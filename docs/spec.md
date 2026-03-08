@@ -34,7 +34,7 @@ ONE HTTP server:
 - **`/mcp`** — MCP Streamable HTTP endpoint for agents. Tool calls via POST, event stream via GET [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http).
 - **`/admin/*`** — REST endpoints + [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) event stream for the VSCode extension. Not exposed to MCP clients. VSIX receives all state changes via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) push — no polling.
 
-**Database path**: `${workspaceFolder}/.too_many_cooks/data.db` (single source of truth in `too_many_cooks_data` package).
+**Database path**: `${workspaceFolder}/.too_many_cooks/data.db` 
 
 **Transport**: Streamable HTTP with [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http). Server pushes events (new messages, lock changes, etc.) to all connected clients (agents + VSIX) in real-time. No polling anywhere.
 
@@ -146,7 +146,7 @@ Admin operations are exposed as REST endpoints on the server, **not** as MCP too
 
 | Package | Role |
 |---------|------|
-| `too_many_cooks_data/` | Data layer: DB ops, types, config, schema. Only used by the server. |
+
 | `too_many_cooks/` | HTTP server. MCP endpoint for agents, admin REST endpoints for VSIX, event notifications. |
 | `too_many_cooks_vscode_extension/` | VSCode extension. Talks to server via `/admin/*` REST endpoints. Receives all state changes via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) push. Tree views for agents, locks, messages, plans. |
 
@@ -181,7 +181,7 @@ Black-box, end-to-end tests. Interact via MCP protocol (HTTP) or VSCode UI, veri
 
 | Test suite | Location |
 |------------|----------|
-| Data layer | `too_many_cooks_data/test/` |
+| Data layer | `too_many_cooks/test/` |
 | MCP server (integration) | `too_many_cooks/test/integration_test.dart` |
 | Tool schemas | `too_many_cooks/test/tool_schemas_test.dart` |
 | VSCode extension | `too_many_cooks_vscode_extension/test/suite/` |

@@ -6,7 +6,7 @@ import 'dart:js_interop';
 import 'package:dart_node_core/dart_node_core.dart';
 import 'package:nadz/nadz.dart';
 import 'package:test/test.dart';
-import 'package:too_many_cooks_data/too_many_cooks_data.dart';
+import 'package:too_many_cooks/src/data/data.dart';
 
 extension type _Fs(JSObject _) implements JSObject {
   external void unlinkSync(String path);

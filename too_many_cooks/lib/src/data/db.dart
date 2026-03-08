@@ -7,9 +7,9 @@ import 'package:dart_logging/dart_logging.dart';
 import 'package:dart_node_better_sqlite3/dart_node_better_sqlite3.dart';
 import 'package:dart_node_core/dart_node_core.dart';
 import 'package:nadz/nadz.dart';
-import 'package:too_many_cooks_data/src/config.dart';
-import 'package:too_many_cooks_data/src/schema.dart';
-import 'package:too_many_cooks_data/src/types.dart';
+import 'config.dart';
+import 'schema.dart';
+import 'types.dart';
 
 @JS('require')
 external JSObject _require(String module);

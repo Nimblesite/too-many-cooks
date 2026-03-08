@@ -4,7 +4,7 @@ library;
 import 'package:test/test.dart';
 import 'package:too_many_cooks/src/config.dart';
 import 'package:too_many_cooks/src/types.dart';
-import 'package:too_many_cooks_data/too_many_cooks_data.dart' as data;
+import 'package:too_many_cooks/src/data/data.dart' as data;
 
 void main() {
   group('TooManyCooksConfig', () {
@@ -27,7 +27,7 @@ void main() {
       expect(config.lockTimeoutMs, 1000);
     });
 
-    test('defaultConfig is identical to too_many_cooks_data defaultConfig', () {
+    test('defaultConfig matches data layer defaultConfig', () {
       expect(defaultConfig.dbPath, data.defaultConfig.dbPath);
       expect(defaultConfig.lockTimeoutMs, data.defaultConfig.lockTimeoutMs);
       expect(

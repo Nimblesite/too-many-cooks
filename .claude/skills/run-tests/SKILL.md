@@ -19,14 +19,12 @@ git diff --name-only main
 | Changed path | Test target |
 |---|---|
 | `too_many_cooks/` | `too_many_cooks` |
-| `too_many_cooks_data/` | `too_many_cooks_data` |
 | `too_many_cooks_vscode_extension/` | `too_many_cooks_vscode_extension` |
 
 ## Step 2: Run tests
 
 **Data layer:**
 ```bash
-cd too_many_cooks_data && dart test
 ```
 
 **MCP server (integration):**
@@ -42,7 +40,6 @@ On headless Linux, prefix with `xvfb-run -a`.
 
 **All:**
 ```bash
-cd too_many_cooks_data && dart test
 cd ../too_many_cooks && dart test
 ```
 

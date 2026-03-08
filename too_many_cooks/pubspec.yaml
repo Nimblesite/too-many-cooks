@@ -9,19 +9,19 @@ environment:
 dependencies:
   austerity: 1.3.0
   dart_logging:
-    path: ../../../packages/dart_logging
+    path: ../../dart_node/packages/dart_logging
+  dart_node_better_sqlite3:
+    path: ../../dart_node/packages/dart_node_better_sqlite3
   dart_node_core:
-    path: ../../../packages/dart_node_core
+    path: ../../dart_node/packages/dart_node_core
   dart_node_express:
-    path: ../../../packages/dart_node_express
+    path: ../../dart_node/packages/dart_node_express
   dart_node_mcp:
-    path: ../../../packages/dart_node_mcp
+    path: ../../dart_node/packages/dart_node_mcp
   nadz: 0.0.7-beta
   path: ^1.9.0
-  too_many_cooks_data:
-    path: ../too_many_cooks_data
 
 dev_dependencies:
   dart_node_coverage:
-    path: ../../../packages/dart_node_coverage
+    path: ../../dart_node/packages/dart_node_coverage
   test: ^1.24.0

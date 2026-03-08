@@ -48,7 +48,7 @@ Multi-agent coordination MCP server for AI agents editing the same codebase.
 
 ```
 too_many_cooks/           # MCP server (Dart/Node.js)
-too_many_cooks_data/      # Data layer (SQLite, types)
+
 too_many_cooks_vscode_extension/ # VSCode extension (TypeScript/Dart)
 docs/                     # Specification
 website/                  # Documentation website (Eleventy)

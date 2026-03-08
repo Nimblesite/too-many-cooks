@@ -92,42 +92,42 @@ packages:
   dart_logging:
     dependency: "direct main"
     description:
-      path: "../../../packages/dart_logging"
+      path: "../../dart_node/packages/dart_logging"
       relative: true
     source: path
     version: "0.11.0-beta"
   dart_node_better_sqlite3:
-    dependency: transitive
+    dependency: "direct main"
     description:
-      path: "../../../packages/dart_node_better_sqlite3"
+      path: "../../dart_node/packages/dart_node_better_sqlite3"
       relative: true
     source: path
     version: "0.11.0-beta"
   dart_node_core:
     dependency: "direct main"
     description:
-      path: "../../../packages/dart_node_core"
+      path: "../../dart_node/packages/dart_node_core"
       relative: true
     source: path
     version: "0.11.0-beta"
   dart_node_coverage:
     dependency: "direct dev"
     description:
-      path: "../../../packages/dart_node_coverage"
+      path: "../../dart_node/packages/dart_node_coverage"
       relative: true
     source: path
     version: "0.9.0-beta"
   dart_node_express:
     dependency: "direct main"
     description:
-      path: "../../../packages/dart_node_express"
+      path: "../../dart_node/packages/dart_node_express"
       relative: true
     source: path
     version: "0.11.0-beta"
   dart_node_mcp:
     dependency: "direct main"
     description:
-      path: "../../../packages/dart_node_mcp"
+      path: "../../dart_node/packages/dart_node_mcp"
       relative: true
     source: path
     version: "0.11.0-beta"
@@ -371,13 +371,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.14"
-  too_many_cooks_data:
-    dependency: "direct main"
-    description:
-      path: "../too_many_cooks_data"
-      relative: true
-    source: path
-    version: "0.1.0"
   typed_data:
     dependency: transitive
     description:

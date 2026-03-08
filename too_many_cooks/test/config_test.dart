@@ -2,7 +2,7 @@
 library;
 
 import 'package:test/test.dart';
-import 'package:too_many_cooks_data/too_many_cooks_data.dart';
+import 'package:too_many_cooks/src/data/data.dart';
 
 void main() {
   test('resolveDbPath returns correct path', () {

@@ -2,7 +2,7 @@
 library;
 
 // Re-export all types from shared package.
-export 'package:too_many_cooks_data/too_many_cooks_data.dart'
+export '../data/data.dart'
     show
         AgentIdentity,
         AgentPlan,

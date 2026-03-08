@@ -7,7 +7,7 @@ import 'package:nadz/nadz.dart';
 import 'package:too_many_cooks/src/config.dart';
 import 'package:too_many_cooks/src/notifications.dart';
 import 'package:too_many_cooks/src/types.dart';
-import 'package:too_many_cooks_data/too_many_cooks_data.dart';
+import '../../data/data.dart';
 
 /// Input schema for lock tool.
 const lockInputSchema = <String, Object?>{
