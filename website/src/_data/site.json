@@ -2,7 +2,7 @@
   "name": "too_many_cooks",
   "title": "Too Many Cooks - Multi-Agent Coordination MCP Server",
   "description": "Too Many Cooks is an MCP server for coordinating multiple AI agents editing the same codebase simultaneously.",
-  "url": "https://melbournedeveloper.github.io/too_many_cooks",
+  "url": "https://tmc-mcp.dev",
   "author": "Christian Findlay",
   "language": "en",
   "themeColor": "#0E7C6B",

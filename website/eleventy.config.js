@@ -15,7 +15,7 @@ const techdocOptions = {
   site: {
     name: "too_many_cooks",
     title: "Too Many Cooks - Multi-Agent Coordination MCP Server",
-    url: "https://melbournedeveloper.github.io/too_many_cooks",
+    url: "https://tmc-mcp.dev",
     description: "Too Many Cooks is an MCP server for coordinating multiple AI agents editing the same codebase simultaneously.",
     author: "Christian Findlay",
     themeColor: "#0E7C6B",
@@ -76,6 +76,7 @@ export default function(eleventyConfig) {
   );
 
   eleventyConfig.addPassthroughCopy("src/assets");
+  eleventyConfig.addPassthroughCopy("src/CNAME");
   eleventyConfig.addWatchTarget("src/assets/");
 
   return {

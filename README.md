@@ -40,7 +40,7 @@ scripts/                            # Build/test scripts
 
 See the [spec](docs/spec.md) for the full protocol specification.
 
-[too-many-cooks.dev](https://melbournedeveloper.github.io/too_many_cooks)
+[tmc-mcp.dev](https://tmc-mcp.dev)
 
 ## License
 
