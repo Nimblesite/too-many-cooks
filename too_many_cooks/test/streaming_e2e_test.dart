@@ -19,6 +19,7 @@ const _baseUrl = 'http://localhost:4040';
 const _accept = 'application/json, text/event-stream';
 const _adminEventsPath = '/admin/events';
 const _mcpProtocolVersion = '2025-03-26';
+const _defaultEventTimeoutMs = 1000;
 
 void main() {
   group('Streaming E2E - SSE Events Over Streamable HTTP', () {
@@ -439,7 +440,6 @@ class _AdminSseClient {
   /// Connect: init admin session, then open GET SSE stream.
   static Future<_AdminSseClient> connect() async {
     final sessionId = await _initAdminSession();
-    consoleError('[TEST] Admin session: $sessionId');
     final client = _AdminSseClient._();
     client._reader = await _SseReader.open(
       '$_baseUrl$_adminEventsPath',
@@ -450,18 +450,14 @@ class _AdminSseClient {
     await Future<void>.delayed(
       const Duration(milliseconds: 200),
     );
-    consoleError(
-      '[TEST] SSE stream opened, events so far: '
-      '${client._events.length}',
-    );
     return client;
   }
 
   /// Wait for at least [count] NEW events (beyond what
-  /// we've already consumed). Timeout after 3 seconds.
+  /// we've already consumed).
   Future<List<String>> waitForEvents(
     int count, {
-    int timeoutMs = 3000,
+    int timeoutMs = _defaultEventTimeoutMs,
   }) async {
     final start = DateTime.now().millisecondsSinceEpoch;
     final startLen = _events.length;
@@ -474,7 +470,6 @@ class _AdminSseClient {
         const Duration(milliseconds: 50),
       );
     }
-    // Return whatever we got
     return _events.sublist(startLen);
   }
 
@@ -562,53 +557,24 @@ class _SseReader {
       ..['headers'] = headers
       ..['signal'] = signal;
 
-    // Start reading in the background
+    // Start reading in the background.
+    // The entire async chain MUST be wrapped in
+    // try-catch — when abort() is called, the
+    // pending reader.read() rejects with AbortError
+    // which would otherwise surface as an uncaught
+    // async error and fail the test.
     unawaited(
-      _jsFetch(url.toJS, options).toDart.then(
-        (response) async {
+      Future<void>(() async {
+        try {
+          final response = await _jsFetch(
+            url.toJS,
+            options,
+          ).toDart;
           final ok = response['ok'] as JSBoolean?;
-          final status = response['status'] as JSNumber?;
-          consoleError(
-            '[TEST] GET SSE response: '
-            'ok=$ok status=${status?.toDartInt}',
-          );
-          // Log response headers
-          final respHeaders =
-              response['headers'] as JSObject?;
-          if (respHeaders != null) {
-            final ct = (respHeaders['get']
-                    as JSFunction?)
-                ?.callAsFunction(
-                  respHeaders,
-                  'content-type'.toJS,
-                );
-            consoleError(
-              '[TEST] GET SSE content-type: $ct',
-            );
-          }
-          if (ok == null || !ok.toDart) {
-            // Try to read error body
-            final textFn =
-                response['text'] as JSFunction?;
-            if (textFn != null) {
-              final errPromise = textFn
-                  .callAsFunction(response);
-              if (errPromise == null) return;
-              final errText =
-                  await (errPromise
-                          as JSPromise<JSString>)
-                      .toDart;
-              consoleError(
-                '[TEST] GET SSE error body: '
-                '${errText.toDart}',
-              );
-            }
-            return;
-          }
+          if (ok == null || !ok.toDart) return;
 
           final body = response['body'];
           if (body == null || body.isUndefinedOrNull) {
-            consoleError('[TEST] GET SSE body is null');
             return;
           }
 
@@ -619,7 +585,6 @@ class _SseReader {
               as JSObject;
           final decoder = _createTextDecoder();
           var buffer = '';
-          consoleError('[TEST] SSE reader loop starting');
 
           for (;;) {
             final chunk = await (
@@ -629,36 +594,24 @@ class _SseReader {
             ).toDart;
 
             final done = chunk['done'] as JSBoolean?;
-            if (done != null && done.toDart) {
-              consoleError('[TEST] SSE reader: done');
-              break;
-            }
+            if (done != null && done.toDart) break;
 
             final value = chunk['value'];
-            if (value == null || value.isUndefinedOrNull) {
-              consoleError('[TEST] SSE reader: null chunk');
+            if (value == null ||
+                value.isUndefinedOrNull) {
               continue;
             }
 
-            final decoded = (decoder['decode']! as JSFunction)
-                .callAsFunction(
-                  decoder,
-                  value,
-                  _streamOptions,
-                )!
+            final decoded =
+                (decoder['decode']! as JSFunction)
+                    .callAsFunction(
+                      decoder,
+                      value,
+                      _streamOptions,
+                    )!
                 as JSString;
-            final decodedStr = decoded.toDart;
-            final preview = decodedStr.substring(
-              0,
-              decodedStr.length.clamp(0, 200),
-            );
-            consoleError(
-              '[TEST] SSE chunk '
-              '(${decodedStr.length} chars): '
-              '$preview',
-            );
             final buf = StringBuffer(buffer)
-              ..write(decodedStr);
+              ..write(decoded.toDart);
             buffer = buf.toString();
 
             // Parse SSE lines
@@ -666,23 +619,20 @@ class _SseReader {
             buffer = lines.removeLast();
             for (final line in lines) {
               if (line.startsWith(_dataPrefix)) {
-                final data =
-                    line.substring(_dataPrefix.length).trim();
+                final data = line
+                    .substring(_dataPrefix.length)
+                    .trim();
                 if (data.isNotEmpty) {
                   events.add(data);
-                  consoleError(
-                    '[TEST] SSE event added, '
-                    'total: ${events.length}',
-                  );
                 }
               }
             }
           }
-        },
-        onError: (Object e) {
-          consoleError('[TEST] SSE reader error: $e');
-        },
-      ),
+        } on Object {
+          // Stream aborted or errored — expected on
+          // close()
+        }
+      }),
     );
 
     return _SseReader._(controller);
