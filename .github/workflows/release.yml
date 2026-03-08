@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  DART_COMPILED_JS: too-many-cooks/build/bin/server.js
+
+jobs:
+  build-mcp:
+    name: Build MCP npm Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ vars.DART_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: too-many-cooks/package-lock.json
+
+      - name: Get MCP server dependencies
+        working-directory: too-many-cooks
+        run: |
+          dart pub get
+          npm ci
+
+      - name: Compile MCP server
+        run: |
+          set -e
+          dart compile js -o ${{ env.DART_COMPILED_JS }} too-many-cooks/bin/server.dart
+
+      - name: Verify server binary
+        run: |
+          set -e
+          test -f ${{ env.DART_COMPILED_JS }} || (echo "Server build failed!" && exit 1)
+          echo "MCP server built: ${{ env.DART_COMPILED_JS }}"
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Pack npm tarball
+        working-directory: too-many-cooks
+        run: |
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          npm pack
+
+      - name: Upload npm tarball as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
+          name: Too Many Cooks ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  build-vsix:
+    name: Build VSCode Extension
+    runs-on: ubuntu-latest
+    needs: build-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ vars.DART_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
+
+      - name: Build MCP server (required by extension build)
+        run: |
+          set -e
+          cd too-many-cooks
+          dart pub get
+          npm ci
+          dart compile js -o build/bin/server.js bin/server.dart
+
+      - name: Get extension Dart dependencies
+        working-directory: too_many_cooks_vscode_extension
+        run: dart pub get
+
+      - name: Install extension npm dependencies
+        working-directory: too_many_cooks_vscode_extension
+        run: npm ci
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package VSCode extension
+        working-directory: too_many_cooks_vscode_extension
+        run: |
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          npx vsce package --no-git-tag-version ${{ steps.version.outputs.VERSION }}
+
+      - name: Upload VSIX as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: too_many_cooks_vscode_extension/too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
+          name: Too Many Cooks ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  deploy-website:
+    name: Deploy Website to GitHub Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Build website
+        working-directory: website
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/_site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
