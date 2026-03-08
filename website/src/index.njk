@@ -1,0 +1,86 @@
+---
+layout: layouts/base.njk
+title: "Too Many Cooks - Multi-Agent Coordination MCP Server"
+description: "An MCP server for coordinating multiple AI agents editing the same codebase simultaneously. Prevent conflicts with file locking, messaging, and shared plans."
+keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Model Context Protocol, file locking"
+---
+
+<section class="hero">
+  <div class="container">
+    <h1>Too Many Cooks</h1>
+    <p class="hero-subtitle">
+      Coordinate multiple AI agents working on the same codebase.
+      File locking, messaging, and shared plans — no more conflicts.
+    </p>
+    <div class="hero-buttons">
+      <a href="/docs/getting-started/" class="btn btn-primary btn-large">Get Started</a>
+      <a href="https://github.com/melbournedeveloper/too_many_cooks" class="btn btn-secondary btn-large">GitHub</a>
+    </div>
+
+    <div class="hero-code">
+{% highlight "bash" %}
+# Install globally
+npm install -g too-many-cooks
+
+# Add to Claude Code
+claude mcp add --transport stdio too-many-cooks -- too-many-cooks
+{% endhighlight %}
+    </div>
+  </div>
+</section>
+
+<section class="summary-section">
+  <div class="container">
+    <p class="summary-text">
+      <strong>Too Many Cooks</strong> is an MCP server that lets multiple AI agents coordinate when editing the same codebase.
+      Agents register with a key, lock files before editing, post messages to each other, and share plans.
+      It prevents conflicts and keeps agents in sync.
+    </p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <div class="section-title">
+      <h2>Coordination Tools</h2>
+      <p>Five MCP tools for multi-agent coordination.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">R</div>
+        <h3>Register</h3>
+        <p>Each agent registers with a unique key on startup. Required before using any other tool.</p>
+        <a href="/docs/register/">Learn more &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">L</div>
+        <h3>Lock</h3>
+        <p>Lock files or resources before editing. Other agents see the lock and wait or choose a different file.</p>
+        <a href="/docs/lock/">Learn more &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">M</div>
+        <h3>Messages</h3>
+        <p>Post and read messages between agents. Keep other agents informed about your progress and intent.</p>
+        <a href="/docs/messages/">Learn more &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">P</div>
+        <h3>Plans</h3>
+        <p>Share your plan with other agents before starting. Avoid redundant work and coordinate changes.</p>
+        <a href="/docs/plans/">Learn more &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">S</div>
+        <h3>Status</h3>
+        <p>Check the current state — who is registered, what is locked, what plans are active.</p>
+        <a href="/docs/status/">Learn more &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>

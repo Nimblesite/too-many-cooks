@@ -1,0 +1,82 @@
+{
+  "main": [
+    {
+      "text": "Docs",
+      "url": "/docs/getting-started/"
+    },
+    {
+      "text": "GitHub",
+      "url": "https://github.com/melbournedeveloper/too_many_cooks",
+      "external": true
+    }
+  ],
+  "docs": [
+    {
+      "title": "Introduction",
+      "items": [
+        {
+          "text": "Getting Started",
+          "url": "/docs/getting-started/"
+        },
+        {
+          "text": "How It Works",
+          "url": "/docs/how-it-works/"
+        }
+      ]
+    },
+    {
+      "title": "Tools",
+      "items": [
+        {
+          "text": "Register",
+          "url": "/docs/register/"
+        },
+        {
+          "text": "Lock",
+          "url": "/docs/lock/"
+        },
+        {
+          "text": "Messages",
+          "url": "/docs/messages/"
+        },
+        {
+          "text": "Plans",
+          "url": "/docs/plans/"
+        },
+        {
+          "text": "Status",
+          "url": "/docs/status/"
+        }
+      ]
+    },
+    {
+      "title": "VSCode Extension",
+      "items": [
+        {
+          "text": "Overview",
+          "url": "/docs/vscode-extension/"
+        }
+      ]
+    }
+  ],
+  "footer": [
+    {
+      "title": "Documentation",
+      "items": [
+        {
+          "text": "Getting Started",
+          "url": "/docs/getting-started/"
+        }
+      ]
+    },
+    {
+      "title": "Community",
+      "items": [
+        {
+          "text": "GitHub",
+          "url": "https://github.com/melbournedeveloper/too_many_cooks"
+        }
+      ]
+    }
+  ]
+}
