@@ -95,6 +95,13 @@ export class StoreManager {
     });
   }
 
+  // Test-only: corrupt the cached MCP session ID to
+  // simulate a server restart. The next callTool should
+  // detect the stale session and transparently reconnect.
+  public invalidateMcpSession(): void {
+    this.mcpSessionId = 'stale-session-00000000';
+  }
+
   public disconnect(): void {
     this.connectPromise = null;
     this.mcpSessionId = null;
@@ -148,21 +155,33 @@ export class StoreManager {
   public async callTool(name: string, args: Readonly<Record<string, unknown>>): Promise<string> {
     if (!this.isConnected) { return '{"error":"Not connected"}'; }
     try {
-      if (this.mcpSessionId === null) {
-        this.mcpSessionId = await initMcpSession(this.baseUrl, '/mcp', 'too-many-cooks-vsix');
-      }
-      const result: Record<string, unknown> = await mcpJsonRpcRequest({
-        baseUrl: this.baseUrl,
-        method: 'tools/call',
-        params: { arguments: args, name },
-        sessionId: this.mcpSessionId,
-      });
-      const text: string = extractToolResultText(result);
-      await this.refreshStatus();
-      return text;
-    } catch (err: unknown) {
+      return await this.doCallTool(name, args);
+    } catch {
+      // Session may be stale (server restarted). Clear
+      // and retry once with a fresh session.
+      this.log('[StoreManager] callTool failed — retrying with fresh session');
       this.mcpSessionId = null;
-      return `{"error":"${String(err)}"}`;
+      try {
+        return await this.doCallTool(name, args);
+      } catch (retryErr: unknown) {
+        this.mcpSessionId = null;
+        return `{"error":"${String(retryErr)}"}`;
+      }
     }
+  }
+
+  private async doCallTool(name: string, args: Readonly<Record<string, unknown>>): Promise<string> {
+    if (this.mcpSessionId === null) {
+      this.mcpSessionId = await initMcpSession(this.baseUrl, '/mcp', 'too-many-cooks-vsix');
+    }
+    const result: Record<string, unknown> = await mcpJsonRpcRequest({
+      baseUrl: this.baseUrl,
+      method: 'tools/call',
+      params: { arguments: args, name },
+      sessionId: this.mcpSessionId,
+    });
+    const text: string = extractToolResultText(result);
+    await this.refreshStatus();
+    return text;
   }
 }

@@ -28,6 +28,7 @@ export interface TestAPIConfig {
 export interface TestAPI {
   readonly callTool: (name: string, args: Readonly<Record<string, unknown>>) => Promise<string>;
   readonly connect: () => Promise<void>;
+  readonly invalidateMcpSession: () => void;
   readonly deleteAgent: (agentName: string) => Promise<void>;
   readonly disconnect: () => Promise<void>;
   readonly findAgentInTree: (agentName: string) => TreeItemSnapshot | null;
@@ -194,13 +195,14 @@ async function safeRefresh(storeManager: Readonly<StoreManager>): Promise<void> 
 
 function createAsyncMethods(
   sm: Readonly<StoreManager>,
-): Pick<TestAPI, 'callTool' | 'connect' | 'deleteAgent' | 'disconnect' | 'forceReleaseLock' | 'refreshStatus' | 'sendMessage'> {
+): Pick<TestAPI, 'callTool' | 'connect' | 'deleteAgent' | 'disconnect' | 'forceReleaseLock' | 'invalidateMcpSession' | 'refreshStatus' | 'sendMessage'> {
   return {
     callTool: async (name: string, args: Readonly<Record<string, unknown>>): Promise<string> => {
       const result: string = await sm.callTool(name, args);
       return result;
     },
     connect: async (): Promise<void> => { await sm.connect(); },
+    invalidateMcpSession: (): void => { sm.invalidateMcpSession(); },
     deleteAgent: async (agentName: string): Promise<void> => { await sm.deleteAgent(agentName); },
     disconnect: async (): Promise<void> => { await Promise.resolve(); sm.disconnect(); },
     forceReleaseLock: async (fp: string): Promise<void> => { await sm.forceReleaseLock(fp); },

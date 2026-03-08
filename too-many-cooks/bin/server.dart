@@ -32,6 +32,12 @@ String _randomUUID() => _jsRandomUUID();
 // ignore: lines_longer_than_80_chars
 const _badRequestJson = '{"jsonrpc":"2.0","error":{"code":-32000,"message":"Bad Request"},"id":null}';
 
+// JSON-RPC session-not-found error response (404).
+// ignore: lines_longer_than_80_cols
+const _sessionNotFoundJson =
+    '{"jsonrpc":"2.0","error":{"code":-32001,'
+    '"message":"Session not found"},"id":null}';
+
 Future<void> main() async {
   final log = _createLogger()
     ..info('Server starting...');
@@ -178,8 +184,16 @@ Future<void> Function(Request, Response)
     return;
   }
 
-  if (sessionId == null &&
-      _isInitializeRequest(body)) {
+  // Stale/expired session — tell client to
+  // re-initialize (MCP spec: 404).
+  if (sessionId != null) {
+    res
+      ..status(404)
+      ..send(_sessionNotFoundJson);
+    return;
+  }
+
+  if (_isInitializeRequest(body)) {
     late final StreamableHttpTransport transport;
     final transportResult =
         createStreamableHttpTransport(
@@ -261,11 +275,16 @@ Future<void> Function(Request, Response)
 ) => (req, res) async {
   final sessionId =
       _getHeader(req, 'mcp-session-id');
-  if (sessionId == null ||
-      !transports.containsKey(sessionId)) {
+  if (sessionId == null) {
     res
       ..status(400)
-      ..send('Invalid or missing session ID');
+      ..send('Missing session ID');
+    return;
+  }
+  if (!transports.containsKey(sessionId)) {
+    res
+      ..status(404)
+      ..send(_sessionNotFoundJson);
     return;
   }
   // Mark session as having an active SSE stream so
@@ -302,8 +321,15 @@ Future<void> Function(Request, Response)
     return;
   }
 
-  if (sessionId == null &&
-      _isInitializeRequest(body)) {
+  // Stale/expired admin session — 404 per MCP spec.
+  if (sessionId != null) {
+    res
+      ..status(404)
+      ..send(_sessionNotFoundJson);
+    return;
+  }
+
+  if (_isInitializeRequest(body)) {
     late final StreamableHttpTransport transport;
     final transportResult =
         createStreamableHttpTransport(
@@ -383,11 +409,16 @@ Future<void> Function(Request, Response)
 ) => (req, res) async {
   final sessionId =
       _getHeader(req, 'mcp-session-id');
-  if (sessionId == null ||
-      !hub.transports.containsKey(sessionId)) {
+  if (sessionId == null) {
     res
       ..status(400)
-      ..send('Invalid or missing session ID');
+      ..send('Missing session ID');
+    return;
+  }
+  if (!hub.transports.containsKey(sessionId)) {
+    res
+      ..status(404)
+      ..send(_sessionNotFoundJson);
     return;
   }
   await hub.transports[sessionId]
