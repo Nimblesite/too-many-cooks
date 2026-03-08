@@ -5,8 +5,8 @@ Multi-agent coordination MCP server. Lets multiple AI agents safely edit the sam
 ## Quick Start
 
 ```bash
-npm install -g too-many-cooks
-claude mcp add --transport stdio too-many-cooks -- too-many-cooks
+# Add to Claude Code over HTTP (Streamable HTTP transport)
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
 ```
 
 Set `TMC_WORKSPACE` to target a specific workspace folder (defaults to `process.cwd()`).

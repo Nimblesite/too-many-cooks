@@ -22,3 +22,5 @@ too_many_cooks/logs/
 website/playwright-report/
 
 website/_site/
+
+*.vsix
