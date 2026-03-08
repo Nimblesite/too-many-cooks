@@ -5,7 +5,7 @@ import 'package:dart_logging/dart_logging.dart';
 import 'package:dart_node_mcp/dart_node_mcp.dart';
 import 'package:nadz/nadz.dart';
 import 'package:too_many_cooks/src/types.dart';
-import '../../data/data.dart';
+import '../data/data.dart';
 
 /// Input schema for status tool (no inputs required).
 const statusInputSchema = <String, Object?>{

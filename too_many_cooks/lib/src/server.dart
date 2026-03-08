@@ -13,7 +13,7 @@ import 'package:too_many_cooks/src/tools/plan_tool.dart';
 import 'package:too_many_cooks/src/tools/register_tool.dart';
 import 'package:too_many_cooks/src/tools/status_tool.dart';
 import 'package:too_many_cooks/src/types.dart';
-import '../data/data.dart'
+import 'data/data.dart'
     show TooManyCooksDb, createDb;
 
 /// Result of creating the server — includes both MCP server and DB

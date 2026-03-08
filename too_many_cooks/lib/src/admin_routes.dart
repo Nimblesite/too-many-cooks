@@ -12,7 +12,7 @@ import 'package:dart_node_core/dart_node_core.dart';
 import 'package:dart_node_express/dart_node_express.dart';
 import 'package:dart_node_mcp/dart_node_mcp.dart';
 import 'package:nadz/nadz.dart';
-import '../data/data.dart';
+import 'data/data.dart';
 
 /// Admin event hub — manages Streamable HTTP transports
 /// for pushing real-time events to the VSIX.
