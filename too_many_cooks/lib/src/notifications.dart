@@ -5,8 +5,6 @@
 /// the server based on connection state.
 library;
 
-import 'dart:async';
-
 import 'package:dart_node_mcp/dart_node_mcp.dart';
 
 /// Event type for agent registration.
@@ -50,23 +48,12 @@ NotificationEmitter createNotificationEmitter(
   AdminPushFn? adminPush,
 }) {
   void emit(String event, Map<String, Object?> payload) {
-    final notificationData = <String, Object?>{
-      'event': event,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'payload': payload,
-    };
-
-    unawaited(
-      server
-          .sendLoggingMessage((
-            level: 'info',
-            logger: 'too-many-cooks',
-            data: notificationData,
-          ))
-          .then((_) {}, onError: (_) {}),
-    );
-
-    // Also push to admin hub so the VSIX gets real-time updates
+    // Push to admin hub so the VSIX gets real-time updates.
+    // NOTE: We intentionally do NOT call server.sendLoggingMessage()
+    // here. Injecting logging notifications into the MCP response
+    // stream races with concurrent tool-call responses on the same
+    // Streamable HTTP session, causing clients to parse a notification
+    // instead of their tool result.
     adminPush?.call(event, payload);
   }
 
