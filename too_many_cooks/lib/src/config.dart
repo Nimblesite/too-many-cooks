@@ -4,10 +4,10 @@
 /// lives in the data package to guarantee a single source of truth.
 library;
 
-import 'data/data.dart'
+import 'package:too_many_cooks/src/data/data.dart'
     show TooManyCooksDataConfig;
 
-export 'data/data.dart'
+export 'package:too_many_cooks/src/data/data.dart'
     show
         TooManyCooksDataConfig,
         createDataConfig,

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Multi-agent coordination MCP server for AI agents editing the same codebase.
+Multi-agent coordination MCP server for AI agents editing the same codebase. Includes a VSIX that allows the user to see the interactions and perform admin tasks.
 
 ## Rules
 
@@ -36,10 +36,6 @@ Multi-agent coordination MCP server for AI agents editing the same codebase.
 - All packages require: `austerity` (linting), `nadz` (Result types)
 - `node_preamble` for dart2js Node.js compatibility
 
-**Pull Requests**
-- Keep the documentation tight
-- Only use git diff with main. Ignore commit messages
-
 # Web & Translation
 
 - Optimize for AI Search and SEO
@@ -47,10 +43,10 @@ Multi-agent coordination MCP server for AI agents editing the same codebase.
 ## Codebase Structure
 
 ```
-too_many_cooks/           # MCP server (Dart/Node.js)
+too_many_cooks/                     # MCP server (Dart/Node.js)
 
-too_many_cooks_vscode_extension/ # VSCode extension (TypeScript/Dart)
-docs/                     # Specification
-website/                  # Documentation website (Eleventy)
-scripts/                  # Build/test scripts
+too_many_cooks_vscode_extension/    # VSCode extension (TypeScript/Dart)
+docs/                               # Specification
+website/                            # Documentation website (Eleventy)
+scripts/                            # Build/test scripts
 ```

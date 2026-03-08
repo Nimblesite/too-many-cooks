@@ -16,17 +16,19 @@ If `$ARGUMENTS` specifies a package, use that. If no args specified, assume ever
 
 **MCP server (integration):**
 ```bash
-cd too_many_cooks && dart test
+bash scripts/test-mcp.sh
 ```
 
-**VSCode extension** (requires display):
+**VSCode extension + MCP e2e:**
 ```bash
-cd too_many_cooks_vscode_extension && npm run pretest && npm test
+bash scripts/test-vsix-e2e.sh
 ```
 On headless Linux, prefix with `xvfb-run -a`.
 
 **All:**
-Run scripts/test-all.sh
+```bash
+bash scripts/test-mcp.sh && bash scripts/test-vsix-e2e.sh
+```
 
 ## After running
 

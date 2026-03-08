@@ -3,8 +3,8 @@ library;
 
 import 'package:test/test.dart';
 import 'package:too_many_cooks/src/config.dart';
-import 'package:too_many_cooks/src/types.dart';
 import 'package:too_many_cooks/src/data/data.dart' as data;
+import 'package:too_many_cooks/src/types.dart';
 
 void main() {
   group('TooManyCooksConfig', () {

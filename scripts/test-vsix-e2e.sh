@@ -11,10 +11,10 @@ rm -rf "$ROOT/too_many_cooks/build"
 # 2. Build MCP
 cd "$ROOT/too_many_cooks"
 dart compile js -o build/bin/server.js bin/server.dart
-cd "$ROOT/../.."
+cd "$ROOT/../dart_node"
 dart run tools/build/add_preamble.dart \
-  examples/too_many_cooks/too_many_cooks/build/bin/server.js \
-  "examples/too_many_cooks/too_many_cooks/$SERVER_BINARY" \
+  "$ROOT/too_many_cooks/build/bin/server.js" \
+  "$ROOT/too_many_cooks/$SERVER_BINARY" \
   --shebang
 
 # 3. Clean VSIX

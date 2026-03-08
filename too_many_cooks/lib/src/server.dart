@@ -6,6 +6,8 @@ import 'package:dart_node_core/dart_node_core.dart';
 import 'package:dart_node_mcp/dart_node_mcp.dart';
 import 'package:nadz/nadz.dart';
 import 'package:too_many_cooks/src/config.dart';
+import 'package:too_many_cooks/src/data/data.dart'
+    show TooManyCooksDb, createDb;
 import 'package:too_many_cooks/src/notifications.dart';
 import 'package:too_many_cooks/src/tools/lock_tool.dart';
 import 'package:too_many_cooks/src/tools/message_tool.dart';
@@ -13,8 +15,6 @@ import 'package:too_many_cooks/src/tools/plan_tool.dart';
 import 'package:too_many_cooks/src/tools/register_tool.dart';
 import 'package:too_many_cooks/src/tools/status_tool.dart';
 import 'package:too_many_cooks/src/types.dart';
-import 'data/data.dart'
-    show TooManyCooksDb, createDb;
 
 /// Result of creating the server — includes both MCP server and DB
 /// so the HTTP layer can wire up admin routes.
