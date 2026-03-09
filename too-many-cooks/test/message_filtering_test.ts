@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
-const TEST_PORT = 4045;
+const TEST_PORT = 4055;
 const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
 const MCP_PATH = "/mcp";
 const ACCEPT = "application/json, text/event-stream";

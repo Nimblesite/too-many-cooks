@@ -142,6 +142,8 @@ const lockZodSchema = {
     .describe("File path to lock (required except for list)"),
   reason: z.string().optional()
     .describe("Why you need this lock (optional, for acquire)"),
+  agent_key: z.string().optional()
+    .describe("Agent key for authentication (optional, uses session if omitted)"),
 };
 
 /** Zod schema for message tool input. */
@@ -156,6 +158,8 @@ const messageZodSchema = {
     .describe("Message ID (for mark_read)"),
   unread_only: z.boolean().optional()
     .describe("Only return unread messages (default: true)"),
+  agent_key: z.string().optional()
+    .describe("Agent key for authentication (optional, uses session if omitted)"),
 };
 
 /** Zod schema for plan tool input. */
@@ -166,6 +170,8 @@ const planZodSchema = {
     .describe("Your goal (for update). MUST be 100 chars or less."),
   current_task: z.string().max(100).optional()
     .describe("What you are doing now (for update). MUST be 100 chars or less."),
+  agent_key: z.string().optional()
+    .describe("Agent key for authentication (optional, uses session if omitted)"),
 };
 
 /** Zod schema for status tool input (empty). */
