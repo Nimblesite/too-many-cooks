@@ -11,12 +11,19 @@ export 'package:too_many_cooks/src/data/data.dart'
         FileLock,
         LockResult,
         Message,
+        agentIdentityToJson,
+        agentPlanToJson,
+        agentRegistrationToJson,
+        dbErrorToJson,
         errDatabase,
         errLockExpired,
         errLockHeld,
         errNotFound,
         errUnauthorized,
-        errValidation;
+        errValidation,
+        fileLockToJson,
+        lockResultToJson,
+        messageToJson;
 
 /// Create text content for MCP tool responses.
 /// Uses Map which is required for dart2js compatibility with records.

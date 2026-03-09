@@ -7,11 +7,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CODEGEN_DIR="$ROOT_DIR/codegen"
 SCHEMA="$ROOT_DIR/too-many-cooks/schema/models.json"
-DART_OUT="$ROOT_DIR/too-many-cooks/lib/src/data/generated_types.dart"
-TS_OUT="$ROOT_DIR/too_many_cooks_vscode_extension/src/generated/types.generated.ts"
-
-# Ensure TS output dir exists
-mkdir -p "$(dirname "$TS_OUT")"
+DART_OUT="$ROOT_DIR/too-many-cooks/lib/src/data/types.gen.dart"
+TS_OUT="$ROOT_DIR/too_many_cooks_vscode_extension/src/state/types.gen.ts"
 
 echo "Generating models from $SCHEMA..."
 cd "$CODEGEN_DIR"
