@@ -2,34 +2,25 @@
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/.." && pwd)"
+MCP_DIR="$ROOT/too-many-cooks"
 VSIX_DIR="$ROOT/too_many_cooks_vscode_extension"
-SERVER_BINARY="build/bin/server_node.js"
 
-# 1. Clean MCP
-rm -rf "$ROOT/too-many-cooks/build"
+# 1. Build MCP server
+cd "$MCP_DIR"
+npm install
+npm run build
 
-# 2. Build MCP
-cd "$ROOT/too-many-cooks"
-dart compile js -o build/bin/server.js bin/server.dart
-cd "$ROOT/../dart_node"
-dart run tools/build/add_preamble.dart \
-  "$ROOT/too-many-cooks/build/bin/server.js" \
-  "$ROOT/too-many-cooks/$SERVER_BINARY" \
-  --shebang
-
-# 3. Clean VSIX
-rm -rf "$VSIX_DIR"/*.vsix "$VSIX_DIR/out"
-
-# 4. Build VSIX
+# 2. Build VSIX
 cd "$VSIX_DIR"
 npm install
 npm run compile
 npm run compile:test
 
-# 5. Start MCP server
+# 3. Start MCP server
 cleanup_mcp() { [ -n "${MCP_PID:-}" ] && kill "$MCP_PID" 2>/dev/null || true; }
 trap cleanup_mcp EXIT
-node "$ROOT/too-many-cooks/$SERVER_BINARY" &
+cd "$MCP_DIR"
+node --import tsx bin/server.ts &
 MCP_PID=$!
 
 # Poll until server is ready (max 10s)
@@ -45,5 +36,6 @@ for i in $(seq 1 50); do
   sleep 0.2
 done
 
-# 7. Run VSIX tests
+# 4. Run VSIX tests
+cd "$VSIX_DIR"
 npm run test

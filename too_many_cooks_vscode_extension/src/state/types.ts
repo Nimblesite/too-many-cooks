@@ -1,8 +1,8 @@
 // State types for Too Many Cooks VSCode extension.
 
 // Re-export generated model types.
-export type { AgentIdentity, AgentPlan, FileLock, Message } from './types.gen';
-import type { AgentIdentity, AgentPlan, FileLock, Message } from './types.gen';
+export type { AgentIdentity, AgentPlan, FileLock, Message } from 'state/types.gen';
+import type { AgentIdentity, AgentPlan, FileLock, Message } from 'state/types.gen';
 
 // Connection status to the MCP server.
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';

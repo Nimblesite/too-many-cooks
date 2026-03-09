@@ -257,7 +257,6 @@ module.exports = {
     'no-sequences': 'error',
     'no-shadow': 'error',
     'no-shadow-restricted-names': 'error',
-    'no-ternary': 'error',
     'no-throw-literal': 'error',
     'no-undef-init': 'error',
     'no-undefined': 'error',

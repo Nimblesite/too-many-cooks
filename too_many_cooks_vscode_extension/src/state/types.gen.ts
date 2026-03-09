@@ -116,7 +116,7 @@ export function parseArray<T>(
     return [];
   }
   return data
-    .filter((item: unknown): item is Record<string, unknown> => isRecord(item))
+    .filter((item: unknown): item is Record<string, unknown> => { return isRecord(item); })
     .map(mapper);
 }
 
@@ -125,8 +125,8 @@ export function parseAgentIdentity(
 ): AgentIdentity {
   return {
     agentName: stringField(raw, 'agent_name'),
-    registeredAt: numberField(raw, 'registered_at'),
     lastActive: numberField(raw, 'last_active'),
+    registeredAt: numberField(raw, 'registered_at'),
   };
 }
 
@@ -134,8 +134,8 @@ export function parseAgentRegistration(
   raw: Readonly<Record<string, unknown>>,
 ): AgentRegistration {
   return {
-    agentName: stringField(raw, 'agent_name'),
     agentKey: stringField(raw, 'agent_key'),
+    agentName: stringField(raw, 'agent_name'),
   };
 }
 
@@ -143,10 +143,10 @@ export function parseFileLock(
   raw: Readonly<Record<string, unknown>>,
 ): FileLock {
   return {
-    filePath: stringField(raw, 'file_path'),
-    agentName: stringField(raw, 'agent_name'),
     acquiredAt: numberField(raw, 'acquired_at'),
+    agentName: stringField(raw, 'agent_name'),
     expiresAt: numberField(raw, 'expires_at'),
+    filePath: stringField(raw, 'file_path'),
     reason: nullableStringField(raw, 'reason'),
     version: numberField(raw, 'version'),
   };
@@ -155,10 +155,11 @@ export function parseFileLock(
 export function parseLockResult(
   raw: Readonly<Record<string, unknown>>,
 ): LockResult {
+  const lockValue: unknown = raw.lock;
   return {
     acquired: boolField(raw, 'acquired'),
-    lock: isRecord(raw['lock']) ? parseFileLock(raw['lock'] as Record<string, unknown>) : null,
     error: nullableStringField(raw, 'error'),
+    lock: isRecord(lockValue) ? parseFileLock(lockValue) : null,
   };
 }
 
@@ -166,12 +167,12 @@ export function parseMessage(
   raw: Readonly<Record<string, unknown>>,
 ): Message {
   return {
-    id: stringField(raw, 'id'),
-    fromAgent: stringField(raw, 'from_agent'),
-    toAgent: stringField(raw, 'to_agent'),
     content: stringField(raw, 'content'),
     createdAt: numberField(raw, 'created_at'),
+    fromAgent: stringField(raw, 'from_agent'),
+    id: stringField(raw, 'id'),
     readAt: nullableNumberField(raw, 'read_at'),
+    toAgent: stringField(raw, 'to_agent'),
   };
 }
 
@@ -180,8 +181,8 @@ export function parseAgentPlan(
 ): AgentPlan {
   return {
     agentName: stringField(raw, 'agent_name'),
-    goal: stringField(raw, 'goal'),
     currentTask: stringField(raw, 'current_task'),
+    goal: stringField(raw, 'goal'),
     updatedAt: numberField(raw, 'updated_at'),
   };
 }

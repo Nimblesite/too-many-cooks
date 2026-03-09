@@ -20,7 +20,7 @@ function parseArray<T>(data: unknown, mapper: (raw: Readonly<Record<string, unkn
     return [];
   }
   return data
-    .filter((item: unknown): item is Record<string, unknown> => isRecord(item))
+    .filter((item: unknown): item is Record<string, unknown> => { return isRecord(item); })
     .map(mapper);
 }
 

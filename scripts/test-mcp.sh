@@ -4,4 +4,4 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/.." && pwd)"
 
 cd "$ROOT/too-many-cooks"
-dart test
+npm test
