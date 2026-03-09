@@ -85,10 +85,15 @@ void registerAdminRoutes(
   AdminEventHub hub,
 ) {
   // JSON body parser
+  // requireModule returns JSAny which must be accessed via JSObject for
+  // extension type; this is a JS interop boundary cast.
+  // ignore: no_casts
   final expressModule = requireModule('express') as JSObject;
-  final jsonMiddleware =
-      (expressModule['json'] as JSFunction?)
-          ?.callAsFunction(expressModule);
+  final jsonFn = expressModule['json'];
+  final jsonMiddleware = switch (jsonFn) {
+    final JSFunction f => f.callAsFunction(expressModule),
+    _ => null,
+  };
   app
     ..use(jsonMiddleware)
 
@@ -126,7 +131,10 @@ void registerAdminRoutes(
     // POST /admin/delete-lock — force-delete a lock
     ..post('/admin/delete-lock', handler((req, res) {
       final body = _parseBody(req);
-      final filePath = body['filePath'] as String?;
+      final filePath = switch (body['filePath']) {
+        final String v => v,
+        _ => null,
+      };
       if (filePath == null) {
         _sendError(res, 400, 'filePath required');
         return;
@@ -146,7 +154,10 @@ void registerAdminRoutes(
     // POST /admin/delete-agent — delete agent + data
     ..post('/admin/delete-agent', handler((req, res) {
       final body = _parseBody(req);
-      final agentName = body['agentName'] as String?;
+      final agentName = switch (body['agentName']) {
+        final String v => v,
+        _ => null,
+      };
       if (agentName == null) {
         _sendError(res, 400, 'agentName required');
         return;
@@ -166,7 +177,10 @@ void registerAdminRoutes(
     // POST /admin/reset-key — generate new key for agent
     ..post('/admin/reset-key', handler((req, res) {
       final body = _parseBody(req);
-      final agentName = body['agentName'] as String?;
+      final agentName = switch (body['agentName']) {
+        final String v => v,
+        _ => null,
+      };
       if (agentName == null) {
         _sendError(res, 400, 'agentName required');
         return;
@@ -182,9 +196,18 @@ void registerAdminRoutes(
     // POST /admin/send-message — send message (no auth)
     ..post('/admin/send-message', handler((req, res) {
       final body = _parseBody(req);
-      final fromAgent = body['fromAgent'] as String?;
-      final toAgent = body['toAgent'] as String?;
-      final content = body['content'] as String?;
+      final fromAgent = switch (body['fromAgent']) {
+        final String v => v,
+        _ => null,
+      };
+      final toAgent = switch (body['toAgent']) {
+        final String v => v,
+        _ => null,
+      };
+      final content = switch (body['content']) {
+        final String v => v,
+        _ => null,
+      };
       if (fromAgent == null ||
           toAgent == null ||
           content == null) {

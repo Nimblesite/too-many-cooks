@@ -70,7 +70,10 @@ ToolCallback createPlanHandler(
   if (action == 'list') return _list(db);
 
   // Hidden agent_key override for multi-agent integration testing
-  final keyOverride = args['agent_key'] as String?;
+  final keyOverride = switch (args['agent_key']) {
+    final String v => v,
+    _ => null,
+  };
   final String agentName;
   final String agentKey;
   if (keyOverride != null) {
@@ -102,8 +105,8 @@ ToolCallback createPlanHandler(
       log,
       agentName,
       agentKey,
-      args['goal'] as String?,
-      args['current_task'] as String?,
+      switch (args['goal']) { final String v => v, _ => null },
+      switch (args['current_task']) { final String v => v, _ => null },
     ),
     'get' => _get(db, agentName),
     _ => (

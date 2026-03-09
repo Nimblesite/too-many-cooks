@@ -17,14 +17,14 @@ Multi-agent coordination MCP server for AI agents editing the same codebase. Inc
 - NO DUPLICATION. search before adding, move don't copy
 - Functions < 20 lines, files < 500 LOC
 - Switch expressions/ternaries over if/else (except in declarative contexts)
-- NO GLOBAL STATE. Keep all app state in one place.
+- **Avoid global state**. If necessary, CENTRALIZE GLOBAL STATE with immutable types
 - Return `Result<T,E>` instead of throwing exceptions
 
 ### Dart
 - All Dart, minimal JS. Use `dart:js_interop` (not deprecated `dart:js_util`/`package:js`)
 - AVOID `JSObject`/`JSAny`/`dynamic`!
 - Prefer typedef records over classes for data (structural typing)
-- ILLEGAL: `as`, `late`, `!`, `.then()`, global state
+- **⛔️ ILLEGAL: `as`, `late`, `!`, `.then()`, casting** - Use pattern matching
 - All packages require: `austerity` (linting), `nadz` (Result types)
 - `node_preamble` for dart2js Node.js compatibility
 

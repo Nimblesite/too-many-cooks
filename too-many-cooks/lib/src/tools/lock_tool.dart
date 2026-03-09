@@ -69,8 +69,14 @@ ToolCallback createLockHandler(
     );
   }
   final action = actionArg;
-  final filePath = args['file_path'] as String?;
-  final reason = args['reason'] as String?;
+  final filePath = switch (args['file_path']) {
+    final String v => v,
+    _ => null,
+  };
+  final reason = switch (args['reason']) {
+    final String v => v,
+    _ => null,
+  };
   final log = logger.child({
     'tool': 'lock',
     'action': action,
@@ -82,7 +88,10 @@ ToolCallback createLockHandler(
   if (action == 'list') return _list(db);
 
   // Hidden agent_key override for multi-agent integration testing
-  final keyOverride = args['agent_key'] as String?;
+  final keyOverride = switch (args['agent_key']) {
+    final String v => v,
+    _ => null,
+  };
   final String agentName;
   final String agentKey;
   if (keyOverride != null) {

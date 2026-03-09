@@ -281,11 +281,14 @@ Result<AgentRegistration, DbError> _register(
     INSERT INTO identity (agent_name, agent_key, registered_at, last_active)
     VALUES (?, ?, ?, ?)
   ''');
-  if (stmtResult case Error(:final error)) {
-    log.error('Registration failed: $error');
-    return Error((code: errDatabase, message: error));
+  final Statement stmt;
+  switch (stmtResult) {
+    case Success(:final value):
+      stmt = value;
+    case Error(:final error):
+      log.error('Registration failed: $error');
+      return Error((code: errDatabase, message: error));
   }
-  final stmt = (stmtResult as Success<Statement, String>).value;
   final runResult = stmt.run([name, key, now, now]);
   if (runResult case Error(:final error)) {
     if (error.contains('UNIQUE')) {
@@ -324,14 +327,11 @@ Result<AgentIdentity, DbError> _getAgent(Database db, String name) {
   ''');
   return switch (stmtResult) {
     Success(:final value) => switch (value.get([name])) {
-      Success(:final value) when value == null => const Error((
+      Success(value: final Map<String, Object?> v) =>
+        Success(agentIdentityFromJson(v)),
+      Success() => const Error((
         code: errNotFound,
         message: 'Agent not found',
-      )),
-      Success(:final value) => Success((
-        agentName: value!['agent_name']! as String,
-        registeredAt: value['registered_at']! as int,
-        lastActive: value['last_active']! as int,
       )),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
@@ -346,11 +346,18 @@ Result<String, DbError> _lookupByKey(Database db, Logger log, String key) {
   );
   return switch (stmtResult) {
     Success(:final value) => switch (value.get([key])) {
-      Success(:final value) when value == null => const Error((
+      Success(value: final Map<String, Object?> v) =>
+        switch (v['agent_name']) {
+          final String name => Success(name),
+          _ => const Error((
+            code: errDatabase,
+            message: 'Missing agent_name',
+          )),
+        },
+      Success() => const Error((
         code: errUnauthorized,
         message: 'Invalid key',
       )),
-      Success(:final value) => Success(value!['agent_name']! as String),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
     Error(:final error) => Error((code: errDatabase, message: error)),
@@ -365,15 +372,7 @@ Result<List<AgentIdentity>, DbError> _listAgents(Database db, Logger log) {
   return switch (stmtResult) {
     Success(:final value) => switch (value.all()) {
       Success(:final value) => Success(
-        value
-            .map(
-              (r) => (
-                agentName: r['agent_name']! as String,
-                registeredAt: r['registered_at']! as int,
-                lastActive: r['last_active']! as int,
-              ),
-            )
-            .toList(),
+        value.map(agentIdentityFromJson).toList(),
       ),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
@@ -410,10 +409,13 @@ Result<LockResult, DbError> _acquireLock(
     }
     // Expired - delete it
     final delStmtResult = db.prepare('DELETE FROM locks WHERE file_path = ?');
-    if (delStmtResult case Error(:final error)) {
-      return Error((code: errDatabase, message: error));
+    final Statement delStmt;
+    switch (delStmtResult) {
+      case Success(:final value):
+        delStmt = value;
+      case Error(:final error):
+        return Error((code: errDatabase, message: error));
     }
-    final delStmt = (delStmtResult as Success<Statement, String>).value;
     final delResult = delStmt.run([filePath]);
     if (delResult case Error(:final error)) {
       return Error((code: errDatabase, message: error));
@@ -498,15 +500,15 @@ Result<void, DbError> _forceReleaseLock(
   final existing = _queryLock(db, log, filePath);
   return switch (existing) {
     Error(:final error) => Error(error),
-    Success(:final value) when value == null => const Error((
+    Success(value: final FileLock v) when v.expiresAt > _now() => Error((
+      code: errLockHeld,
+      message: 'Lock not expired, held by ${v.agentName}',
+    )),
+    Success(value: final FileLock _) => _deleteExpiredLock(db, filePath),
+    Success() => const Error((
       code: errNotFound,
       message: 'No lock exists',
     )),
-    Success(:final value) when value!.expiresAt > _now() => Error((
-      code: errLockHeld,
-      message: 'Lock not expired, held by ${value.agentName}',
-    )),
-    Success() => _deleteExpiredLock(db, filePath),
   };
 }
 
@@ -530,15 +532,9 @@ Result<FileLock?, DbError> _queryLock(
   final stmtResult = db.prepare('SELECT * FROM locks WHERE file_path = ?');
   return switch (stmtResult) {
     Success(:final value) => switch (value.get([filePath])) {
-      Success(:final value) when value == null => const Success(null),
-      Success(:final value) => Success((
-        filePath: value!['file_path']! as String,
-        agentName: value['agent_name']! as String,
-        acquiredAt: value['acquired_at']! as int,
-        expiresAt: value['expires_at']! as int,
-        reason: value['reason'] as String?,
-        version: value['version']! as int,
-      )),
+      Success(value: final Map<String, Object?> v) =>
+        Success(fileLockFromJson(v)),
+      Success() => const Success(null),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
     Error(:final error) => Error((code: errDatabase, message: error)),
@@ -551,18 +547,7 @@ Result<List<FileLock>, DbError> _listLocks(Database db, Logger log) {
   return switch (stmtResult) {
     Success(:final value) => switch (value.all()) {
       Success(:final value) => Success(
-        value
-            .map(
-              (r) => (
-                filePath: r['file_path']! as String,
-                agentName: r['agent_name']! as String,
-                acquiredAt: r['acquired_at']! as int,
-                expiresAt: r['expires_at']! as int,
-                reason: r['reason'] as String?,
-                version: r['version']! as int,
-              ),
-            )
-            .toList(),
+        value.map(fileLockFromJson).toList(),
       ),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
@@ -667,18 +652,7 @@ ORDER BY created_at DESC''';
   return switch (stmtResult) {
     Success(:final value) => switch (value.all([agentName])) {
       Success(:final value) => () {
-        final messageList = value
-            .map(
-              (r) => (
-                id: r['id']! as String,
-                fromAgent: r['from_agent']! as String,
-                toAgent: r['to_agent']! as String,
-                content: r['content']! as String,
-                createdAt: r['created_at']! as int,
-                readAt: r['read_at'] as int?,
-              ),
-            )
-            .toList();
+        final messageList = value.map(messageFromJson).toList();
         // Auto-mark fetched messages as read (agent proved identity with key)
         _autoMarkRead(db, log, agentName, messageList);
         return Success<List<Message>, DbError>(messageList);
@@ -712,11 +686,14 @@ void _autoMarkRead(
     UPDATE messages SET read_at = ?
     WHERE id = ? AND to_agent = ? AND read_at IS NULL
   ''');
-  if (stmtResult case Error(:final error)) {
-    log.warn('Failed to auto-mark messages read: $error');
-    return;
+  final Statement stmt;
+  switch (stmtResult) {
+    case Success(:final value):
+      stmt = value;
+    case Error(:final error):
+      log.warn('Failed to auto-mark messages read: $error');
+      return;
   }
-  final stmt = (stmtResult as Success<Statement, String>).value;
   for (final id in unreadIds) {
     final result = stmt.run([now, id, agentName]);
     if (result case Error(:final error)) {
@@ -806,13 +783,9 @@ Result<AgentPlan?, DbError> _getPlan(
   final stmtResult = db.prepare('SELECT * FROM plans WHERE agent_name = ?');
   return switch (stmtResult) {
     Success(:final value) => switch (value.get([agentName])) {
-      Success(:final value) when value == null => const Success(null),
-      Success(:final value) => Success((
-        agentName: value!['agent_name']! as String,
-        goal: value['goal']! as String,
-        currentTask: value['current_task']! as String,
-        updatedAt: value['updated_at']! as int,
-      )),
+      Success(value: final Map<String, Object?> v) =>
+        Success(agentPlanFromJson(v)),
+      Success() => const Success(null),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
     Error(:final error) => Error((code: errDatabase, message: error)),
@@ -825,16 +798,7 @@ Result<List<AgentPlan>, DbError> _listPlans(Database db, Logger log) {
   return switch (stmtResult) {
     Success(:final value) => switch (value.all()) {
       Success(:final value) => Success(
-        value
-            .map(
-              (r) => (
-                agentName: r['agent_name']! as String,
-                goal: r['goal']! as String,
-                currentTask: r['current_task']! as String,
-                updatedAt: r['updated_at']! as int,
-              ),
-            )
-            .toList(),
+        value.map(agentPlanFromJson).toList(),
       ),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
@@ -850,18 +814,7 @@ Result<List<Message>, DbError> _listAllMessages(Database db, Logger log) {
   return switch (stmtResult) {
     Success(:final value) => switch (value.all()) {
       Success(:final value) => Success(
-        value
-            .map(
-              (r) => (
-                id: r['id']! as String,
-                fromAgent: r['from_agent']! as String,
-                toAgent: r['to_agent']! as String,
-                content: r['content']! as String,
-                createdAt: r['created_at']! as int,
-                readAt: r['read_at'] as int?,
-              ),
-            )
-            .toList(),
+        value.map(messageFromJson).toList(),
       ),
       Error(:final error) => Error((code: errDatabase, message: error)),
     },
@@ -948,21 +901,35 @@ Result<void, DbError> _adminDeleteAgent(
     'DELETE FROM identity WHERE agent_name = ?',
   );
 
-  // Check all prepared successfully
-  for (final stmtResult in [deleteLocks, deleteMessages, deletePlans]) {
-    if (stmtResult case Error(:final error)) {
+  // Extract statements via pattern matching
+  final Statement locksStmt;
+  switch (deleteLocks) {
+    case Success(:final value):
+      locksStmt = value;
+    case Error(:final error):
       return Error((code: errDatabase, message: error));
-    }
   }
-  if (deleteIdentity case Error(:final error)) {
-    return Error((code: errDatabase, message: error));
+  final Statement msgsStmt;
+  switch (deleteMessages) {
+    case Success(:final value):
+      msgsStmt = value;
+    case Error(:final error):
+      return Error((code: errDatabase, message: error));
   }
-
-  // Run the deletes
-  final locksStmt = (deleteLocks as Success<Statement, String>).value;
-  final msgsStmt = (deleteMessages as Success<Statement, String>).value;
-  final plansStmt = (deletePlans as Success<Statement, String>).value;
-  final idStmt = (deleteIdentity as Success<Statement, String>).value;
+  final Statement plansStmt;
+  switch (deletePlans) {
+    case Success(:final value):
+      plansStmt = value;
+    case Error(:final error):
+      return Error((code: errDatabase, message: error));
+  }
+  final Statement idStmt;
+  switch (deleteIdentity) {
+    case Success(:final value):
+      idStmt = value;
+    case Error(:final error):
+      return Error((code: errDatabase, message: error));
+  }
 
   if (locksStmt.run([agentName]) case Error(:final error)) {
     return Error((code: errDatabase, message: error));
@@ -1062,10 +1029,14 @@ Result<String, DbError> _adminSendMessage(
     INSERT OR IGNORE INTO identity (agent_name, agent_key, registered_at, last_active)
     VALUES (?, ?, ?, ?)
   ''');
-  if (ensureStmt case Error(:final error)) {
-    return Error((code: errDatabase, message: error));
+  final Statement ensureStmtValue;
+  switch (ensureStmt) {
+    case Success(:final value):
+      ensureStmtValue = value;
+    case Error(:final error):
+      return Error((code: errDatabase, message: error));
   }
-  final ensureResult = (ensureStmt as Success<Statement, String>).value
+  final ensureResult = ensureStmtValue
       .run([fromAgent, _generateKey(), now, now]);
   if (ensureResult case Error(:final error)) {
     return Error((code: errDatabase, message: error));

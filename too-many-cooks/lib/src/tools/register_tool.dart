@@ -49,8 +49,14 @@ ToolCallback createRegisterHandler(
   Logger logger,
   SessionSetter setSession,
 ) => (args, meta) async {
-  final nameArg = args['name'] as String?;
-  final keyArg = args['key'] as String?;
+  final nameArg = switch (args['name']) {
+    final String v => v,
+    _ => null,
+  };
+  final keyArg = switch (args['key']) {
+    final String v => v,
+    _ => null,
+  };
   final hasName = nameArg != null && nameArg.isNotEmpty;
   final hasKey = keyArg != null && keyArg.isNotEmpty;
 

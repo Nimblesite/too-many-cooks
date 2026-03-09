@@ -70,7 +70,10 @@ ToolCallback createMessageHandler(
   final action = actionArg;
 
   // Hidden agent_key override for multi-agent integration testing
-  final keyOverride = args['agent_key'] as String?;
+  final keyOverride = switch (args['agent_key']) {
+    final String v => v,
+    _ => null,
+  };
   final String agentName;
   final String agentKey;
   if (keyOverride != null) {
@@ -103,20 +106,20 @@ ToolCallback createMessageHandler(
       log,
       agentName,
       agentKey,
-      args['to_agent'] as String?,
-      args['content'] as String?,
+      switch (args['to_agent']) { final String v => v, _ => null },
+      switch (args['content']) { final String v => v, _ => null },
     ),
     'get' => _get(
       db,
       agentName,
       agentKey,
-      args['unread_only'] as bool? ?? true,
+      switch (args['unread_only']) { final bool v => v, _ => true },
     ),
     'mark_read' => _markRead(
       db,
       agentName,
       agentKey,
-      args['message_id'] as String?,
+      switch (args['message_id']) { final String v => v, _ => null },
     ),
     _ => (
       content: <Object>[textContent('{"error":"Unknown action: $action"}')],
