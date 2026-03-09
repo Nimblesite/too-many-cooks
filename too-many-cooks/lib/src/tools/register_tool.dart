@@ -120,23 +120,26 @@ ToolCallback createRegisterHandler(
     'tool': 'register',
     'agentName': name,
   });
-  return switch (db.register(name)) {
-    Success(:final value) => () {
-      setSession(value.agentName, value.agentKey);
-      db.activate(value.agentName);
-      emitter.emit(eventAgentRegistered, {
-        'agent_name': value.agentName,
-        'registered_at': DateTime.now().millisecondsSinceEpoch,
-      });
-      log.info('Agent registered: ${value.agentName}');
-      return (
-        content: <Object>[
-          textContent(jsonEncode(agentRegistrationToJson(value))),
-        ],
-        isError: false,
-      );
-    }(),
-    Error(:final error) => () {
+  final regResult = db.register(name);
+  final AgentRegistration reg;
+  switch (regResult) {
+    case Success(:final value):
+      reg = value;
+    case Error(:final error) when error.message.contains('already registered'):
+      // Re-registration: reset key so agent gets a fresh identity
+      switch (db.adminResetKey(name)) {
+        case Success(:final value):
+          reg = value;
+        case Error(:final error):
+          log.warn('Re-registration failed: ${error.code}');
+          return (
+            content: <Object>[
+              textContent(jsonEncode(dbErrorToJson(error))),
+            ],
+            isError: true,
+          );
+      }
+    case Error(:final error):
       log.warn('Registration failed: ${error.code}');
       return (
         content: <Object>[
@@ -144,6 +147,18 @@ ToolCallback createRegisterHandler(
         ],
         isError: true,
       );
-    }(),
-  };
+  }
+  setSession(reg.agentName, reg.agentKey);
+  db.activate(reg.agentName);
+  emitter.emit(eventAgentRegistered, {
+    'agent_name': reg.agentName,
+    'registered_at': DateTime.now().millisecondsSinceEpoch,
+  });
+  log.info('Agent registered: ${reg.agentName}');
+  return (
+    content: <Object>[
+      textContent(jsonEncode(agentRegistrationToJson(reg))),
+    ],
+    isError: false,
+  );
 };

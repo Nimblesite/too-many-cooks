@@ -278,9 +278,18 @@ Result<AgentRegistration, DbError> _register(
   }
   final key = _generateKey();
   final now = _now();
+  // Upsert: new agents are inserted active. Inactive agents
+  // (deactivated by adminReset) can be re-registered with a
+  // fresh key. Active agents reject duplicate names.
   final stmtResult = db.prepare('''
-    INSERT INTO identity (agent_name, agent_key, registered_at, last_active)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO identity (agent_name, agent_key, active, registered_at, last_active)
+    VALUES (?, ?, 1, ?, ?)
+    ON CONFLICT(agent_name) DO UPDATE SET
+      agent_key = excluded.agent_key,
+      active = 1,
+      registered_at = excluded.registered_at,
+      last_active = excluded.last_active
+    WHERE active = 0
   ''');
   final Statement stmt;
   switch (stmtResult) {
@@ -290,20 +299,27 @@ Result<AgentRegistration, DbError> _register(
       log.error('Registration failed: $error');
       return Error((code: errDatabase, message: error));
   }
-  final runResult = stmt.run([name, key, now, now]);
-  if (runResult case Error(:final error)) {
-    if (error.contains('UNIQUE')) {
-      log.warn('Registration failed: name already exists');
-      return const Error((
+  return switch (stmt.run([name, key, now, now])) {
+    Success(:final value) when value.changes > 0 => () {
+      log.info('Agent registered: $name');
+      return Success<AgentRegistration, DbError>(
+        (agentName: name, agentKey: key),
+      );
+    }(),
+    Success() => () {
+      log.warn('Registration failed: name already registered');
+      return const Error<AgentRegistration, DbError>((
         code: errValidation,
         message: 'Name already registered',
       ));
-    }
-    log.error('Registration failed: $error');
-    return Error((code: errDatabase, message: error));
-  }
-  log.info('Agent registered: $name');
-  return Success((agentName: name, agentKey: key));
+    }(),
+    Error(:final error) => () {
+      log.error('Registration failed: $error');
+      return Error<AgentRegistration, DbError>(
+        (code: errDatabase, message: error),
+      );
+    }(),
+  };
 }
 
 Result<AgentIdentity, DbError> _authenticate(
@@ -368,7 +384,8 @@ Result<String, DbError> _lookupByKey(Database db, Logger log, String key) {
 Result<List<AgentIdentity>, DbError> _listAgents(Database db, Logger log) {
   log.debug('Listing all agents');
   final stmtResult = db.prepare(
-    'SELECT agent_name, registered_at, last_active FROM identity',
+    'SELECT agent_name, registered_at, last_active '
+    'FROM identity WHERE active = 1',
   );
   return switch (stmtResult) {
     Success(:final value) => switch (value.all()) {
