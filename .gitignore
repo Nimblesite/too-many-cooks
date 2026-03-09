@@ -22,3 +22,5 @@ website/coverage/
 *.vsix
 
 test-results/
+
+codegen/.dart_tool/
