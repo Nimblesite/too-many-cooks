@@ -19,7 +19,7 @@ const spawnServerWithWorkspace = (workspace: string): ChildProcess =>
   spawn("node", [SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
-      PATH: process.env["PATH"] ?? "/usr/local/bin:/usr/bin:/bin",
+      PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
       TMC_WORKSPACE: workspace,
       TMC_PORT: String(PORT),
     },
@@ -33,11 +33,11 @@ const waitForServer = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) {
     try {
       const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) return;
+      if (r.ok) {return;}
     } catch {
       // not ready yet
     }
-    if (i === 49) throw new Error("Server failed to start");
+    if (i === 49) {throw new Error("Server failed to start");}
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 };

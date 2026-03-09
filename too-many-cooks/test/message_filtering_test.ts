@@ -29,9 +29,9 @@ const parseJson = (text: string): Record<string, unknown> =>
 
 const extractEventType = (sseData: string): string | undefined => {
   const json = parseJson(sseData);
-  const params = json["params"] as Record<string, unknown> | undefined;
-  const data = params?.["data"] as Record<string, unknown> | undefined;
-  return data?.["event"] as string | undefined;
+  const params = json.params as Record<string, unknown> | undefined;
+  const data = params?.data as Record<string, unknown> | undefined;
+  return data?.event as string | undefined;
 };
 
 class AgentSseClient {
@@ -54,22 +54,22 @@ class AgentSseClient {
           },
           signal,
         });
-        if (!response.ok) return;
+        if (!response.ok) {return;}
         const body = response.body;
-        if (body === null) return;
+        if (body === null) {return;}
         const reader = body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         for (;;) {
           const chunk = await reader.read();
-          if (chunk.done) break;
+          if (chunk.done) {break;}
           buffer += decoder.decode(chunk.value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               const data = line.substring(6).trim();
-              if (data.length > 0) client.events.push(data);
+              if (data.length > 0) {client.events.push(data);}
             }
           }
         }
@@ -146,8 +146,8 @@ class McpClient {
       name,
       arguments: args,
     });
-    const content = (result["content"] as Array<Record<string, unknown>>)[0];
-    return content?.["text"] as string;
+    const content = (result.content as Array<Record<string, unknown>>)[0];
+    return content?.text as string;
   }
 
   private async request(
@@ -163,15 +163,15 @@ class McpClient {
     const response = await this.postMcp(body);
     const text = await response.text();
     const json = this.parseMcpResponse(text);
-    if ("error" in json && json["error"] !== undefined) {
-      const errorObj = json["error"] as Record<string, unknown>;
-      const msg = (errorObj["message"] as string | undefined) ?? "Error";
+    if ("error" in json && json.error !== undefined) {
+      const errorObj = json.error as Record<string, unknown>;
+      const msg = (errorObj.message as string | undefined) ?? "Error";
       return {
         isError: true,
         content: [{ type: "text", text: msg }],
       };
     }
-    return json["result"] as Record<string, unknown>;
+    return json.result as Record<string, unknown>;
   }
 
   private async postMcp(body: string): Promise<Response> {
@@ -224,11 +224,11 @@ const waitForServer = async (): Promise<void> => {
   for (let i = 0; i < 30; i++) {
     try {
       const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) return;
+      if (r.ok) {return;}
     } catch {
       // not ready
     }
-    if (i === 29) throw new Error("Server failed to start");
+    if (i === 29) {throw new Error("Server failed to start");}
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 };
@@ -247,7 +247,7 @@ const deleteDbFiles = (): void => {
   for (const file of DB_FILES) {
     const path = `${DB_DIR}/${file}`;
     try {
-      if (existsSync(path)) unlinkSync(path);
+      if (existsSync(path)) {unlinkSync(path);}
     } catch {
       // ignore
     }
@@ -289,7 +289,7 @@ describe("message filtering", () => {
     await recipient.callTool("register", { name: "recipient" });
     await bystander.callTool("register", { name: "bystander" });
 
-    const senderKey = senderReg["agent_key"] as string;
+    const senderKey = senderReg.agent_key as string;
 
     // Open SSE streams AFTER registration to avoid buffered events.
     const recipientSse = await AgentSseClient.connect(
@@ -348,7 +348,7 @@ describe("message filtering", () => {
     );
     await agent2.callTool("register", { name: "agent2-b" });
 
-    const senderKey = senderReg["agent_key"] as string;
+    const senderKey = senderReg.agent_key as string;
 
     const agent2Sse = await AgentSseClient.connect(agent2.getSessionId());
 

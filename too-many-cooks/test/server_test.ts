@@ -16,7 +16,7 @@ describe("createTooManyCooksServer", () => {
 
   it("creates server with custom config", () => {
     const config = {
-      dbPath: `.test_server_${Date.now()}.db`,
+      dbPath: `.test_server_${String(Date.now())}.db`,
       lockTimeoutMs: 5000,
       maxMessageLength: 100,
       maxPlanLength: 50,

@@ -34,12 +34,12 @@ describe("locks", () => {
     const config = createDataConfig({ dbPath: TEST_DB_PATH });
     const result = createDb(config);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     db = result.value;
 
     // Register a test agent
     const regResult = db.register("lock-agent");
-    if (!regResult.ok) throw new Error("expected ok");
+    if (!regResult.ok) {throw new Error("expected ok");}
     const reg = regResult.value;
     agentName = reg.agentName;
     agentKey = reg.agentKey;
@@ -52,7 +52,7 @@ describe("locks", () => {
 
   it("acquireLock succeeds on free file", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.acquireLock(
       "/path/to/file.dart",
       agentName,
@@ -61,7 +61,7 @@ describe("locks", () => {
       60000,
     );
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const lockResult = result.value;
     assert.strictEqual(lockResult.acquired, true);
     assert.notStrictEqual(lockResult.lock, undefined);
@@ -73,10 +73,10 @@ describe("locks", () => {
 
   it("acquireLock fails when held by another agent", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     // Register second agent
     const reg2Result = db.register("lock-agent-2");
-    if (!reg2Result.ok) throw new Error("expected ok");
+    if (!reg2Result.ok) {throw new Error("expected ok");}
     const reg2 = reg2Result.value;
 
     // First agent acquires lock
@@ -91,7 +91,7 @@ describe("locks", () => {
       60000,
     );
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const lockResult = result.value;
     assert.strictEqual(lockResult.acquired, false);
     assert.strictEqual(lockResult.lock, undefined);
@@ -100,7 +100,7 @@ describe("locks", () => {
 
   it("acquireLock fails with invalid credentials", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.acquireLock(
       "/path/to/file.dart",
       agentName,
@@ -109,13 +109,13 @@ describe("locks", () => {
       60000,
     );
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_UNAUTHORIZED);
   });
 
   it("releaseLock succeeds when owned", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.acquireLock("/release/file.dart", agentName, agentKey, undefined, 60000);
 
     const result = db.releaseLock("/release/file.dart", agentName, agentKey);
@@ -124,28 +124,28 @@ describe("locks", () => {
     // Verify lock is gone
     const queryResult = db.queryLock("/release/file.dart");
     assert.strictEqual(queryResult.ok, true);
-    if (!queryResult.ok) throw new Error("expected ok");
+    if (!queryResult.ok) {throw new Error("expected ok");}
     const lock = queryResult.value;
     assert.strictEqual(lock, undefined);
   });
 
   it("releaseLock fails when not owned", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.releaseLock("/not/locked.dart", agentName, agentKey);
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_NOT_FOUND);
   });
 
   it("queryLock returns lock info", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.acquireLock("/query/file.dart", agentName, agentKey, "testing", 60000);
 
     const result = db.queryLock("/query/file.dart");
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const lock = result.value;
     assert.notStrictEqual(lock, undefined);
     assert.strictEqual(lock!.filePath, "/query/file.dart");
@@ -155,23 +155,23 @@ describe("locks", () => {
 
   it("queryLock returns null for unlocked file", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.queryLock("/not/locked.dart");
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const lock = result.value;
     assert.strictEqual(lock, undefined);
   });
 
   it("listLocks returns all active locks", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.acquireLock("/list/file1.dart", agentName, agentKey, undefined, 60000);
     db.acquireLock("/list/file2.dart", agentName, agentKey, undefined, 60000);
 
     const result = db.listLocks();
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const locks = result.value;
     assert.strictEqual(locks.length, 2);
     assert.deepStrictEqual(
@@ -182,12 +182,12 @@ describe("locks", () => {
 
   it("renewLock extends expiration", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.acquireLock("/renew/file.dart", agentName, agentKey, undefined, 1000);
 
     const queryBefore = db.queryLock("/renew/file.dart");
     assert.strictEqual(queryBefore.ok, true);
-    if (!queryBefore.ok) throw new Error("expected ok");
+    if (!queryBefore.ok) {throw new Error("expected ok");}
     const lockBefore = queryBefore.value!;
 
     const result = db.renewLock(
@@ -200,7 +200,7 @@ describe("locks", () => {
 
     const queryAfter = db.queryLock("/renew/file.dart");
     assert.strictEqual(queryAfter.ok, true);
-    if (!queryAfter.ok) throw new Error("expected ok");
+    if (!queryAfter.ok) {throw new Error("expected ok");}
     const lockAfter = queryAfter.value!;
     assert.ok(lockAfter.expiresAt > lockBefore.expiresAt);
     assert.ok(lockAfter.version > lockBefore.version);
@@ -208,22 +208,22 @@ describe("locks", () => {
 
   it("renewLock fails when not owned", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.renewLock("/not/owned.dart", agentName, agentKey, 60000);
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_NOT_FOUND);
   });
 
   it("acquireLock takes over expired lock", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     // Acquire with 0ms timeout (immediately expired)
     db.acquireLock("/expire/file.dart", agentName, agentKey, undefined, 0);
 
     // Register second agent
     const reg2Result = db.register("lock-agent-3");
-    if (!reg2Result.ok) throw new Error("expected ok");
+    if (!reg2Result.ok) {throw new Error("expected ok");}
     const reg2 = reg2Result.value;
 
     // Second agent should acquire expired lock (expiry checked at acquire time)
@@ -235,7 +235,7 @@ describe("locks", () => {
       60000,
     );
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const lockResult = result.value;
     assert.strictEqual(lockResult.acquired, true);
     assert.strictEqual(lockResult.lock!.agentName, reg2.agentName);
@@ -243,10 +243,10 @@ describe("locks", () => {
 
   it("forceReleaseLock fails on non-expired lock", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     // Register second agent
     const reg2Result = db.register("force-agent");
-    if (!reg2Result.ok) throw new Error("expected ok");
+    if (!reg2Result.ok) {throw new Error("expected ok");}
     const reg2 = reg2Result.value;
 
     // First agent acquires with long timeout
@@ -259,16 +259,16 @@ describe("locks", () => {
       reg2.agentKey,
     );
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_LOCK_HELD);
   });
 
   it("forceReleaseLock fails when no lock exists", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.forceReleaseLock("/no/lock.dart", agentName, agentKey);
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_NOT_FOUND);
   });
 });

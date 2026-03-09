@@ -15,7 +15,6 @@ import fs from 'node:fs';
 
 import {
   type TooManyCooksDb,
-  type AgentRegistration,
   createDataConfig,
   createDb,
 } from '../lib/src/data/data.js';

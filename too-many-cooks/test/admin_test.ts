@@ -7,7 +7,6 @@ import fs from 'node:fs';
 
 import {
   type TooManyCooksDb,
-  type AgentRegistration,
   type AgentIdentity,
   createDataConfig,
   createDb,

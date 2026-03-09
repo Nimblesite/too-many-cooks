@@ -14,27 +14,27 @@ import {
 type SchemaObj = Record<string, unknown>;
 
 const props = (schema: SchemaObj): Record<string, SchemaObj> => {
-  const p = schema["properties"] as Record<string, SchemaObj> | undefined;
-  if (p === undefined) throw new Error("No properties in schema");
+  const p = schema.properties as Record<string, SchemaObj> | undefined;
+  if (p === undefined) {throw new Error("No properties in schema");}
   return p;
 };
 
 const field = (schema: SchemaObj, name: string): SchemaObj => {
   const f = props(schema)[name];
-  if (f === undefined) throw new Error(`No field ${name} in schema`);
+  if (f === undefined) {throw new Error(`No field ${name} in schema`);}
   return f;
 };
 
 const desc = (schema: SchemaObj, name: string): string => {
-  const d = field(schema, name)["description"];
-  if (typeof d !== "string") throw new Error(`No description for ${name}`);
+  const d = field(schema, name).description;
+  if (typeof d !== "string") {throw new Error(`No description for ${name}`);}
   return d;
 };
 
 describe("message tool schema", () => {
   it("content has maxLength 200", () => {
     assert.strictEqual(
-      field(MESSAGE_INPUT_SCHEMA as SchemaObj, "content")["maxLength"],
+      field(MESSAGE_INPUT_SCHEMA as SchemaObj, "content").maxLength,
       200,
     );
   });
@@ -49,7 +49,7 @@ describe("message tool schema", () => {
 describe("plan tool schema", () => {
   it("goal has maxLength 100", () => {
     assert.strictEqual(
-      field(PLAN_INPUT_SCHEMA as SchemaObj, "goal")["maxLength"],
+      field(PLAN_INPUT_SCHEMA as SchemaObj, "goal").maxLength,
       100,
     );
   });
@@ -62,7 +62,7 @@ describe("plan tool schema", () => {
 
   it("current_task has maxLength 100", () => {
     assert.strictEqual(
-      field(PLAN_INPUT_SCHEMA as SchemaObj, "current_task")["maxLength"],
+      field(PLAN_INPUT_SCHEMA as SchemaObj, "current_task").maxLength,
       100,
     );
   });
@@ -99,7 +99,7 @@ describe("register tool schema", () => {
     // Schema should NOT have required: ['name', 'key']
     // Either name or key, not both — validated in handler
     assert.strictEqual(
-      (REGISTER_INPUT_SCHEMA as SchemaObj)["required"],
+      (REGISTER_INPUT_SCHEMA as SchemaObj).required,
       undefined,
     );
   });

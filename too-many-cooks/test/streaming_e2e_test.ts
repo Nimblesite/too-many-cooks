@@ -34,11 +34,11 @@ const waitForServer = async (): Promise<void> => {
   for (let i = 0; i < 30; i++) {
     try {
       const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) return;
+      if (r.ok) {return;}
     } catch {
       // Not ready yet
     }
-    if (i === 29) throw new Error("Server failed to start");
+    if (i === 29) {throw new Error("Server failed to start");}
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
   }
 };
@@ -82,7 +82,7 @@ class AdminSseClient {
     const client = new AdminSseClient();
     client.controller = new AbortController();
     // Start reading in the background
-    void client.startReading(sessionId).catch(() => {});
+    void client.startReading(sessionId).catch((): void => { /* noop */ });
     // Give the stream a moment to establish
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
     return client;
@@ -99,7 +99,7 @@ class AdminSseClient {
         signal: this.controller?.signal,
       });
 
-      if (!response.ok || response.body === null) return;
+      if (!response.ok || response.body === null) {return;}
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -107,7 +107,7 @@ class AdminSseClient {
 
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {break;}
 
         buffer += decoder.decode(value, { stream: true });
 
@@ -230,8 +230,8 @@ class McpClient {
       name,
       arguments: args,
     });
-    const content = (result["content"] as Record<string, unknown>[])[0];
-    return content?.["text"] as string;
+    const content = (result.content as Array<Record<string, unknown>>)[0];
+    return content?.text as string;
   }
 
   private async request(
@@ -248,15 +248,15 @@ class McpClient {
     const response = await this.postMcp(body);
     const text = await response.text();
     const json = this.parseMcpResponse(text);
-    if ("error" in json && json["error"] !== undefined) {
-      const err = json["error"] as Record<string, unknown>;
-      const message = (err["message"] as string) ?? "Error";
+    if ("error" in json && json.error !== undefined) {
+      const err = json.error as Record<string, unknown>;
+      const message = (err.message as string) ?? "Error";
       return {
         isError: true,
         content: [{ type: "text", text: message }],
       };
     }
-    return json["result"] as Record<string, unknown>;
+    return json.result as Record<string, unknown>;
   }
 
   private async postMcp(body: string): Promise<Response> {
@@ -273,7 +273,7 @@ class McpClient {
       body,
     });
     const sid = response.headers.get("mcp-session-id");
-    if (sid !== null) this.sessionId = sid;
+    if (sid !== null) {this.sessionId = sid;}
     return response;
   }
 
@@ -339,7 +339,7 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
       name: "sse-agent-1",
     });
     const regJson = JSON.parse(regResult) as Record<string, unknown>;
-    assert.strictEqual(regJson["agent_name"], "sse-agent-1");
+    assert.strictEqual(regJson.agent_name, "sse-agent-1");
 
     // 3. ASSERT: SSE event arrives
     const events = await sse.waitForEvents(1);
@@ -365,7 +365,7 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
     const reg1 = JSON.parse(
       await mcpClient.callTool("register", { name: "stream-all-1" }),
     ) as Record<string, unknown>;
-    const key1 = reg1["agent_key"] as string;
+    const key1 = reg1.agent_key as string;
 
     JSON.parse(
       await mcpClient.callTool("register", { name: "stream-all-2" }),
@@ -444,22 +444,22 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
 
     // Parse the SSE data as JSON-RPC notification
     const eventJson = JSON.parse(events[0]!) as Record<string, unknown>;
-    assert.strictEqual(eventJson["jsonrpc"], "2.0");
-    assert.strictEqual(eventJson["method"], "notifications/message");
+    assert.strictEqual(eventJson.jsonrpc, "2.0");
+    assert.strictEqual(eventJson.method, "notifications/message");
 
     // Params must contain logging data
-    const params = eventJson["params"] as Record<string, unknown> | undefined;
+    const params = eventJson.params as Record<string, unknown> | undefined;
     assert.ok(params !== undefined);
-    assert.strictEqual(params["level"], "info");
+    assert.strictEqual(params.level, "info");
 
     // Data must contain event and payload
-    const data = params["data"] as Record<string, unknown> | undefined;
+    const data = params.data as Record<string, unknown> | undefined;
     assert.ok(data !== undefined);
     assert.ok("event" in data);
     assert.ok("payload" in data);
     assert.ok("timestamp" in data);
     assert.strictEqual(
-      data["event"],
+      data.event,
       "agent_registered",
       "Event type MUST be agent_registered for register",
     );
@@ -489,7 +489,7 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
 
     // Register 5 agents concurrently
     const agentCount = 5;
-    const regPromises = Array.from({ length: agentCount }, (_, i) =>
+    const regPromises = Array.from({ length: agentCount }, async (_, i) =>
       mcpClient.callTool("register", { name: `concurrent-${String(i)}` }),
     );
     await Promise.all(regPromises);
@@ -517,7 +517,7 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
 
     // Use admin REST to send message (bypasses MCP)
     await adminPost("/admin/send-message", {
-      fromAgent: reg["agent_name"] as string,
+      fromAgent: reg.agent_name as string,
       toAgent: "*",
       content: "Admin push test",
     });
@@ -542,7 +542,7 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
         name: "roundtrip-agent",
       }),
     ) as Record<string, unknown>;
-    const key = reg["agent_key"] as string;
+    const key = reg.agent_key as string;
     allEvents.push(...(await sse.waitForEvents(1)));
 
     // Lock
@@ -592,9 +592,9 @@ describe("Streaming E2E - SSE Events Over Streamable HTTP", () => {
     // Extract event types from all events
     const eventTypes = allEvents.map((e) => {
       const json = JSON.parse(e) as Record<string, unknown>;
-      const params = json["params"] as Record<string, unknown> | undefined;
-      const data = params?.["data"] as Record<string, unknown> | undefined;
-      return data?.["event"] as string | undefined;
+      const params = json.params as Record<string, unknown> | undefined;
+      const data = params?.data as Record<string, unknown> | undefined;
+      return data?.event as string | undefined;
     });
 
     assert.ok(

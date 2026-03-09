@@ -48,7 +48,7 @@ const waitForServer = async (): Promise<void> => {
   for (let i = 0; i < 30; i++) {
     try {
       const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) return;
+      if (r.ok) {return;}
     } catch {
       // Not ready yet
     }

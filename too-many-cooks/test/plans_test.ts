@@ -33,12 +33,12 @@ describe("plans", () => {
     const config = createDataConfig({ dbPath: TEST_DB_PATH });
     const result = createDb(config);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     db = result.value;
 
     // Register test agent
     const regResult = db.register("plan-agent");
-    if (!regResult.ok) throw new Error("expected ok");
+    if (!regResult.ok) {throw new Error("expected ok");}
     const reg = regResult.value;
     agentName = reg.agentName;
     agentKey = reg.agentKey;
@@ -51,7 +51,7 @@ describe("plans", () => {
 
   it("updatePlan creates new plan", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.updatePlan(
       agentName,
       agentKey,
@@ -63,14 +63,14 @@ describe("plans", () => {
 
   it("updatePlan updates existing plan", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.updatePlan(agentName, agentKey, "Goal 1", "Task 1");
 
     const result = db.updatePlan(agentName, agentKey, "Goal 2", "Task 2");
     assert.strictEqual(result.ok, true);
 
     const getPlan = db.getPlan(agentName);
-    if (!getPlan.ok) throw new Error("expected ok");
+    if (!getPlan.ok) {throw new Error("expected ok");}
     const plan = getPlan.value!;
     assert.strictEqual(plan.goal, "Goal 2");
     assert.strictEqual(plan.currentTask, "Task 2");
@@ -78,42 +78,42 @@ describe("plans", () => {
 
   it("updatePlan fails with invalid credentials", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const result = db.updatePlan(agentName, "wrong-key", "Goal", "Task");
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_UNAUTHORIZED);
   });
 
   it("updatePlan fails for goal exceeding max length", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const longGoal = "x".repeat(101); // Default max is 100
     const result = db.updatePlan(agentName, agentKey, longGoal, "Task");
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_VALIDATION);
     assert.ok(result.error.message.includes("100"));
   });
 
   it("updatePlan fails for task exceeding max length", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     const longTask = "x".repeat(101);
     const result = db.updatePlan(agentName, agentKey, "Goal", longTask);
     assert.strictEqual(result.ok, false);
-    if (result.ok) throw new Error("expected error");
+    if (result.ok) {throw new Error("expected error");}
     assert.strictEqual(result.error.code, ERR_VALIDATION);
   });
 
   it("getPlan returns plan for agent", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.updatePlan(agentName, agentKey, "My Goal", "Current Task");
 
     const result = db.getPlan(agentName);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const plan = result.value;
     assert.notStrictEqual(plan, undefined);
     assert.strictEqual(plan!.agentName, agentName);
@@ -124,33 +124,33 @@ describe("plans", () => {
 
   it("getPlan returns null for agent without plan", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     // Register agent without setting plan
     const reg2 = db.register("no-plan-agent");
-    if (!reg2.ok) throw new Error("expected ok");
+    if (!reg2.ok) {throw new Error("expected ok");}
     const agent2 = reg2.value;
 
     const result = db.getPlan(agent2.agentName);
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const plan = result.value;
     assert.strictEqual(plan, undefined);
   });
 
   it("listPlans returns all plans", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.updatePlan(agentName, agentKey, "Goal 1", "Task 1");
 
     // Register second agent with plan
     const reg2 = db.register("plan-agent-2");
-    if (!reg2.ok) throw new Error("expected ok");
+    if (!reg2.ok) {throw new Error("expected ok");}
     const agent2 = reg2.value;
     db.updatePlan(agent2.agentName, agent2.agentKey, "Goal 2", "Task 2");
 
     const result = db.listPlans();
     assert.strictEqual(result.ok, true);
-    if (!result.ok) throw new Error("expected ok");
+    if (!result.ok) {throw new Error("expected ok");}
     const plans = result.value;
     assert.strictEqual(plans.length, 2);
     assert.deepStrictEqual(
@@ -161,15 +161,15 @@ describe("plans", () => {
 
   it("plan updatedAt changes on update", () => {
     assert.notStrictEqual(db, undefined);
-    if (!db) throw new Error("expected db");
+    if (!db) {throw new Error("expected db");}
     db.updatePlan(agentName, agentKey, "Goal", "Task 1");
     const getPlan1 = db.getPlan(agentName);
-    if (!getPlan1.ok) throw new Error("expected ok");
+    if (!getPlan1.ok) {throw new Error("expected ok");}
     const plan1 = getPlan1.value;
 
     db.updatePlan(agentName, agentKey, "Goal", "Task 2");
     const getPlan2 = db.getPlan(agentName);
-    if (!getPlan2.ok) throw new Error("expected ok");
+    if (!getPlan2.ok) {throw new Error("expected ok");}
     const plan2 = getPlan2.value;
 
     assert.ok(plan2!.updatedAt >= plan1!.updatedAt);

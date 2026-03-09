@@ -6,7 +6,6 @@ import assert from "node:assert";
 import fs from "node:fs";
 
 import {
-  type TooManyCooksDb,
   createDataConfig,
   createDb,
   ERR_NOT_FOUND,

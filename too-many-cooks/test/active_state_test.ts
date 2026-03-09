@@ -7,7 +7,6 @@ import fs from 'node:fs';
 
 import {
   type TooManyCooksDb,
-  type AgentRegistration,
   createDataConfig,
   createDb,
   ERR_NOT_FOUND,
