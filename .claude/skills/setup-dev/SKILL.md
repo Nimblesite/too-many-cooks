@@ -17,13 +17,12 @@ allowed-tools: Bash
 ## MCP Server Setup
 
 ```bash
-cd too-many-cooks && dart pub get && npm ci
-dart compile js -o build/bin/server.js bin/server.dart
+cd too-many-cooks && npm ci && npm run build
 ```
 
 Add to Claude Code:
 ```bash
-claude mcp add --transport http too-many-cooks -- node too-many-cooks/build/bin/server.js
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
 ```
 
 ---
@@ -34,7 +33,6 @@ Build the MCP server first (above), then:
 
 ```bash
 cd too_many_cooks_vscode_extension
-dart pub get
 npm ci
 npm run compile
 npx @vscode/vsce package

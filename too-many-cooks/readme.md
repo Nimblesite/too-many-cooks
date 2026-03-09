@@ -2,7 +2,7 @@
 
 Multi-agent coordination MCP server. Enables multiple AI agents to safely edit a codebase simultaneously with file locking, messaging, shared plans, and real-time push notifications.
 
-Uses [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) transport so all agents connect to one shared server and receive real-time state changes. No polling. Built with Dart, compiled to Node.js via [dart_node](https://www.dartnode.org).
+Uses [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) transport so all agents connect to one shared server and receive real-time state changes. No polling. Built with TypeScript on Node.js.
 
 ## Install
 
@@ -96,7 +96,7 @@ The companion [Too Many Cooks VSCode extension](https://github.com/MelbourneDeve
 - **Messaging** - inter-agent communication with broadcast support
 - **Plan Visibility** - share goals and current tasks across agents
 - **Real-time Notifications** - server pushes state changes to all connected agents via Streamable HTTP
-- **Written in Dart** - compiled to Node.js via [dart_node](https://www.dartnode.org)
+- **Written in TypeScript** - runs on Node.js
 
 ## MCP Tools
 

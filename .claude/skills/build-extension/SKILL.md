@@ -17,15 +17,14 @@ bash too_many_cooks_vscode_extension/build.sh
 ```
 
 This does:
-1. Compiles MCP server: `dart compile js -o build/bin/server.js bin/server.dart`
-2. Compiles extension: `dart compile js` → `wrap-extension.js` bridge → `out/lib/extension.js`
+1. Builds MCP server: `npm run build`
+2. Compiles extension: `npm run compile`
 3. Packages: `vsce package` → `.vsix` file
 
 ## Build MCP server only
 
 ```bash
-cd too-many-cooks && dart pub get && npm ci
-dart compile js -o build/bin/server.js bin/server.dart
+cd too-many-cooks && npm ci && npm run build
 ```
 
 ## Test
@@ -43,6 +42,4 @@ code --install-extension too_many_cooks_vscode_extension/*.vsix
 
 ## Architecture
 
-Dart → `dart compile js` → wrapper script → VSCode-compatible JS module.
-
-The wrapper scripts (`scripts/wrap-extension.js`, `scripts/wrap-tests.js`) bridge dart2js output to VSCode's CommonJS `require`/`module.exports` system and inject polyfills needed by dart2js async scheduling.
+TypeScript → `tsc` → VSCode-compatible JS module.

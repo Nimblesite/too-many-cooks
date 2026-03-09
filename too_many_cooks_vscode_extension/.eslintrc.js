@@ -56,7 +56,6 @@ module.exports = {
     ],
     '@typescript-eslint/no-base-to-string': 'error',
     '@typescript-eslint/no-confusing-void-expression': 'error',
-    // '@typescript-eslint/no-deprecated': 'error', // Rule not found
     '@typescript-eslint/no-duplicate-enum-values': 'error',
     '@typescript-eslint/no-duplicate-type-constituents': 'error',
     '@typescript-eslint/no-dynamic-delete': 'error',
@@ -324,7 +323,6 @@ module.exports = {
         'max-lines-per-function': 'off',
         'max-nested-callbacks': 'off',
         '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-non-null-assertion': 'warn',
         '@typescript-eslint/no-unsafe-assignment': 'warn',
         '@typescript-eslint/no-unsafe-member-access': 'warn',
         'no-magic-numbers': 'off',

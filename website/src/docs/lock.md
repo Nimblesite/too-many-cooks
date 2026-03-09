@@ -23,13 +23,13 @@ Advisory file locking. Lock a file before editing, release when done.
 ## Acquire a lock
 
 ```json
-{ "action": "acquire", "file_path": "lib/src/server.dart" }
+{ "action": "acquire", "file_path": "src/server.ts" }
 ```
 
 ## Release a lock
 
 ```json
-{ "action": "release", "file_path": "lib/src/server.dart" }
+{ "action": "release", "file_path": "src/server.ts" }
 ```
 
 ## Notes
