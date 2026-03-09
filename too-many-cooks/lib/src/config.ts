@@ -19,5 +19,8 @@ import type { TooManyCooksDataConfig } from "./data/data.js";
 /** Server configuration type alias for backwards compatibility. */
 export type TooManyCooksConfig = TooManyCooksDataConfig;
 
-/** Server binary relative path (output of build_mcp.sh). */
-export const SERVER_BINARY = "build/bin/server_node.js";
+/** Server entry point relative path. */
+export const SERVER_BINARY = "bin/server.ts";
+
+/** Node args needed to run the server (tsx loader for TypeScript). */
+export const SERVER_NODE_ARGS = ["--import", "tsx"] as const;

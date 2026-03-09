@@ -9,9 +9,10 @@ import {
   readdirSync,
 } from "node:fs";
 
-import { SERVER_BINARY } from "../lib/src/config.js";
+import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
-const BASE_URL = "http://localhost:4040";
+const TEST_PORT = 4042;
+const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
 const ACCEPT = "application/json, text/event-stream";
 
 /** Delete DB and temp files using Node.js fs. */
@@ -55,8 +56,9 @@ const deleteDbFiles = (): void => {
 
 /** Spawn the server process. */
 const spawnServer = (): ChildProcess =>
-  spawn("node", [SERVER_BINARY], {
+  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
   });
 
 /** Wait for server to be ready by polling /admin/status

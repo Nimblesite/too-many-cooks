@@ -2,8 +2,12 @@
 name = Admin Reset
 description = Reset all server state to a clean slate before tests
 
+[vars]
+baseUrl = http://localhost:4040
+
 [request]
-POST {{baseUrl}}/admin/reset
+method = POST
+url = {{baseUrl}}/admin/reset
 
 [request.headers]
 Content-Type = application/json

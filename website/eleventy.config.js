@@ -35,11 +35,11 @@ const techdocOptions = {
     blog: false,
     docs: true,
     darkMode: true,
-    i18n: false,
+    i18n: true,
   },
   i18n: {
     defaultLanguage: "en",
-    languages: ["en"],
+    languages: ["en", "zh"],
   },
 };
 

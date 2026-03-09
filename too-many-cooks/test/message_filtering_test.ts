@@ -8,9 +8,10 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
-import { SERVER_BINARY } from "../lib/src/config.js";
+import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
-const BASE_URL = "http://localhost:4040";
+const TEST_PORT = 4045;
+const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
 const MCP_PATH = "/mcp";
 const ACCEPT = "application/json, text/event-stream";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
@@ -212,8 +213,9 @@ class McpClient {
 }
 
 const spawnServer = (): ChildProcess =>
-  spawn("node", [SERVER_BINARY], {
+  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
   });
 
 const killProcess = (proc: ChildProcess): void => {

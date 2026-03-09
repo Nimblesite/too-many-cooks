@@ -2,8 +2,12 @@
 name = Reset Key Missing Name
 description = Verify 400 when agentName is missing from reset-key
 
+[vars]
+baseUrl = http://localhost:4040
+
 [request]
-POST {{baseUrl}}/admin/reset-key
+method = POST
+url = {{baseUrl}}/admin/reset-key
 
 [request.headers]
 Content-Type = application/json

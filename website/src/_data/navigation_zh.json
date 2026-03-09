@@ -1,0 +1,82 @@
+{
+  "main": [
+    {
+      "text": "文档",
+      "url": "/zh/docs/getting-started/"
+    },
+    {
+      "text": "GitHub",
+      "url": "https://github.com/melbournedeveloper/too_many_cooks",
+      "external": true
+    }
+  ],
+  "docs": [
+    {
+      "title": "介绍",
+      "items": [
+        {
+          "text": "快速开始",
+          "url": "/zh/docs/getting-started/"
+        },
+        {
+          "text": "工作原理",
+          "url": "/zh/docs/how-it-works/"
+        }
+      ]
+    },
+    {
+      "title": "工具",
+      "items": [
+        {
+          "text": "注册",
+          "url": "/zh/docs/register/"
+        },
+        {
+          "text": "锁定",
+          "url": "/zh/docs/lock/"
+        },
+        {
+          "text": "消息",
+          "url": "/zh/docs/messages/"
+        },
+        {
+          "text": "计划",
+          "url": "/zh/docs/plans/"
+        },
+        {
+          "text": "状态",
+          "url": "/zh/docs/status/"
+        }
+      ]
+    },
+    {
+      "title": "VSCode 扩展",
+      "items": [
+        {
+          "text": "概览",
+          "url": "/zh/docs/vscode-extension/"
+        }
+      ]
+    }
+  ],
+  "footer": [
+    {
+      "title": "文档",
+      "items": [
+        {
+          "text": "快速开始",
+          "url": "/zh/docs/getting-started/"
+        }
+      ]
+    },
+    {
+      "title": "社区",
+      "items": [
+        {
+          "text": "GitHub",
+          "url": "https://github.com/melbournedeveloper/too_many_cooks"
+        }
+      ]
+    }
+  ]
+}

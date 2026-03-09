@@ -67,7 +67,7 @@ export type TooManyCooksDb = {
     filePath: string,
     agentName: string,
     agentKey: string,
-    reason: string | null,
+    reason: string | null | undefined,
     timeoutMs: number,
   ) => Result<LockResult, DbError>;
   readonly releaseLock: (
@@ -379,7 +379,7 @@ const acquireLock = (
   filePath: string,
   agentName: string,
   agentKey: string,
-  reason: string | null,
+  reason: string | null | undefined,
   timeoutMs: number,
 ): Result<LockResult, DbError> => {
   log.debug(`Acquiring lock on ${filePath} for ${agentName}`);
@@ -395,7 +395,7 @@ const acquireLock = (
     if (existing.value.expiresAt > timestamp) {
       return success({
         acquired: false,
-        lock: null,
+        lock: undefined,
         error: `Held by ${existing.value.agentName} until ${String(existing.value.expiresAt)}`,
       });
     }
@@ -413,22 +413,22 @@ const insertLock = (
   agentName: string,
   timestamp: number,
   expiresAt: number,
-  reason: string | null,
+  reason: string | null | undefined,
 ): Result<LockResult, DbError> => {
   try {
     const stmt = db.prepare(
       "INSERT INTO locks (file_path, agent_name, acquired_at, expires_at, reason) VALUES (?, ?, ?, ?, ?)",
     );
-    stmt.run(filePath, agentName, timestamp, expiresAt, reason);
+    stmt.run(filePath, agentName, timestamp, expiresAt, reason ?? null);
     return success({
       acquired: true,
-      lock: { filePath, agentName, acquiredAt: timestamp, expiresAt, reason, version: 1 },
-      error: null,
+      lock: { filePath, agentName, acquiredAt: timestamp, expiresAt, reason: reason ?? null, version: 1 },
+      error: undefined,
     });
   } catch (e: unknown) {
     const msg = String(e);
     return msg.includes("UNIQUE")
-      ? success({ acquired: false, lock: null, error: "Lock race condition" })
+      ? success({ acquired: false, lock: undefined, error: "Lock race condition" })
       : error({ code: ERR_DATABASE, message: msg });
   }
 };

@@ -87,8 +87,8 @@ export const fileLockFromJson = (
 /** Lock acquisition result. */
 export type LockResult = {
   readonly acquired: boolean;
-  readonly lock: FileLock | null;
-  readonly error: string | null;
+  readonly lock: FileLock | undefined;
+  readonly error: string | undefined;
 };
 
 /** Serialize LockResult to a JSON-compatible map. */
@@ -96,10 +96,10 @@ export const lockResultToJson = (
   lockResult: LockResult,
 ): Record<string, unknown> => ({
   acquired: lockResult.acquired,
-  ...(lockResult.lock === null
+  ...(lockResult.lock === undefined
     ? {}
     : { lock: fileLockToJson(lockResult.lock) }),
-  ...(lockResult.error === null ? {} : { error: lockResult.error }),
+  ...(lockResult.error === undefined ? {} : { error: lockResult.error }),
 });
 
 /** Deserialize LockResult from a JSON map. */
@@ -110,8 +110,8 @@ export const lockResultFromJson = (
   lock:
     typeof json.lock === "object" && json.lock !== null
       ? fileLockFromJson(json.lock as Record<string, unknown>)
-      : null,
-  error: typeof json.error === "string" ? json.error : null,
+      : undefined,
+  error: typeof json.error === "string" ? json.error : undefined,
 });
 
 /** Inter-agent message. */

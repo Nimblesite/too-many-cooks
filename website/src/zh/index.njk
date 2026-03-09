@@ -1,0 +1,87 @@
+---
+layout: layouts/base.njk
+title: "Too Many Cooks - 多智能体协调 MCP 服务器"
+description: "用于协调多个 AI 智能体同时编辑同一代码库的 MCP 服务器。通过文件锁定、消息传递和共享计划防止冲突。"
+keywords: "Too Many Cooks, MCP, 多智能体协调, AI 智能体, Claude, Model Context Protocol, 文件锁定, 消息传递, 共享计划, VSCode 扩展"
+lang: zh
+---
+
+<section class="hero">
+  <div class="container">
+    <h1>Too Many Cooks</h1>
+    <p class="hero-subtitle">
+      协调多个 AI 智能体同时编辑同一代码库。
+      文件锁定、消息传递和共享计划——不再有冲突。
+    </p>
+    <div class="hero-buttons">
+      <a href="/zh/docs/getting-started/" class="btn btn-primary btn-large">快速开始</a>
+      <a href="https://github.com/melbournedeveloper/too_many_cooks" class="btn btn-secondary btn-large">GitHub</a>
+    </div>
+
+    <div class="hero-code">
+{% highlight "bash" %}
+# 全局安装
+npm install -g too-many-cooks
+
+# 添加到 Claude Code
+claude mcp add --transport stdio too-many-cooks -- too-many-cooks
+{% endhighlight %}
+    </div>
+  </div>
+</section>
+
+<section class="summary-section">
+  <div class="container">
+    <p class="summary-text">
+      <strong>Too Many Cooks</strong> 是一个 MCP 服务器，让多个 AI 智能体在编辑同一代码库时进行协调。
+      智能体使用密钥注册，在编辑前锁定文件，互相发送消息，并共享计划。
+      它防止冲突并保持智能体同步。
+    </p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <div class="section-title">
+      <h2>协调工具</h2>
+      <p>用于多智能体协调的五个 MCP 工具。</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">R</div>
+        <h3>注册</h3>
+        <p>每个智能体在启动时使用唯一密钥注册。在使用任何其他工具之前必须先注册。</p>
+        <a href="/zh/docs/register/">了解更多 &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">L</div>
+        <h3>锁定</h3>
+        <p>在编辑前锁定文件或资源。其他智能体看到锁定后会等待或选择不同的文件。</p>
+        <a href="/zh/docs/lock/">了解更多 &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">M</div>
+        <h3>消息</h3>
+        <p>在智能体之间发送和阅读消息。让其他智能体了解你的进度和意图。</p>
+        <a href="/zh/docs/messages/">了解更多 &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">P</div>
+        <h3>计划</h3>
+        <p>在开始之前与其他智能体分享你的计划。避免重复工作并协调变更。</p>
+        <a href="/zh/docs/plans/">了解更多 &rarr;</a>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">S</div>
+        <h3>状态</h3>
+        <p>检查当前状态——谁已注册、什么被锁定、哪些计划正在进行。</p>
+        <a href="/zh/docs/status/">了解更多 &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>

@@ -12,13 +12,14 @@ import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 
-import { SERVER_BINARY } from "../lib/src/config.js";
+import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
 // ============================================================
 // Named Constants
 // ============================================================
 
-const BASE_URL = "http://localhost:4040" as const;
+const TEST_PORT = 4046;
+const BASE_URL = `http://localhost:${String(TEST_PORT)}` as const;
 const MCP_PATH = "/mcp" as const;
 const ACCEPT = "application/json, text/event-stream" as const;
 const MCP_PROTOCOL_VERSION = "2025-03-26" as const;
@@ -260,8 +261,9 @@ class McpClient {
 // ============================================================
 
 const spawnServer = (): ChildProcess =>
-  spawn("node", [SERVER_BINARY], {
+  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
   });
 
 const waitForServer = async (): Promise<void> => {

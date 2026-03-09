@@ -9,21 +9,23 @@ import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 
-const BASE_URL = "http://localhost:4040";
+const TEST_PORT = 4043;
+const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
 const ACCEPT = "application/json, text/event-stream";
 const ADMIN_EVENTS_PATH = "/admin/events";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const DEFAULT_EVENT_TIMEOUT_MS = 1000;
 
-const SERVER_BINARY = "build/bin/server.js";
+import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
 // ============================================================
 // Server lifecycle helpers
 // ============================================================
 
 const spawnServer = (): ChildProcess =>
-  spawn("node", [SERVER_BINARY], {
+  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
   });
 
 const killProcess = (proc: ChildProcess): void => {

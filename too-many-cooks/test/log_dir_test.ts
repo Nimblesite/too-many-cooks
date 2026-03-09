@@ -9,14 +9,14 @@ import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { SERVER_BINARY } from "../lib/src/config.js";
+import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
 const PORT = 4041;
 const BASE_URL = `http://localhost:${String(PORT)}`;
 const ACCEPT = "application/json, text/event-stream";
 
 const spawnServerWithWorkspace = (workspace: string): ChildProcess =>
-  spawn("node", [SERVER_BINARY], {
+  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
     env: {
       PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",

@@ -2,8 +2,12 @@
 name = Delete Lock Nonexistent
 description = Attempt to delete a lock that does not exist
 
+[vars]
+baseUrl = http://localhost:4040
+
 [request]
-POST {{baseUrl}}/admin/delete-lock
+method = POST
+url = {{baseUrl}}/admin/delete-lock
 
 [request.headers]
 Content-Type = application/json

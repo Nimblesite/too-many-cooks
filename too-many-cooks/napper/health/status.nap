@@ -2,8 +2,12 @@
 name = Admin Status
 description = Verify the admin status endpoint returns system state
 
+[vars]
+baseUrl = http://localhost:4040
+
 [request]
-GET {{baseUrl}}/admin/status
+method = GET
+url = {{baseUrl}}/admin/status
 
 [assert]
 status = 200

@@ -134,7 +134,7 @@ describe("plans", () => {
     assert.strictEqual(result.ok, true);
     if (!result.ok) {throw new Error("expected ok");}
     const plan = result.value;
-    assert.strictEqual(plan, undefined);
+    assert.strictEqual(plan, null);
   });
 
   it("listPlans returns all plans", () => {

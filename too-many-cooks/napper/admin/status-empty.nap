@@ -2,8 +2,12 @@
 name = Status After Reset
 description = Confirm status returns empty arrays after a reset
 
+[vars]
+baseUrl = http://localhost:4040
+
 [request]
-GET {{baseUrl}}/admin/status
+method = GET
+url = {{baseUrl}}/admin/status
 
 [assert]
 status = 200
