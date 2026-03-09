@@ -96,6 +96,13 @@ packages:
       relative: true
     source: path
     version: "0.11.0-beta"
+  dart_node_better_sqlite3:
+    dependency: "direct main"
+    description:
+      path: "../../dart_node/packages/dart_node_better_sqlite3"
+      relative: true
+    source: path
+    version: "0.11.0-beta"
   dart_node_core:
     dependency: "direct main"
     description:
@@ -124,13 +131,6 @@ packages:
       relative: true
     source: path
     version: "0.11.0-beta"
-  dart_node_sql_js:
-    dependency: "direct main"
-    description:
-      path: "../../dart_node/packages/dart_node_sql_js"
-      relative: true
-    source: path
-    version: "0.1.0-beta"
   file:
     dependency: transitive
     description:
