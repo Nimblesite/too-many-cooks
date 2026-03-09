@@ -64,23 +64,26 @@ async function main() {
   logToFile('INFO', 'Extension development path:', extensionDevelopmentPath);
   logToFile('INFO', 'Extension tests path:', extensionTestsPath);
 
-  const vscodeExecutablePath =
-    process.env.VSCODE_EXECUTABLE_PATH ||
-    '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code';
+  // On CI (or when VSCODE_EXECUTABLE_PATH is unset), let @vscode/test-electron
+  // download a fresh copy of VSCode. Only use a local install when explicitly set.
+  const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || undefined;
 
   try {
     // The code CLI may return immediately (forks VSCode process).
     // We capture the initial exit code but also poll the log for results.
-    const exitCode = await runTests({
+    const runOptions = {
       extensionDevelopmentPath,
       extensionTestsPath,
-      vscodeExecutablePath,
       launchArgs: ['--user-data-dir', '/tmp/vsc-tmc-test', extensionDevelopmentPath],
       extensionTestsEnv: {
         VERBOSE_LOGGING: 'true',
         TMC_TEST_LOG_FILE: LOG_FILE,
       },
-    });
+    };
+    if (vscodeExecutablePath) {
+      runOptions.vscodeExecutablePath = vscodeExecutablePath;
+    }
+    const exitCode = await runTests(runOptions);
 
     logToFile('INFO', 'CLI exit code:', exitCode);
 

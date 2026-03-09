@@ -5,8 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  too-many-cooks-mcp:
-    name: Too Many Cooks MCP Server
+  build-lint-test:
+    name: Build, Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,8 +16,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: too-many-cooks/package-lock.json
+          cache-dependency-path: |
+            too-many-cooks/package-lock.json
+            too_many_cooks_vscode_extension/package-lock.json
 
+      # ── MCP Server ──────────────────────────────────────
       - name: Install MCP server dependencies
         working-directory: too-many-cooks
         run: npm ci
@@ -34,34 +37,20 @@ jobs:
         working-directory: too-many-cooks
         run: npm test
 
-  vscode-extension:
-    name: VSCode Extension Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
-
-      - name: Build MCP server
-        working-directory: too-many-cooks
-        run: |
-          npm ci
-          npm run build
-
+      # ── VSCode Extension ────────────────────────────────
       - name: Install extension dependencies
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
+
+      - name: Lint extension
+        working-directory: too_many_cooks_vscode_extension
+        run: npm run lint
 
       - name: Compile extension and tests
         working-directory: too_many_cooks_vscode_extension
         run: npm run pretest
 
-      - name: Run VSCode extension tests
+      - name: Run extension tests
         uses: coactions/setup-xvfb@v1
         with:
           run: npm test
