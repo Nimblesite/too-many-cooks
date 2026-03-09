@@ -26,3 +26,5 @@ website/_site/
 *.vsix
 
 website/coverage/
+
+test-results/

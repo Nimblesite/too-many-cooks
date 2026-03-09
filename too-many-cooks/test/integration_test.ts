@@ -4,9 +4,8 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
-  unlinkSync,
-  existsSync,
-  readdirSync,
+  mkdtempSync,
+  rmSync,
 } from "node:fs";
 
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
@@ -15,51 +14,16 @@ const TEST_PORT = 4042;
 const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
 const ACCEPT = "application/json, text/event-stream";
 
-/** Delete DB and temp files using Node.js fs. */
-const deleteDbFiles = (): void => {
-  const dbDir = ".too_many_cooks";
-
-  // Delete DB files in ./.too_many_cooks/ (current working directory)
-  for (const file of ["data.db", "data.db-wal", "data.db-shm"]) {
-    const path = `${dbDir}/${file}`;
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  // Delete any .test_*.db files and .mjs temp files in current directory
-  let files: string[];
-  try {
-    files = readdirSync(".");
-  } catch {
-    return;
-  }
-  for (const fileName of files) {
-    const isTestDb =
-      fileName.startsWith(".test_") && fileName.includes(".db");
-    const isTempMjs = fileName.endsWith(".mjs");
-    if (isTestDb || isTempMjs) {
-      try {
-        if (existsSync(fileName)) {
-          unlinkSync(fileName);
-        }
-      } catch {
-        // File may have been deleted by another process - ignore
-      }
-    }
-  }
-};
-
 /** Spawn the server process. */
-const spawnServer = (): ChildProcess =>
-  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
+let tmpWorkspace = "";
+
+const spawnServer = (): ChildProcess => {
+  tmpWorkspace = mkdtempSync("/tmp/tmc-integration-");
+  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
+    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
   });
+};
 
 /** Wait for server to be ready by polling /admin/status
  * and then verifying the /mcp endpoint accepts requests. */
@@ -259,15 +223,13 @@ describe("Too Many Cooks MCP Server Integration", () => {
   let client: McpClient;
 
   before(async () => {
-    // Delete DB files and start server once
-    deleteDbFiles();
     serverProcess = spawnServer();
     await waitForServer();
   });
 
   after(() => {
     serverProcess.kill();
-    deleteDbFiles();
+    rmSync(tmpWorkspace, { recursive: true, force: true });
   });
 
   beforeEach(async () => {

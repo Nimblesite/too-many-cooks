@@ -87,7 +87,7 @@ describe("locks", () => {
       "/contested/file.dart",
       reg2.agentName,
       reg2.agentKey,
-      undefined,
+      null,
       60000,
     );
     assert.strictEqual(result.ok, true);
@@ -105,7 +105,7 @@ describe("locks", () => {
       "/path/to/file.dart",
       agentName,
       "wrong-key",
-      undefined,
+      null,
       60000,
     );
     assert.strictEqual(result.ok, false);
@@ -231,7 +231,7 @@ describe("locks", () => {
       "/expire/file.dart",
       reg2.agentName,
       reg2.agentKey,
-      undefined,
+      null,
       60000,
     );
     assert.strictEqual(result.ok, true);

@@ -11,7 +11,7 @@
     "build": "tsc",
     "start": "node build/bin/server.js",
     "lint": "eslint .",
-    "test": "node --import tsx --test test/*.ts"
+    "test": "node --import tsx --test --test-concurrency=1 test/*.ts"
   },
   "keywords": [
     "mcp",

@@ -27,9 +27,6 @@ const EVENT_TIMEOUT_MS = 2000;
 const STREAM_SETTLE_MS = 200;
 const POLL_INTERVAL_MS = 50;
 
-const DB_DIR = '.too_many_cooks' as const;
-const DB_FILES = ['data.db', 'data.db-wal', 'data.db-shm'] as const;
-
 // ============================================================
 // Helper: sleep
 // ============================================================
@@ -38,31 +35,18 @@ const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 // ============================================================
-// Helper: delete DB files
-// ============================================================
-
-const deleteDbFiles = (): void => {
-  for (const file of DB_FILES) {
-    const path = `${DB_DIR}/${file}`;
-    try {
-      if (fs.existsSync(path)) {
-        fs.unlinkSync(path);
-      }
-    } catch {
-      // ignore
-    }
-  }
-};
-
-// ============================================================
 // Helper: spawn server
 // ============================================================
 
-const spawnServer = (): ChildProcess =>
-  spawn('node', [...SERVER_NODE_ARGS, SERVER_BINARY], {
+let tmpWorkspace = '';
+
+const spawnServer = (): ChildProcess => {
+  tmpWorkspace = fs.mkdtempSync('/tmp/tmc-admin-reset-sse-');
+  return spawn('node', [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ['pipe', 'pipe', 'inherit'],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
+    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
   });
+};
 
 // ============================================================
 // Helper: wait for server
@@ -327,14 +311,13 @@ describe('admin_reset_sse_test', () => {
   let serverProcess: ChildProcess;
 
   before(async () => {
-    deleteDbFiles();
     serverProcess = spawnServer();
     await waitForServer();
   });
 
   after(() => {
     serverProcess.kill();
-    deleteDbFiles();
+    fs.rmSync(tmpWorkspace, { recursive: true, force: true });
   });
 
   it('admin SSE stream receives events AFTER /admin/reset', async () => {

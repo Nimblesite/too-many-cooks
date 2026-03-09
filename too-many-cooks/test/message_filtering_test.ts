@@ -7,7 +7,7 @@
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
 const TEST_PORT = 4045;
@@ -18,8 +18,6 @@ const MCP_PROTOCOL_VERSION = "2025-03-26";
 const STREAM_ESTABLISH_DELAY_MS = 300;
 const EVENT_TIMEOUT_MS = 1500;
 const EVENT_POLL_DELAY_MS = 50;
-const DB_DIR = ".too_many_cooks";
-const DB_FILES = ["data.db", "data.db-wal", "data.db-shm"];
 
 // ============================================================
 // Helpers
@@ -212,11 +210,15 @@ class McpClient {
   }
 }
 
-const spawnServer = (): ChildProcess =>
-  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
+let tmpWorkspace = "";
+
+const spawnServer = (): ChildProcess => {
+  tmpWorkspace = mkdtempSync("/tmp/tmc-msg-filter-");
+  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
+    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
   });
+};
 
 const killProcess = (proc: ChildProcess): void => {
   proc.kill();
@@ -245,29 +247,18 @@ const resetServer = async (): Promise<void> => {
   }
 };
 
-const deleteDbFiles = (): void => {
-  for (const file of DB_FILES) {
-    const path = `${DB_DIR}/${file}`;
-    try {
-      if (existsSync(path)) {unlinkSync(path);}
-    } catch {
-      // ignore
-    }
-  }
-};
 
 describe("message filtering", () => {
   let serverProcess: ChildProcess;
 
   before(async () => {
-    deleteDbFiles();
     serverProcess = spawnServer();
     await waitForServer();
   });
 
   after(() => {
     killProcess(serverProcess);
-    deleteDbFiles();
+    rmSync(tmpWorkspace, { recursive: true, force: true });
   });
 
   beforeEach(async () => {

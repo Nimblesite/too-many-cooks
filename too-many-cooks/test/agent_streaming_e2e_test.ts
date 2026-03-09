@@ -49,8 +49,6 @@ const JSON_RPC_VERSION = "2.0" as const;
 const NOTIFICATION_METHOD = "notifications/message" as const;
 const LEVEL_INFO = "info" as const;
 
-const DB_DIR = ".too_many_cooks" as const;
-const DB_FILES = ["data.db", "data.db-wal", "data.db-shm"] as const;
 
 // ============================================================
 // Helper: sleep
@@ -260,11 +258,15 @@ class McpClient {
 // Server lifecycle helpers
 // ============================================================
 
-const spawnServer = (): ChildProcess =>
-  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
+let tmpWorkspace = "";
+
+const spawnServer = (): ChildProcess => {
+  tmpWorkspace = fs.mkdtempSync("/tmp/tmc-agent-streaming-");
+  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
+    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
   });
+};
 
 const waitForServer = async (): Promise<void> => {
   for (let i = 0; i < MAX_SERVER_POLL_ATTEMPTS; i++) {
@@ -291,19 +293,6 @@ const resetServer = async (): Promise<void> => {
   }
 };
 
-const deleteDbFiles = (): void => {
-  for (const file of DB_FILES) {
-    const path = `${DB_DIR}/${file}`;
-    try {
-      if (fs.existsSync(path)) {
-        fs.unlinkSync(path);
-      }
-    } catch {
-      // ignore
-    }
-  }
-};
-
 // ============================================================
 // Tests
 // ============================================================
@@ -312,14 +301,13 @@ describe("agent_streaming_e2e_test", () => {
   let serverProcess: ChildProcess;
 
   before(async () => {
-    deleteDbFiles();
     serverProcess = spawnServer();
     await waitForServer();
   });
 
   after(() => {
     serverProcess.kill();
-    deleteDbFiles();
+    fs.rmSync(tmpWorkspace, { recursive: true, force: true });
   });
 
   it("agent receives message_sent notification via SSE", async () => {

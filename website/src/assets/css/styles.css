@@ -740,7 +740,6 @@ strong {
 /* Docs content */
 .docs-content {
   padding: var(--space-10) var(--space-12);
-  max-width: 780px;
 }
 
 .docs-content h1 {

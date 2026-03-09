@@ -22,25 +22,15 @@ const SESSION_NOT_FOUND_STATUS = 404;
 
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../lib/src/config.js";
 
-const deleteDbFiles = (): void => {
-  const dbDir = ".too_many_cooks";
-  for (const file of ["data.db", "data.db-wal", "data.db-shm"]) {
-    const filePath = `${dbDir}/${file}`;
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch {
-      // ignore
-    }
-  }
-};
+let tmpWorkspace = "";
 
-const spawnServer = (): ChildProcess =>
-  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
+const spawnServer = (): ChildProcess => {
+  tmpWorkspace = fs.mkdtempSync("/tmp/tmc-stale-session-");
+  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
     stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT) },
+    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
   });
+};
 
 const killProcess = (proc: ChildProcess): void => {
   proc.kill();
@@ -65,14 +55,13 @@ describe("stale session tests", () => {
   let serverProcess: ChildProcess;
 
   before(async () => {
-    deleteDbFiles();
     serverProcess = spawnServer();
     await waitForServer();
   });
 
   after(() => {
     killProcess(serverProcess);
-    deleteDbFiles();
+    fs.rmSync(tmpWorkspace, { recursive: true, force: true });
   });
 
   it("POST /mcp with stale session ID returns 404", async () => {
