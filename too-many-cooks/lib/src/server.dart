@@ -35,10 +35,7 @@ Result<ServerBundle, String> createTooManyCooksServer({
 
   final dbResult = createDb(cfg);
   if (dbResult case Error(:final error)) {
-    log.error(
-      'Failed to create database',
-      structuredData: {'error': error},
-    );
+    log.error('Failed to create database', structuredData: {'error': error});
     return Error(error);
   }
   final TooManyCooksDb db;
@@ -130,13 +127,7 @@ Result<McpServer, String> createMcpServerForDb(
     ..registerTool(
       'lock',
       lockToolConfig,
-      createLockHandler(
-        db,
-        config,
-        emitter,
-        log,
-        getSession,
-      ),
+      createLockHandler(db, config, emitter, log, getSession),
     )
     ..registerTool(
       'message',
@@ -148,11 +139,7 @@ Result<McpServer, String> createMcpServerForDb(
       planToolConfig,
       createPlanHandler(db, emitter, log, getSession),
     )
-    ..registerTool(
-      'status',
-      statusToolConfig,
-      createStatusHandler(db, log),
-    );
+    ..registerTool('status', statusToolConfig, createStatusHandler(db, log));
 
   log.info('Server initialized with all tools registered');
 
@@ -168,18 +155,12 @@ Logger _createConsoleLogger() => createLoggerWithContext(
 );
 
 /// Log transport that writes to console.error.
-void _logToConsole(
-  LogMessage message,
-  LogLevel minimumLogLevel,
-) {
+void _logToConsole(LogMessage message, LogLevel minimumLogLevel) {
   if (message.logLevel.index < minimumLogLevel.index) {
     return;
   }
   final level = message.logLevel.name.toUpperCase();
   final data = message.structuredData;
-  final dataStr =
-      data != null && data.isNotEmpty ? ' $data' : '';
-  consoleError(
-    '[TMC] [$level] ${message.message}$dataStr',
-  );
+  final dataStr = data != null && data.isNotEmpty ? ' $data' : '';
+  consoleError('[TMC] [$level] ${message.message}$dataStr');
 }

@@ -18,10 +18,7 @@ import 'package:nadz/nadz.dart';
 import 'package:too_many_cooks/too_many_cooks.dart';
 
 @JS('setInterval')
-external void _setInterval(
-  JSFunction callback,
-  int delay,
-);
+external void _setInterval(JSFunction callback, int delay);
 
 @JS('globalThis.crypto.randomUUID')
 external String _jsRandomUUID();
@@ -39,8 +36,7 @@ const _sessionNotFoundJson =
     '"message":"Session not found"},"id":null}';
 
 Future<void> main() async {
-  final log = _createLogger()
-    ..info('Server starting...');
+  final log = _createLogger()..info('Server starting...');
   try {
     await _startServer(log);
   } catch (e, st) {
@@ -66,8 +62,7 @@ Future<void> _startServer(Logger log) async {
   log.info('Database created.');
 
   // Session tracking for MCP Streamable HTTP
-  final transports =
-      <String, StreamableHttpTransport>{};
+  final transports = <String, StreamableHttpTransport>{};
 
   // Agent event hub — pushes notifications to all agents
   final agentHub = createAgentEventHub();
@@ -82,30 +77,16 @@ Future<void> _startServer(Logger log) async {
   registerAdminRoutes(app, db, adminHub);
 
   // Admin Streamable HTTP routes (/admin/events)
-  final adminPostFn =
-      _adminPostHandler(adminHub, log);
-  final adminGetDeleteFn =
-      _adminGetDeleteHandler(adminHub);
+  final adminPostFn = _adminPostHandler(adminHub, log);
+  final adminGetDeleteFn = _adminGetDeleteHandler(adminHub);
   app
-    ..post(
-      '/admin/events',
-      _asyncHandler(adminPostFn, log),
-    )
-    ..get(
-      '/admin/events',
-      _asyncHandler(adminGetDeleteFn, log),
-    )
-    ..delete(
-      '/admin/events',
-      _asyncHandler(adminGetDeleteFn, log),
-    );
+    ..post('/admin/events', _asyncHandler(adminPostFn, log))
+    ..get('/admin/events', _asyncHandler(adminGetDeleteFn, log))
+    ..delete('/admin/events', _asyncHandler(adminGetDeleteFn, log));
 
   // MCP Streamable HTTP routes
-  final postFn = _mcpPostHandler(
-    transports, db, cfg, log, adminHub, agentHub,
-  );
-  final getDeleteFn =
-      _mcpGetDeleteHandler(transports, agentHub);
+  final postFn = _mcpPostHandler(transports, db, cfg, log, adminHub, agentHub);
+  final getDeleteFn = _mcpGetDeleteHandler(transports, agentHub);
   app
     ..post('/mcp', _asyncHandler(postFn, log))
     ..get('/mcp', _asyncHandler(getDeleteFn, log))
@@ -116,10 +97,7 @@ Future<void> _startServer(Logger log) async {
   app.listen(
     port,
     (() {
-      log.info(
-        'Server listening',
-        structuredData: {'port': port},
-      );
+      log.info('Server listening', structuredData: {'port': port});
     }).toJS,
   );
 
@@ -155,8 +133,7 @@ String? _getHeader(Request req, String name) {
 }
 
 /// POST /mcp handler — session init or existing session.
-Future<void> Function(Request, Response)
-    _mcpPostHandler(
+Future<void> Function(Request, Response) _mcpPostHandler(
   Map<String, StreamableHttpTransport> transports,
   TooManyCooksDb db,
   TooManyCooksConfig cfg,
@@ -164,15 +141,11 @@ Future<void> Function(Request, Response)
   AdminEventHub adminHub,
   AgentEventHub agentHub,
 ) => (req, res) async {
-  final sessionId =
-      _getHeader(req, 'mcp-session-id');
+  final sessionId = _getHeader(req, 'mcp-session-id');
   final body = req.body;
 
-  if (sessionId != null &&
-      transports.containsKey(sessionId)) {
-    await transports[sessionId]
-        ?.handleRequest(req, res, body)
-        .toDart;
+  if (sessionId != null && transports.containsKey(sessionId)) {
+    await transports[sessionId]?.handleRequest(req, res, body).toDart;
     return;
   }
 
@@ -187,22 +160,18 @@ Future<void> Function(Request, Response)
 
   if (_isInitializeRequest(body)) {
     StreamableHttpTransport? transportRef;
-    final transportResult =
-        createStreamableHttpTransport(
-          sessionIdGenerator: _randomUUID,
-          onSessionInitialized: (sid) {
-            log.info(
-              'Session init',
-              structuredData: {'sessionId': sid},
-            );
-            switch (transportRef) {
-              case final StreamableHttpTransport t:
-                transports[sid] = t;
-              case null:
-                break;
-            }
-          },
-        );
+    final transportResult = createStreamableHttpTransport(
+      sessionIdGenerator: _randomUUID,
+      onSessionInitialized: (sid) {
+        log.info('Session init', structuredData: {'sessionId': sid});
+        switch (transportRef) {
+          case final StreamableHttpTransport t:
+            transports[sid] = t;
+          case null:
+            break;
+        }
+      },
+    );
     final transport = switch (transportResult) {
       Success(:final value) => value,
       Error(:final error) => throw Exception(error),
@@ -212,10 +181,7 @@ Future<void> Function(Request, Response)
     transport['onclose'] = (() {
       final sid = transport.sessionId;
       if (sid != null) {
-        log.info(
-          'Session closed',
-          structuredData: {'sessionId': sid},
-        );
+        log.info('Session closed', structuredData: {'sessionId': sid});
         transports.remove(sid);
         agentHub.servers.remove(sid);
         agentHub.sessionAgentNames.remove(sid);
@@ -224,7 +190,9 @@ Future<void> Function(Request, Response)
     }).toJS;
 
     final serverResult = createMcpServerForDb(
-      db, cfg, log,
+      db,
+      cfg,
+      log,
       adminPush: adminHub.pushEvent,
       agentPush: agentHub.pushEvent,
       agentPushToAgent: agentHub.pushToAgent,
@@ -241,9 +209,7 @@ Future<void> Function(Request, Response)
     };
     await server.connect(transport);
 
-    await transport
-        .handleRequest(req, res, body)
-        .toDart;
+    await transport.handleRequest(req, res, body).toDart;
 
     // Track agent server for push notifications.
     // Must be AFTER handleRequest — sessionId is only
@@ -262,13 +228,11 @@ Future<void> Function(Request, Response)
 };
 
 /// GET/DELETE /mcp handler — requires existing session.
-Future<void> Function(Request, Response)
-    _mcpGetDeleteHandler(
+Future<void> Function(Request, Response) _mcpGetDeleteHandler(
   Map<String, StreamableHttpTransport> transports,
   AgentEventHub agentHub,
 ) => (req, res) async {
-  final sessionId =
-      _getHeader(req, 'mcp-session-id');
+  final sessionId = _getHeader(req, 'mcp-session-id');
   if (sessionId == null) {
     res
       ..status(400)
@@ -284,27 +248,20 @@ Future<void> Function(Request, Response)
   // Mark session as having an active SSE stream so
   // the agent hub delivers push notifications to it.
   agentHub.activeSseSessions.add(sessionId);
-  await transports[sessionId]
-      ?.handleRequest(req, res)
-      .toDart;
+  await transports[sessionId]?.handleRequest(req, res).toDart;
 };
 
 /// POST /admin/events — Streamable HTTP init or
 /// existing session.
-Future<void> Function(Request, Response)
-    _adminPostHandler(
+Future<void> Function(Request, Response) _adminPostHandler(
   AdminEventHub hub,
   Logger log,
 ) => (req, res) async {
-  final sessionId =
-      _getHeader(req, 'mcp-session-id');
+  final sessionId = _getHeader(req, 'mcp-session-id');
   final body = req.body;
 
-  if (sessionId != null &&
-      hub.transports.containsKey(sessionId)) {
-    await hub.transports[sessionId]
-        ?.handleRequest(req, res, body)
-        .toDart;
+  if (sessionId != null && hub.transports.containsKey(sessionId)) {
+    await hub.transports[sessionId]?.handleRequest(req, res, body).toDart;
     return;
   }
 
@@ -318,22 +275,18 @@ Future<void> Function(Request, Response)
 
   if (_isInitializeRequest(body)) {
     StreamableHttpTransport? transportRef;
-    final transportResult =
-        createStreamableHttpTransport(
-          sessionIdGenerator: _randomUUID,
-          onSessionInitialized: (sid) {
-            log.info(
-              'Admin session init',
-              structuredData: {'sessionId': sid},
-            );
-            switch (transportRef) {
-              case final StreamableHttpTransport t:
-                hub.transports[sid] = t;
-              case null:
-                break;
-            }
-          },
-        );
+    final transportResult = createStreamableHttpTransport(
+      sessionIdGenerator: _randomUUID,
+      onSessionInitialized: (sid) {
+        log.info('Admin session init', structuredData: {'sessionId': sid});
+        switch (transportRef) {
+          case final StreamableHttpTransport t:
+            hub.transports[sid] = t;
+          case null:
+            break;
+        }
+      },
+    );
     final transport = switch (transportResult) {
       Success(:final value) => value,
       Error(:final error) => throw Exception(error),
@@ -343,10 +296,7 @@ Future<void> Function(Request, Response)
     transport['onclose'] = (() {
       final sid = transport.sessionId;
       if (sid != null) {
-        log.info(
-          'Admin session closed',
-          structuredData: {'sessionId': sid},
-        );
+        log.info('Admin session closed', structuredData: {'sessionId': sid});
         hub.transports.remove(sid);
         hub.servers.remove(sid);
       }
@@ -370,9 +320,7 @@ Future<void> Function(Request, Response)
     };
     await server.connect(transport);
 
-    await transport
-        .handleRequest(req, res, body)
-        .toDart;
+    await transport.handleRequest(req, res, body).toDart;
 
     // Track server for event pushing.
     // Must be AFTER handleRequest — sessionId is
@@ -392,12 +340,10 @@ Future<void> Function(Request, Response)
 
 /// GET/DELETE /admin/events — requires existing admin
 /// session.
-Future<void> Function(Request, Response)
-    _adminGetDeleteHandler(
+Future<void> Function(Request, Response) _adminGetDeleteHandler(
   AdminEventHub hub,
 ) => (req, res) async {
-  final sessionId =
-      _getHeader(req, 'mcp-session-id');
+  final sessionId = _getHeader(req, 'mcp-session-id');
   if (sessionId == null) {
     res
       ..status(400)
@@ -410,9 +356,7 @@ Future<void> Function(Request, Response)
       ..send(_sessionNotFoundJson);
     return;
   }
-  await hub.transports[sessionId]
-      ?.handleRequest(req, res)
-      .toDart;
+  await hub.transports[sessionId]?.handleRequest(req, res).toDart;
 };
 
 /// Wrap an async handler for Express.
@@ -424,10 +368,7 @@ JSFunction _asyncHandler(
     try {
       await fn(req, res);
     } on Object catch (e) {
-      log.error(
-        'Request error',
-        structuredData: {'error': '$e'},
-      );
+      log.error('Request error', structuredData: {'error': '$e'});
     }
   }());
 }).toJS;
@@ -460,19 +401,17 @@ Logger _createLogger() {
 String _formatLogLine(LogMessage message) {
   final level = message.logLevel.name.toUpperCase();
   final data = message.structuredData;
-  final dataStr =
-      data != null && data.isNotEmpty ? ' $data' : '';
+  final dataStr = data != null && data.isNotEmpty ? ' $data' : '';
   return '[TMC] [${message.timestamp.toIso8601String()}] '
       '[$level] ${message.message}$dataStr\n';
 }
 
-LogFunction _createConsoleTransport() =>
-    (message, minimumLogLevel) {
-      if (message.logLevel.index < minimumLogLevel.index) {
-        return;
-      }
-      consoleError(_formatLogLine(message).trimRight());
-    };
+LogFunction _createConsoleTransport() => (message, minimumLogLevel) {
+  if (message.logLevel.index < minimumLogLevel.index) {
+    return;
+  }
+  consoleError(_formatLogLine(message).trimRight());
+};
 
 LogFunction _createFileTransport(String filePath) =>
     (message, minimumLogLevel) {

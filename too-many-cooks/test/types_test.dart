@@ -53,8 +53,7 @@ void main() {
 
     test('TooManyCooksConfig is identical to TooManyCooksDataConfig', () {
       final config = createDataConfig(dbPath: '/test.db');
-      final dataConfig =
-          data.createDataConfig(dbPath: '/test.db');
+      final dataConfig = data.createDataConfig(dbPath: '/test.db');
       expect(config.dbPath, dataConfig.dbPath);
     });
   });

@@ -111,8 +111,14 @@ ToolCallback createPlanHandler(
       log,
       agentName,
       agentKey,
-      switch (args['goal']) { final String v => v, _ => null },
-      switch (args['current_task']) { final String v => v, _ => null },
+      switch (args['goal']) {
+        final String v => v,
+        _ => null,
+      },
+      switch (args['current_task']) {
+        final String v => v,
+        _ => null,
+      },
     ),
     'get' => _get(db, agentName),
     _ => (
@@ -152,7 +158,9 @@ CallToolResult _update(
       });
       log.info('Plan updated for $agentName: $currentTask');
       return (
-        content: <Object>[textContent(jsonEncode({'updated': true}))],
+        content: <Object>[
+          textContent(jsonEncode({'updated': true})),
+        ],
         isError: false,
       );
     }(),
@@ -169,7 +177,9 @@ CallToolResult _get(TooManyCooksDb db, String agentName) =>
         isError: false,
       ),
       Success() => (
-        content: <Object>[textContent(jsonEncode({'plan': null}))],
+        content: <Object>[
+          textContent(jsonEncode({'plan': null})),
+        ],
         isError: false,
       ),
       Error(:final error) => _errorResult(error),
@@ -178,9 +188,7 @@ CallToolResult _get(TooManyCooksDb db, String agentName) =>
 CallToolResult _list(TooManyCooksDb db) => switch (db.listPlans()) {
   Success(:final value) => (
     content: <Object>[
-      textContent(
-        jsonEncode({'plans': value.map(agentPlanToJson).toList()}),
-      ),
+      textContent(jsonEncode({'plans': value.map(agentPlanToJson).toList()})),
     ],
     isError: false,
   ),
@@ -188,6 +196,6 @@ CallToolResult _list(TooManyCooksDb db) => switch (db.listPlans()) {
 };
 
 CallToolResult _errorResult(DbError e) => (
-      content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
-      isError: true,
-    );
+  content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
+  isError: true,
+);

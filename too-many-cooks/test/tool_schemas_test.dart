@@ -13,10 +13,7 @@ Map<String, Object?> _props(Map<String, Object?> schema) {
   throw StateError('No properties in schema');
 }
 
-Map<String, Object?> _field(
-  Map<String, Object?> schema,
-  String name,
-) {
+Map<String, Object?> _field(Map<String, Object?> schema, String name) {
   if (_props(schema)[name] case final Map<String, Object?> f) return f;
   throw StateError('No field $name in schema');
 }
@@ -47,17 +44,11 @@ void main() {
     });
 
     test('current_task has maxLength 100', () {
-      expect(
-        _field(planInputSchema, 'current_task')['maxLength'],
-        100,
-      );
+      expect(_field(planInputSchema, 'current_task')['maxLength'], 100);
     });
 
     test('current_task description mentions char limit', () {
-      expect(
-        _desc(planInputSchema, 'current_task'),
-        contains('100'),
-      );
+      expect(_desc(planInputSchema, 'current_task'), contains('100'));
     });
   });
 
@@ -71,17 +62,11 @@ void main() {
     });
 
     test('name description says first registration only', () {
-      expect(
-        _desc(registerInputSchema, 'name'),
-        contains('FIRST'),
-      );
+      expect(_desc(registerInputSchema, 'name'), contains('FIRST'));
     });
 
     test('key description says reconnect only', () {
-      expect(
-        _desc(registerInputSchema, 'key'),
-        contains('RECONNECT'),
-      );
+      expect(_desc(registerInputSchema, 'key'), contains('RECONNECT'));
     });
 
     test('does not require both name and key', () {
@@ -93,11 +78,7 @@ void main() {
     test('description explains both modes', () {
       expect(
         registerToolConfig.description,
-        allOf(
-          contains('name'),
-          contains('key'),
-          contains('RECONNECT'),
-        ),
+        allOf(contains('name'), contains('key'), contains('RECONNECT')),
       );
     });
   });

@@ -17,14 +17,7 @@ const lockInputSchema = <String, Object?>{
   'properties': {
     'action': {
       'type': 'string',
-      'enum': [
-        'acquire',
-        'release',
-        'force_release',
-        'renew',
-        'query',
-        'list',
-      ],
+      'enum': ['acquire', 'release', 'force_release', 'renew', 'query', 'list'],
       'description': 'Lock action to perform',
     },
     'file_path': {
@@ -173,9 +166,7 @@ CallToolResult _acquire(
   if (filePath == null) {
     return (
       content: <Object>[
-        textContent(
-          jsonEncode({'error': 'acquire requires file_path'}),
-        ),
+        textContent(jsonEncode({'error': 'acquire requires file_path'})),
       ],
       isError: true,
     );
@@ -197,16 +188,12 @@ CallToolResult _acquire(
       });
       log.info('Lock acquired on $filePath by $agentName');
       return (
-        content: <Object>[
-          textContent(jsonEncode(lockResultToJson(value))),
-        ],
+        content: <Object>[textContent(jsonEncode(lockResultToJson(value)))],
         isError: false,
       );
     }(),
     Success(:final value) => (
-      content: <Object>[
-        textContent(jsonEncode(lockResultToJson(value))),
-      ],
+      content: <Object>[textContent(jsonEncode(lockResultToJson(value)))],
       isError: true,
     ),
     Error(:final error) => _errorResult(error),
@@ -224,9 +211,7 @@ CallToolResult _release(
   if (filePath == null) {
     return (
       content: <Object>[
-        textContent(
-          jsonEncode({'error': 'release requires file_path'}),
-        ),
+        textContent(jsonEncode({'error': 'release requires file_path'})),
       ],
       isError: true,
     );
@@ -260,9 +245,7 @@ CallToolResult _forceRelease(
   if (filePath == null) {
     return (
       content: <Object>[
-        textContent(
-          jsonEncode({'error': 'force_release requires file_path'}),
-        ),
+        textContent(jsonEncode({'error': 'force_release requires file_path'})),
       ],
       isError: true,
     );
@@ -303,9 +286,7 @@ CallToolResult _renew(
   if (filePath == null) {
     return (
       content: <Object>[
-        textContent(
-          jsonEncode({'error': 'renew requires file_path'}),
-        ),
+        textContent(jsonEncode({'error': 'renew requires file_path'})),
       ],
       isError: true,
     );
@@ -342,9 +323,7 @@ CallToolResult _query(TooManyCooksDb db, String? filePath) {
   return switch (db.queryLock(filePath)) {
     Success(value: final FileLock v) => (
       content: <Object>[
-        textContent(
-          jsonEncode({'locked': true, 'lock': fileLockToJson(v)}),
-        ),
+        textContent(jsonEncode({'locked': true, 'lock': fileLockToJson(v)})),
       ],
       isError: false,
     ),
@@ -361,9 +340,7 @@ CallToolResult _query(TooManyCooksDb db, String? filePath) {
 CallToolResult _list(TooManyCooksDb db) => switch (db.listLocks()) {
   Success(:final value) => (
     content: <Object>[
-      textContent(
-        jsonEncode({'locks': value.map(fileLockToJson).toList()}),
-      ),
+      textContent(jsonEncode({'locks': value.map(fileLockToJson).toList()})),
     ],
     isError: false,
   ),
@@ -371,6 +348,6 @@ CallToolResult _list(TooManyCooksDb db) => switch (db.listLocks()) {
 };
 
 CallToolResult _errorResult(DbError e) => (
-      content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
-      isError: true,
-    );
+  content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
+  isError: true,
+);

@@ -95,9 +95,7 @@ ToolCallback createRegisterHandler(
         log.info('Agent reconnected: $value');
         return (
           content: <Object>[
-            textContent(
-              jsonEncode({'agent_name': value, 'agent_key': keyArg}),
-            ),
+            textContent(jsonEncode({'agent_name': value, 'agent_key': keyArg})),
           ],
           isError: false,
         );
@@ -105,9 +103,7 @@ ToolCallback createRegisterHandler(
       Error(:final error) => () {
         log.warn('Reconnect failed: ${error.code}');
         return (
-          content: <Object>[
-            textContent(jsonEncode(dbErrorToJson(error))),
-          ],
+          content: <Object>[textContent(jsonEncode(dbErrorToJson(error)))],
           isError: true,
         );
       }(),
@@ -117,10 +113,7 @@ ToolCallback createRegisterHandler(
   // First registration: name only
   switch (nameArg) {
     case final String name:
-      final log = logger.child({
-        'tool': 'register',
-        'agentName': name,
-      });
+      final log = logger.child({'tool': 'register', 'agentName': name});
       final regResult = db.register(name);
       final AgentRegistration reg;
       switch (regResult) {
@@ -144,9 +137,7 @@ ToolCallback createRegisterHandler(
         case Error(:final error):
           log.warn('Registration failed: ${error.code}');
           return (
-            content: <Object>[
-              textContent(jsonEncode(dbErrorToJson(error))),
-            ],
+            content: <Object>[textContent(jsonEncode(dbErrorToJson(error)))],
             isError: true,
           );
       }

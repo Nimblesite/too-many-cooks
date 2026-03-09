@@ -47,16 +47,12 @@ const agentLoggerName = 'too-many-cooks';
 const broadcastRecipient = '*';
 
 /// Callback type for pushing events to all agents.
-typedef EventPushFn =
-    void Function(String event, Map<String, Object?> payload);
+typedef EventPushFn = void Function(String event, Map<String, Object?> payload);
 
 /// Callback type for pushing events to a specific agent by name
 /// or '*' for all.
-typedef EventPushToAgentFn = void Function(
-  String event,
-  Map<String, Object?> payload,
-  String toAgent,
-);
+typedef EventPushToAgentFn =
+    void Function(String event, Map<String, Object?> payload, String toAgent);
 
 /// Agent event hub — tracks all connected agent McpServer
 /// instances and pushes notifications to them in real-time.
@@ -66,8 +62,10 @@ typedef EventPushToAgentFn = void Function(
 /// when the SSE stream first opens.
 typedef AgentEventHub = ({
   Map<String, McpServer> servers,
+
   /// sessionId → agentName, populated on register.
   Map<String, String> sessionAgentNames,
+
   /// Sessions with an active SSE GET stream.
   Set<String> activeSseSessions,
   EventPushFn pushEvent,
@@ -106,13 +104,9 @@ AgentEventHub createAgentEventHub() {
     consoleError('[TMC] [AGENT-PUSH] Sending to $sessionId');
     switch (await sendNotification(server, data)) {
       case Success():
-        consoleError(
-          '[TMC] [AGENT-PUSH] Sent OK to $sessionId',
-        );
+        consoleError('[TMC] [AGENT-PUSH] Sent OK to $sessionId');
       case Error(:final error):
-        consoleError(
-          '[TMC] [AGENT-PUSH] FAILED $sessionId: $error',
-        );
+        consoleError('[TMC] [AGENT-PUSH] FAILED $sessionId: $error');
         servers.remove(sessionId);
         sessionAgentNames.remove(sessionId);
         activeSseSessions.remove(sessionId);
@@ -120,9 +114,7 @@ AgentEventHub createAgentEventHub() {
   }
 
   void pushEvent(String event, Map<String, Object?> payload) {
-    consoleError(
-      '[TMC] [AGENT-PUSH] $event → ${servers.length} agent(s)',
-    );
+    consoleError('[TMC] [AGENT-PUSH] $event → ${servers.length} agent(s)');
     final data = <String, Object?>{
       'event': event,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -133,11 +125,7 @@ AgentEventHub createAgentEventHub() {
     }
   }
 
-  void pushToAgent(
-    String event,
-    Map<String, Object?> payload,
-    String toAgent,
-  ) {
+  void pushToAgent(String event, Map<String, Object?> payload, String toAgent) {
     final data = <String, Object?>{
       'event': event,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -175,14 +163,13 @@ AgentEventHub createAgentEventHub() {
 /// Notification emitter — pushes events to agents and admin.
 typedef NotificationEmitter = ({
   void Function(String event, Map<String, Object?> payload) emit,
+
   /// Push only to admin (VSIX), not to agents.
   void Function(String event, Map<String, Object?> payload) emitAdmin,
+
   /// Push only to a specific agent by name, or '*' for all.
-  void Function(
-    String event,
-    Map<String, Object?> payload,
-    String toAgent,
-  ) emitToAgent,
+  void Function(String event, Map<String, Object?> payload, String toAgent)
+  emitToAgent,
 });
 
 /// Create a notification emitter that pushes to both the
@@ -206,11 +193,7 @@ NotificationEmitter createNotificationEmitter(
     adminPush?.call(event, payload);
   }
 
-  void emitToAgent(
-    String event,
-    Map<String, Object?> payload,
-    String toAgent,
-  ) {
+  void emitToAgent(String event, Map<String, Object?> payload, String toAgent) {
     adminPush?.call(event, payload);
     agentPushToAgent?.call(event, payload, toAgent);
   }

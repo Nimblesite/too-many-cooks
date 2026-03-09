@@ -19,10 +19,7 @@ const _accept = 'application/json, text/event-stream';
 
 /// HTTP fetch (Node.js global).
 @JS('globalThis.fetch')
-external JSPromise<JSObject> _jsFetch(
-  JSString url, [
-  JSObject? options,
-]);
+external JSPromise<JSObject> _jsFetch(JSString url, [JSObject? options]);
 
 void main() {
   group('Log directory creation', () {
@@ -48,67 +45,67 @@ void main() {
       rmFn?.callAsFunction(
         null,
         tmpWorkspace.toJS,
-        <String, Object?>{
-          'recursive': true,
-          'force': true,
-        }.jsify(),
+        <String, Object?>{'recursive': true, 'force': true}.jsify(),
       );
     });
 
     test(
-        'server survives a bad MCP request that triggers error logging',
-        () async {
-      // POST to /mcp with no session-id and a non-initialize body.
-      // This returns 400 and triggers _asyncHandler's error-log path
-      // (appendFileSync). Before the fix, this crashed the server with
-      // ENOENT because the logs/ dir was never created.
-      final headers = JSObject()
-        ..['Content-Type'] = 'application/json'.toJS
-        ..['Accept'] = _accept.toJS;
-      final options = JSObject()
-        ..['method'] = 'POST'.toJS
-        ..['headers'] = headers
-        ..['body'] =
-            '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'.toJS;
+      'server survives a bad MCP request that triggers error logging',
+      () async {
+        // POST to /mcp with no session-id and a non-initialize body.
+        // This returns 400 and triggers _asyncHandler's error-log path
+        // (appendFileSync). Before the fix, this crashed the server with
+        // ENOENT because the logs/ dir was never created.
+        final headers = JSObject()
+          ..['Content-Type'] = 'application/json'.toJS
+          ..['Accept'] = _accept.toJS;
+        final options = JSObject()
+          ..['method'] = 'POST'.toJS
+          ..['headers'] = headers
+          ..['body'] = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'.toJS;
 
-      final response =
-          await _jsFetch('$_baseUrl/mcp'.toJS, options).toDart;
+        final response = await _jsFetch('$_baseUrl/mcp'.toJS, options).toDart;
 
-      final status =
-          (response['status'] as JSNumber?)?.toDartInt ?? 0;
-      expect(status, equals(400),
-          reason: 'Server should return 400 for bad request');
+        final status = (response['status'] as JSNumber?)?.toDartInt ?? 0;
+        expect(
+          status,
+          equals(400),
+          reason: 'Server should return 400 for bad request',
+        );
 
-      // Give the server a moment to process, then confirm it is alive.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+        // Give the server a moment to process, then confirm it is alive.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
 
-      final statusResponse =
-          await _jsFetch('$_baseUrl/admin/status'.toJS).toDart;
-      final ok =
-          (statusResponse['ok'] as JSBoolean?)?.toDart ?? false;
-      expect(ok, isTrue,
-          reason: 'Server must still be alive after bad request');
-    });
+        final statusResponse = await _jsFetch(
+          '$_baseUrl/admin/status'.toJS,
+        ).toDart;
+        final ok = (statusResponse['ok'] as JSBoolean?)?.toDart ?? false;
+        expect(
+          ok,
+          isTrue,
+          reason: 'Server must still be alive after bad request',
+        );
+      },
+    );
 
     test('logs/ directory is created in workspace on startup', () {
       final fs = requireModule('fs') as JSObject;
       final existsFn = fs['existsSync']! as JSFunction;
       final pathMod = requireModule('path') as JSObject;
       final joinFn = pathMod['join']! as JSFunction;
-      final logsDir = (joinFn.callAsFunction(
-            null,
-            tmpWorkspace.toJS,
-            'logs'.toJS,
-          ) as JSString?)
+      final logsDir =
+          (joinFn.callAsFunction(null, tmpWorkspace.toJS, 'logs'.toJS)
+                  as JSString?)
               ?.toDart ??
           '';
       final exists =
-          (existsFn.callAsFunction(null, logsDir.toJS) as JSBoolean?)
-              ?.toDart ??
+          (existsFn.callAsFunction(null, logsDir.toJS) as JSBoolean?)?.toDart ??
           false;
-      expect(exists, isTrue,
-          reason:
-              'logs/ directory must be created in TMC_WORKSPACE on startup');
+      expect(
+        exists,
+        isTrue,
+        reason: 'logs/ directory must be created in TMC_WORKSPACE on startup',
+      );
     });
   });
 }
@@ -117,22 +114,22 @@ void main() {
 external JSString? get _envPath;
 
 JSObject _spawnServerWithWorkspace(String workspace) {
-  final childProcess =
-      requireModule('child_process') as JSObject;
+  final childProcess = requireModule('child_process') as JSObject;
   final spawnFn = childProcess['spawn']! as JSFunction;
   return spawnFn.callAsFunction(
-    null,
-    'node'.toJS,
-    <String>[serverBinary].jsify(),
-    <String, Object?>{
-      'stdio': ['pipe', 'pipe', 'inherit'],
-      'env': <String, Object?>{
-        'PATH': _envPath?.toDart ?? '/usr/local/bin:/usr/bin:/bin',
-        'TMC_WORKSPACE': workspace,
-        'TMC_PORT': '$_port',
-      },
-    }.jsify(),
-  )! as JSObject;
+        null,
+        'node'.toJS,
+        <String>[serverBinary].jsify(),
+        <String, Object?>{
+          'stdio': ['pipe', 'pipe', 'inherit'],
+          'env': <String, Object?>{
+            'PATH': _envPath?.toDart ?? '/usr/local/bin:/usr/bin:/bin',
+            'TMC_WORKSPACE': workspace,
+            'TMC_PORT': '$_port',
+          },
+        }.jsify(),
+      )!
+      as JSObject;
 }
 
 void _killProcess(JSObject process) {
@@ -142,8 +139,7 @@ void _killProcess(JSObject process) {
 Future<void> _waitForServer() async {
   for (var i = 0; i < 50; i++) {
     try {
-      final r =
-          await _jsFetch('$_baseUrl/admin/status'.toJS).toDart;
+      final r = await _jsFetch('$_baseUrl/admin/status'.toJS).toDart;
       final ok = r['ok'] as JSBoolean?;
       if (ok != null && ok.toDart) return;
     } on Object {

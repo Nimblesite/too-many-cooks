@@ -65,18 +65,20 @@ ToolCallback createStatusHandler(TooManyCooksDb db, Logger logger) =>
 
       return (
         content: <Object>[
-          textContent(jsonEncode({
-            'agents': agents,
-            'locks': locks,
-            'plans': plans,
-            'messages': messages,
-          })),
+          textContent(
+            jsonEncode({
+              'agents': agents,
+              'locks': locks,
+              'plans': plans,
+              'messages': messages,
+            }),
+          ),
         ],
         isError: false,
       );
     };
 
 CallToolResult _errorResult(DbError e) => (
-      content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
-      isError: true,
-    );
+  content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
+  isError: true,
+);

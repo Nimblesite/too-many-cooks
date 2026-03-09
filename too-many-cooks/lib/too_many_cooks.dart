@@ -7,9 +7,7 @@ library;
 
 export 'src/admin_routes.dart';
 export 'src/config.dart';
-export 'src/data/data.dart'
-    show TooManyCooksDb, createDb;
-export 'src/notifications.dart'
-    show AgentEventHub, createAgentEventHub;
+export 'src/data/data.dart' show TooManyCooksDb, createDb;
+export 'src/notifications.dart' show AgentEventHub, createAgentEventHub;
 export 'src/server.dart';
 export 'src/types.dart';

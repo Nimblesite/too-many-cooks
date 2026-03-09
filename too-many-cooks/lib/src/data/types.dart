@@ -18,22 +18,21 @@ Result<AgentIdentity, DbError> agentIdentity({
   required String agentName,
   required int registeredAt,
   required int lastActive,
-}) =>
-    !_validAgentName.hasMatch(agentName)
-        ? const Error((
-            code: errValidation,
-            message: 'Agent name must be alphanumeric (hyphens/underscores ok)',
-          ))
-        : agentName.length > maxAgentNameLength
-            ? const Error((
-                code: errValidation,
-                message: 'Agent name must be 1-50 chars',
-              ))
-            : Success((
-                agentName: agentName,
-                registeredAt: registeredAt,
-                lastActive: lastActive,
-              ));
+}) => !_validAgentName.hasMatch(agentName)
+    ? const Error((
+        code: errValidation,
+        message: 'Agent name must be alphanumeric (hyphens/underscores ok)',
+      ))
+    : agentName.length > maxAgentNameLength
+    ? const Error((
+        code: errValidation,
+        message: 'Agent name must be 1-50 chars',
+      ))
+    : Success((
+        agentName: agentName,
+        registeredAt: registeredAt,
+        lastActive: lastActive,
+      ));
 
 /// Error code for resource not found.
 const errNotFound = 'NOT_FOUND';

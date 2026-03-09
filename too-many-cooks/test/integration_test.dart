@@ -8,8 +8,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:dart_node_core/dart_node_core.dart';
 import 'package:test/test.dart';
-import 'package:too_many_cooks/too_many_cooks.dart'
-    show serverBinary;
+import 'package:too_many_cooks/too_many_cooks.dart' show serverBinary;
 
 void main() {
   group('Too Many Cooks MCP Server Integration', () {
@@ -494,18 +493,17 @@ void main() {
       final key = regJson['agent_key']! as String;
 
       // Both name AND key — spec says this is an error
-      final result = await client.callToolRaw(
-        'register',
-        {'name': 'both1', 'key': key},
-      );
+      final result = await client.callToolRaw('register', {
+        'name': 'both1',
+        'key': key,
+      });
       expect(result['isError'], isTrue);
     });
 
     test('register reconnect with invalid key returns error', () async {
-      final result = await client.callToolRaw(
-        'register',
-        {'key': 'definitely-not-a-real-key'},
-      );
+      final result = await client.callToolRaw('register', {
+        'key': 'definitely-not-a-real-key',
+      });
       expect(result['isError'], isTrue);
     });
 
@@ -599,10 +597,7 @@ Future<List<({String name, String key})>> _registerAgents(
 
 /// HTTP fetch (Node.js global).
 @JS('globalThis.fetch')
-external JSPromise<JSObject> _jsFetch(
-  JSString url, [
-  JSObject? options,
-]);
+external JSPromise<JSObject> _jsFetch(JSString url, [JSObject? options]);
 
 const _baseUrl = 'http://localhost:4040';
 const _accept = 'application/json, text/event-stream';
@@ -613,13 +608,14 @@ JSObject _spawnServer() {
   final spawnFn = childProcess['spawn']! as JSFunction;
 
   return spawnFn.callAsFunction(
-    null,
-    'node'.toJS,
-    <String>[serverBinary].jsify(),
-    <String, Object?>{
-      'stdio': ['pipe', 'pipe', 'inherit'],
-    }.jsify(),
-  )! as JSObject;
+        null,
+        'node'.toJS,
+        <String>[serverBinary].jsify(),
+        <String, Object?>{
+          'stdio': ['pipe', 'pipe', 'inherit'],
+        }.jsify(),
+      )!
+      as JSObject;
 }
 
 /// Kill a child process.
@@ -633,18 +629,14 @@ Future<void> _waitForServer() async {
   // Poll /admin/status until it responds
   for (var i = 0; i < 30; i++) {
     try {
-      final r = await _jsFetch(
-        '$_baseUrl/admin/status'.toJS,
-      ).toDart;
+      final r = await _jsFetch('$_baseUrl/admin/status'.toJS).toDart;
       final ok = r['ok'] as JSBoolean?;
       if (ok != null && ok.toDart) break;
     } on Object {
       // Not ready yet
     }
     if (i == 29) throw StateError('Server failed to start');
-    await Future<void>.delayed(
-      const Duration(milliseconds: 200),
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 
   // Verify /mcp endpoint is also ready (avoids race on first request)
@@ -663,24 +655,16 @@ Future<void> _waitForServer() async {
           'params': {
             'protocolVersion': '2024-11-05',
             'capabilities': <String, Object?>{},
-            'clientInfo': {
-              'name': 'health-check',
-              'version': '1.0.0',
-            },
+            'clientInfo': {'name': 'health-check', 'version': '1.0.0'},
           },
         }).toJS;
-      final r = await _jsFetch(
-        '$_baseUrl/mcp'.toJS,
-        options,
-      ).toDart;
+      final r = await _jsFetch('$_baseUrl/mcp'.toJS, options).toDart;
       final ok = r['ok'] as JSBoolean?;
       if (ok != null && ok.toDart) return;
     } on Object {
       // MCP endpoint not ready yet
     }
-    await Future<void>.delayed(
-      const Duration(milliseconds: 200),
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 }
 
@@ -688,12 +672,8 @@ Future<void> _waitForServer() async {
 Future<void> _resetServer() async {
   final options = JSObject()
     ..['method'] = 'POST'.toJS
-    ..['headers'] = (JSObject()
-      ..['Content-Type'] = 'application/json'.toJS);
-  final r = await _jsFetch(
-    '$_baseUrl/admin/reset'.toJS,
-    options,
-  ).toDart;
+    ..['headers'] = (JSObject()..['Content-Type'] = 'application/json'.toJS);
+  final r = await _jsFetch('$_baseUrl/admin/reset'.toJS, options).toDart;
   final ok = r['ok'] as JSBoolean?;
   if (ok == null || !ok.toDart) {
     throw StateError('Failed to reset server');
@@ -709,46 +689,35 @@ class _McpClient {
     final initResult = await _request('initialize', {
       'protocolVersion': '2024-11-05',
       'capabilities': <String, Object?>{},
-      'clientInfo': {
-        'name': 'test-client',
-        'version': '1.0.0',
-      },
+      'clientInfo': {'name': 'test-client', 'version': '1.0.0'},
     });
     if (_sessionId == null) {
-      throw StateError(
-        'No session ID after init: $initResult',
-      );
+      throw StateError('No session ID after init: $initResult');
     }
 
     // Send initialized notification
-    await _postMcp(jsonEncode({
-      'jsonrpc': '2.0',
-      'method': 'notifications/initialized',
-      'params': <String, Object?>{},
-    }));
+    await _postMcp(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'notifications/initialized',
+        'params': <String, Object?>{},
+      }),
+    );
   }
 
-  Future<String> callTool(
-    String name,
-    Map<String, Object?> args,
-  ) async {
+  Future<String> callTool(String name, Map<String, Object?> args) async {
     final result = await _request('tools/call', {
       'name': name,
       'arguments': args,
     });
-    final content =
-        (result['content']! as List).first
-            as Map<String, Object?>;
+    final content = (result['content']! as List).first as Map<String, Object?>;
     return content['text']! as String;
   }
 
   Future<Map<String, Object?>> callToolRaw(
     String name,
     Map<String, Object?> args,
-  ) => _request('tools/call', {
-    'name': name,
-    'arguments': args,
-  });
+  ) => _request('tools/call', {'name': name, 'arguments': args});
 
   Future<Map<String, Object?>> _request(
     String method,
@@ -769,17 +738,12 @@ class _McpClient {
     final json = _parseMcpResponse(text);
 
     if (json.containsKey('error')) {
-      final error =
-          json['error']! as Map<String, Object?>;
-      final message =
-          error['message'] as String? ?? 'Error';
+      final error = json['error']! as Map<String, Object?>;
+      final message = error['message'] as String? ?? 'Error';
       return <String, Object?>{
         'isError': true,
         'content': <Object>[
-          <String, Object?>{
-            'type': 'text',
-            'text': message,
-          },
+          <String, Object?>{'type': 'text', 'text': message},
         ],
       };
     }
@@ -792,8 +756,7 @@ class _McpClient {
       ..['Content-Type'] = 'application/json'.toJS
       ..['Accept'] = _accept.toJS;
     if (_sessionId != null) {
-      headers['mcp-session-id'] =
-          _sessionId!.toJS;
+      headers['mcp-session-id'] = _sessionId!.toJS;
     }
 
     final options = JSObject()
@@ -801,10 +764,7 @@ class _McpClient {
       ..['headers'] = headers
       ..['body'] = body.toJS;
 
-    final response = await _jsFetch(
-      '$_baseUrl/mcp'.toJS,
-      options,
-    ).toDart;
+    final response = await _jsFetch('$_baseUrl/mcp'.toJS, options).toDart;
 
     // Capture session ID from response
     final sid = _getHeader(response, 'mcp-session-id');
@@ -813,24 +773,19 @@ class _McpClient {
     return response;
   }
 
-  Future<String> _responseText(
-    JSObject response,
-  ) async {
-    final text = await (
-      (response['text'] as JSFunction?)
-              ?.callAsFunction(response)
-          as JSPromise<JSString>?
-    )?.toDart;
+  Future<String> _responseText(JSObject response) async {
+    final text =
+        await ((response['text'] as JSFunction?)?.callAsFunction(response)
+                as JSPromise<JSString>?)
+            ?.toDart;
     return text?.toDart ?? '';
   }
 
   String? _getHeader(JSObject response, String name) {
-    final headers =
-        response['headers'] as JSObject?;
+    final headers = response['headers'] as JSObject?;
     if (headers == null) return null;
     final getFn = headers['get'] as JSFunction?;
-    final value =
-        getFn?.callAsFunction(headers, name.toJS);
+    final value = getFn?.callAsFunction(headers, name.toJS);
     if (value == null || value.isUndefinedOrNull) {
       return null;
     }
@@ -844,8 +799,7 @@ class _McpClient {
     for (final line in text.split('\n')) {
       if (line.startsWith('data: ')) {
         try {
-          return jsonDecode(line.substring(6))
-              as Map<String, Object?>;
+          return jsonDecode(line.substring(6)) as Map<String, Object?>;
         } on Object {
           continue;
         }

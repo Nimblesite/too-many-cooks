@@ -17,8 +17,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:dart_node_core/dart_node_core.dart';
 import 'package:test/test.dart';
-import 'package:too_many_cooks/too_many_cooks.dart'
-    show serverBinary;
+import 'package:too_many_cooks/too_many_cooks.dart' show serverBinary;
 
 const _baseUrl = 'http://localhost:4040';
 const _accept = 'application/json, text/event-stream';
@@ -44,59 +43,49 @@ void main() {
     _deleteDbFiles();
   });
 
-  test(
-    'admin SSE stream receives events AFTER /admin/reset',
-    () async {
-      // 1. Open admin SSE stream (like VSIX does on connect)
-      final sse = await _AdminSseClient.connect();
+  test('admin SSE stream receives events AFTER /admin/reset', () async {
+    // 1. Open admin SSE stream (like VSIX does on connect)
+    final sse = await _AdminSseClient.connect();
 
-      // 2. Reset server (like VSIX streaming test suiteSetup)
-      await _resetServer();
+    // 2. Reset server (like VSIX streaming test suiteSetup)
+    await _resetServer();
 
-      // 3. Consume any events from the reset itself
-      //    (state_reset is sent BEFORE hub.servers is cleared)
-      await sse.waitForEvents(1);
+    // 3. Consume any events from the reset itself
+    //    (state_reset is sent BEFORE hub.servers is cleared)
+    await sse.waitForEvents(1);
 
-      // 4. Create MCP session and register agent AFTER reset
-      final mcpClient = _McpClient();
-      await mcpClient.initSession();
-      await mcpClient.callTool(
-        'register',
-        {'name': 'post-reset-agent'},
-      );
+    // 4. Create MCP session and register agent AFTER reset
+    final mcpClient = _McpClient();
+    await mcpClient.initSession();
+    await mcpClient.callTool('register', {'name': 'post-reset-agent'});
 
-      // 5. ASSERT: SSE stream MUST still receive the
-      //    agent_registered event (sent AFTER reset cleared
-      //    hub.servers). This is the bug: after reset clears
-      //    hub.servers, pushEvent iterates an empty map and
-      //    delivers nothing.
-      final events = await sse.waitForEvents(1);
-      sse.close();
+    // 5. ASSERT: SSE stream MUST still receive the
+    //    agent_registered event (sent AFTER reset cleared
+    //    hub.servers). This is the bug: after reset clears
+    //    hub.servers, pushEvent iterates an empty map and
+    //    delivers nothing.
+    final events = await sse.waitForEvents(1);
+    sse.close();
 
-      expect(
-        events.isNotEmpty,
-        isTrue,
-        reason:
-            'Admin SSE stream MUST receive events after '
-            '/admin/reset. The reset should clear test data '
-            'but NOT destroy admin SSE connections.',
-      );
+    expect(
+      events.isNotEmpty,
+      isTrue,
+      reason:
+          'Admin SSE stream MUST receive events after '
+          '/admin/reset. The reset should clear test data '
+          'but NOT destroy admin SSE connections.',
+    );
 
-      // Verify it's an agent_registered event
-      final eventJson =
-          jsonDecode(events.first) as Map<String, Object?>;
-      final params =
-          eventJson['params'] as Map<String, Object?>?;
-      final data =
-          params?['data'] as Map<String, Object?>?;
-      expect(
-        data?['event'],
-        equals('agent_registered'),
-        reason:
-            'Event after reset MUST be agent_registered',
-      );
-    },
-  );
+    // Verify it's an agent_registered event
+    final eventJson = jsonDecode(events.first) as Map<String, Object?>;
+    final params = eventJson['params'] as Map<String, Object?>?;
+    final data = params?['data'] as Map<String, Object?>?;
+    expect(
+      data?['event'],
+      equals('agent_registered'),
+      reason: 'Event after reset MUST be agent_registered',
+    );
+  });
 }
 
 // ============================================================
@@ -118,9 +107,7 @@ class _AdminSseClient {
       sessionId,
       client._events,
     );
-    await Future<void>.delayed(
-      const Duration(milliseconds: _streamSettleMs),
-    );
+    await Future<void>.delayed(const Duration(milliseconds: _streamSettleMs));
     return client;
   }
 
@@ -129,16 +116,13 @@ class _AdminSseClient {
     int timeoutMs = _eventTimeoutMs,
   }) async {
     final start = DateTime.now().millisecondsSinceEpoch;
-    while (DateTime.now().millisecondsSinceEpoch - start <
-        timeoutMs) {
+    while (DateTime.now().millisecondsSinceEpoch - start < timeoutMs) {
       if (_events.length - _consumed >= count) {
         final result = _events.sublist(_consumed);
         _consumed = _events.length;
         return result;
       }
-      await Future<void>.delayed(
-        const Duration(milliseconds: _pollIntervalMs),
-      );
+      await Future<void>.delayed(const Duration(milliseconds: _pollIntervalMs));
     }
     final result = _events.sublist(_consumed);
     _consumed = _events.length;
@@ -161,10 +145,7 @@ Future<String> _initAdminSession() async {
     'params': {
       'protocolVersion': _mcpProtocolVersion,
       'capabilities': <String, Object?>{},
-      'clientInfo': {
-        'name': 'admin-reset-sse-test',
-        'version': '1.0.0',
-      },
+      'clientInfo': {'name': 'admin-reset-sse-test', 'version': '1.0.0'},
     },
   });
   final options = JSObject()
@@ -177,8 +158,7 @@ Future<String> _initAdminSession() async {
     options,
   ).toDart;
 
-  final sessionId =
-      _getResponseHeader(response, 'mcp-session-id');
+  final sessionId = _getResponseHeader(response, 'mcp-session-id');
   if (sessionId == null) {
     throw StateError('No admin session ID');
   }
@@ -196,10 +176,7 @@ Future<String> _initAdminSession() async {
     ..['method'] = 'POST'.toJS
     ..['headers'] = notifyHeaders
     ..['body'] = notifyBody.toJS;
-  await _jsFetch(
-    '$_baseUrl$_adminEventsPath'.toJS,
-    notifyOpts,
-  ).toDart;
+  await _jsFetch('$_baseUrl$_adminEventsPath'.toJS, notifyOpts).toDart;
 
   return sessionId;
 }
@@ -229,10 +206,7 @@ class _SseReader {
     unawaited(
       Future<void>(() async {
         try {
-          final response = await _jsFetch(
-            url.toJS,
-            options,
-          ).toDart;
+          final response = await _jsFetch(url.toJS, options).toDart;
           final ok = response['ok'] as JSBoolean?;
           if (ok == null || !ok.toDart) return;
 
@@ -242,48 +216,42 @@ class _SseReader {
           }
 
           final reader =
-              ((body as JSObject)['getReader']!
-                      as JSFunction)
-                  .callAsFunction(body)!
-              as JSObject;
+              ((body as JSObject)['getReader']! as JSFunction).callAsFunction(
+                    body,
+                  )!
+                  as JSObject;
           final decoder = _createTextDecoder();
           var buffer = '';
 
           for (;;) {
-            final chunk = await (
-              (reader['read']! as JSFunction)
-                      .callAsFunction(reader)!
-                  as JSPromise<JSObject>
-            ).toDart;
+            final chunk =
+                await ((reader['read']! as JSFunction).callAsFunction(reader)!
+                        as JSPromise<JSObject>)
+                    .toDart;
 
             final done = chunk['done'] as JSBoolean?;
             if (done != null && done.toDart) break;
 
             final value = chunk['value'];
-            if (value == null ||
-                value.isUndefinedOrNull) {
+            if (value == null || value.isUndefinedOrNull) {
               continue;
             }
 
             final decoded =
-                (decoder['decode']! as JSFunction)
-                    .callAsFunction(
+                (decoder['decode']! as JSFunction).callAsFunction(
                       decoder,
                       value,
                       _streamOptions,
                     )!
-                as JSString;
-            final buf = StringBuffer(buffer)
-              ..write(decoded.toDart);
+                    as JSString;
+            final buf = StringBuffer(buffer)..write(decoded.toDart);
             buffer = buf.toString();
 
             final lines = buffer.split('\n');
             buffer = lines.removeLast();
             for (final line in lines) {
               if (line.startsWith(_dataPrefix)) {
-                final data = line
-                    .substring(_dataPrefix.length)
-                    .trim();
+                final data = line.substring(_dataPrefix.length).trim();
                 if (data.isNotEmpty) {
                   events.add(data);
                 }
@@ -300,8 +268,7 @@ class _SseReader {
   }
 
   void abort() {
-    (_controller['abort']! as JSFunction)
-        .callAsFunction(_controller);
+    (_controller['abort']! as JSFunction).callAsFunction(_controller);
   }
 }
 
@@ -317,32 +284,26 @@ class _McpClient {
     await _request('initialize', {
       'protocolVersion': _mcpProtocolVersion,
       'capabilities': <String, Object?>{},
-      'clientInfo': {
-        'name': 'admin-reset-mcp',
-        'version': '1.0.0',
-      },
+      'clientInfo': {'name': 'admin-reset-mcp', 'version': '1.0.0'},
     });
     if (_sessionId == null) {
       throw StateError('No session ID after init');
     }
-    await _postMcp(jsonEncode({
-      'jsonrpc': '2.0',
-      'method': 'notifications/initialized',
-      'params': <String, Object?>{},
-    }));
+    await _postMcp(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'notifications/initialized',
+        'params': <String, Object?>{},
+      }),
+    );
   }
 
-  Future<String> callTool(
-    String name,
-    Map<String, Object?> args,
-  ) async {
+  Future<String> callTool(String name, Map<String, Object?> args) async {
     final result = await _request('tools/call', {
       'name': name,
       'arguments': args,
     });
-    final content =
-        (result['content']! as List).first
-            as Map<String, Object?>;
+    final content = (result['content']! as List).first as Map<String, Object?>;
     return content['text']! as String;
   }
 
@@ -361,10 +322,8 @@ class _McpClient {
     final text = await _responseText(response);
     final json = _parseMcpResponse(text);
     if (json.containsKey('error')) {
-      final error =
-          json['error']! as Map<String, Object?>;
-      final message =
-          error['message'] as String? ?? 'Error';
+      final error = json['error']! as Map<String, Object?>;
+      final message = error['message'] as String? ?? 'Error';
       return <String, Object?>{
         'isError': true,
         'content': <Object>[
@@ -386,24 +345,17 @@ class _McpClient {
       ..['method'] = 'POST'.toJS
       ..['headers'] = headers
       ..['body'] = body.toJS;
-    final response = await _jsFetch(
-      '$_baseUrl/mcp'.toJS,
-      options,
-    ).toDart;
-    final sid = _getResponseHeader(
-      response,
-      'mcp-session-id',
-    );
+    final response = await _jsFetch('$_baseUrl/mcp'.toJS, options).toDart;
+    final sid = _getResponseHeader(response, 'mcp-session-id');
     if (sid != null) _sessionId = sid;
     return response;
   }
 
   Future<String> _responseText(JSObject response) async {
-    final text = await (
-      (response['text'] as JSFunction?)
-              ?.callAsFunction(response)
-          as JSPromise<JSString>?
-    )?.toDart;
+    final text =
+        await ((response['text'] as JSFunction?)?.callAsFunction(response)
+                as JSPromise<JSString>?)
+            ?.toDart;
     return text?.toDart ?? '';
   }
 
@@ -414,8 +366,7 @@ class _McpClient {
     for (final line in text.split('\n')) {
       if (line.startsWith('data: ')) {
         try {
-          return jsonDecode(line.substring(6))
-              as Map<String, Object?>;
+          return jsonDecode(line.substring(6)) as Map<String, Object?>;
         } on Object {
           continue;
         }
@@ -430,10 +381,7 @@ class _McpClient {
 // ============================================================
 
 @JS('globalThis.fetch')
-external JSPromise<JSObject> _jsFetch(
-  JSString url, [
-  JSObject? options,
-]);
+external JSPromise<JSObject> _jsFetch(JSString url, [JSObject? options]);
 
 @JS('globalThis.AbortController')
 external JSFunction get _abortControllerCtor;
@@ -444,21 +392,15 @@ JSObject _createAbortController() =>
 @JS('globalThis.TextDecoder')
 external JSFunction get _textDecoderCtor;
 
-JSObject _createTextDecoder() =>
-    _textDecoderCtor.callAsConstructor<JSObject>();
+JSObject _createTextDecoder() => _textDecoderCtor.callAsConstructor<JSObject>();
 
-final JSObject _streamOptions = JSObject()
-  ..['stream'] = true.toJS;
+final JSObject _streamOptions = JSObject()..['stream'] = true.toJS;
 
-String? _getResponseHeader(
-  JSObject response,
-  String name,
-) {
+String? _getResponseHeader(JSObject response, String name) {
   final headers = response['headers'] as JSObject?;
   if (headers == null) return null;
   final getFn = headers['get'] as JSFunction?;
-  final value =
-      getFn?.callAsFunction(headers, name.toJS);
+  final value = getFn?.callAsFunction(headers, name.toJS);
   if (value == null || value.isUndefinedOrNull) {
     return null;
   }
@@ -466,51 +408,42 @@ String? _getResponseHeader(
 }
 
 JSObject _spawnServer() {
-  final childProcess =
-      requireModule('child_process') as JSObject;
+  final childProcess = requireModule('child_process') as JSObject;
   final spawnFn = childProcess['spawn']! as JSFunction;
   return spawnFn.callAsFunction(
-    null,
-    'node'.toJS,
-    <String>[serverBinary].jsify(),
-    <String, Object?>{
-      'stdio': ['pipe', 'pipe', 'inherit'],
-    }.jsify(),
-  )! as JSObject;
+        null,
+        'node'.toJS,
+        <String>[serverBinary].jsify(),
+        <String, Object?>{
+          'stdio': ['pipe', 'pipe', 'inherit'],
+        }.jsify(),
+      )!
+      as JSObject;
 }
 
 void _killProcess(JSObject process) {
-  (process['kill']! as JSFunction)
-      .callAsFunction(process);
+  (process['kill']! as JSFunction).callAsFunction(process);
 }
 
 Future<void> _waitForServer() async {
   for (var i = 0; i < 30; i++) {
     try {
-      final r = await _jsFetch(
-        '$_baseUrl/admin/status'.toJS,
-      ).toDart;
+      final r = await _jsFetch('$_baseUrl/admin/status'.toJS).toDart;
       final ok = r['ok'] as JSBoolean?;
       if (ok != null && ok.toDart) return;
     } on Object {
       // Not ready yet
     }
     if (i == 29) throw StateError('Server failed to start');
-    await Future<void>.delayed(
-      const Duration(milliseconds: 200),
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 }
 
 Future<void> _resetServer() async {
   final options = JSObject()
     ..['method'] = 'POST'.toJS
-    ..['headers'] = (JSObject()
-      ..['Content-Type'] = 'application/json'.toJS);
-  final r = await _jsFetch(
-    '$_baseUrl/admin/reset'.toJS,
-    options,
-  ).toDart;
+    ..['headers'] = (JSObject()..['Content-Type'] = 'application/json'.toJS);
+  final r = await _jsFetch('$_baseUrl/admin/reset'.toJS, options).toDart;
   final ok = r['ok'] as JSBoolean?;
   if (ok == null || !ok.toDart) {
     throw StateError('Failed to reset server');
@@ -523,18 +456,11 @@ void _deleteDbFiles() {
   final existsSync = fs['existsSync']! as JSFunction;
 
   const dbDir = '.too_many_cooks';
-  for (final file in [
-    'data.db',
-    'data.db-wal',
-    'data.db-shm',
-  ]) {
+  for (final file in ['data.db', 'data.db-wal', 'data.db-shm']) {
     final path = '$dbDir/$file';
-    final exists = (existsSync.callAsFunction(
-              fs,
-              path.toJS,
-            ) as JSBoolean?)
-                ?.toDart ??
-            false;
+    final exists =
+        (existsSync.callAsFunction(fs, path.toJS) as JSBoolean?)?.toDart ??
+        false;
     if (exists) {
       unlinkSync.callAsFunction(fs, path.toJS);
     }

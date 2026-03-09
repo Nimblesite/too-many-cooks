@@ -112,20 +112,27 @@ ToolCallback createMessageHandler(
       log,
       agentName,
       agentKey,
-      switch (args['to_agent']) { final String v => v, _ => null },
-      switch (args['content']) { final String v => v, _ => null },
+      switch (args['to_agent']) {
+        final String v => v,
+        _ => null,
+      },
+      switch (args['content']) {
+        final String v => v,
+        _ => null,
+      },
     ),
-    'get' => _get(
-      db,
-      agentName,
-      agentKey,
-      switch (args['unread_only']) { final bool v => v, _ => true },
-    ),
+    'get' => _get(db, agentName, agentKey, switch (args['unread_only']) {
+      final bool v => v,
+      _ => true,
+    }),
     'mark_read' => _markRead(
       db,
       agentName,
       agentKey,
-      switch (args['message_id']) { final String v => v, _ => null },
+      switch (args['message_id']) {
+        final String v => v,
+        _ => null,
+      },
     ),
     _ => (
       content: <Object>[
@@ -166,9 +173,7 @@ CallToolResult _send(
       log.info('Message sent from $agentName to $toAgent');
       return (
         content: <Object>[
-          textContent(
-            jsonEncode({'sent': true, 'message_id': value}),
-          ),
+          textContent(jsonEncode({'sent': true, 'message_id': value})),
         ],
         isError: false,
       );
@@ -185,9 +190,7 @@ CallToolResult _get(
 ) => switch (db.getMessages(agentName, agentKey, unreadOnly: unreadOnly)) {
   Success(:final value) => (
     content: <Object>[
-      textContent(
-        jsonEncode({'messages': value.map(messageToJson).toList()}),
-      ),
+      textContent(jsonEncode({'messages': value.map(messageToJson).toList()})),
     ],
     isError: false,
   ),
@@ -203,16 +206,16 @@ CallToolResult _markRead(
   if (messageId == null) {
     return (
       content: <Object>[
-        textContent(
-          jsonEncode({'error': 'mark_read requires message_id'}),
-        ),
+        textContent(jsonEncode({'error': 'mark_read requires message_id'})),
       ],
       isError: true,
     );
   }
   return switch (db.markRead(messageId, agentName, agentKey)) {
     Success() => (
-      content: <Object>[textContent(jsonEncode({'marked': true}))],
+      content: <Object>[
+        textContent(jsonEncode({'marked': true})),
+      ],
       isError: false,
     ),
     Error(:final error) => _errorResult(error),
@@ -220,6 +223,6 @@ CallToolResult _markRead(
 }
 
 CallToolResult _errorResult(DbError e) => (
-      content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
-      isError: true,
-    );
+  content: <Object>[textContent(jsonEncode(dbErrorToJson(e)))],
+  isError: true,
+);

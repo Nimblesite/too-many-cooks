@@ -49,96 +49,59 @@ void main() {
     _deleteIfExists(_testDbPath);
   });
 
-  test(
-    'agent can reconnect with saved key after adminReset',
-    () {
-      // 1. Register an agent and save the key
-      final regResult = db!.register('persistent-agent');
-      expect(
-        regResult,
-        isA<Success<AgentRegistration, DbError>>(),
-      );
-      final reg =
-          (regResult as Success<AgentRegistration, DbError>)
-              .value;
-      expect(reg.agentKey.length, 64);
+  test('agent can reconnect with saved key after adminReset', () {
+    // 1. Register an agent and save the key
+    final regResult = db!.register('persistent-agent');
+    expect(regResult, isA<Success<AgentRegistration, DbError>>());
+    final reg = (regResult as Success<AgentRegistration, DbError>).value;
+    expect(reg.agentKey.length, 64);
 
-      // 2. Call adminReset (should clear transient data)
-      final resetResult = db!.adminReset();
-      expect(resetResult, isA<Success<void, DbError>>());
+    // 2. Call adminReset (should clear transient data)
+    final resetResult = db!.adminReset();
+    expect(resetResult, isA<Success<void, DbError>>());
 
-      // 3. Try to reconnect with the saved key
-      final lookupResult = db!.lookupByKey(reg.agentKey);
+    // 3. Try to reconnect with the saved key
+    final lookupResult = db!.lookupByKey(reg.agentKey);
 
-      // 4. ASSERT: reconnection MUST succeed
-      expect(
-        lookupResult,
-        isA<Success<String, DbError>>(),
-        reason:
-            'Agent MUST be able to reconnect with saved key '
-            'after adminReset. Reset should clear locks, '
-            'messages, and plans — NOT agent identities.',
-      );
-      final name =
-          (lookupResult as Success<String, DbError>).value;
-      expect(name, equals('persistent-agent'));
-    },
-  );
+    // 4. ASSERT: reconnection MUST succeed
+    expect(
+      lookupResult,
+      isA<Success<String, DbError>>(),
+      reason:
+          'Agent MUST be able to reconnect with saved key '
+          'after adminReset. Reset should clear locks, '
+          'messages, and plans — NOT agent identities.',
+    );
+    final name = (lookupResult as Success<String, DbError>).value;
+    expect(name, equals('persistent-agent'));
+  });
 
-  test(
-    'adminReset clears locks and plans',
-    () {
-      // Register and create transient data
-      final regResult = db!.register('transient-agent');
-      final reg =
-          (regResult as Success<AgentRegistration, DbError>)
-              .value;
-      db!.activate('transient-agent');
-      db!.acquireLock(
-        'test.dart',
-        reg.agentName,
-        reg.agentKey,
-        'testing',
-        600000,
-      );
-      db!.updatePlan(
-        reg.agentName,
-        reg.agentKey,
-        'test goal',
-        'test task',
-      );
+  test('adminReset clears locks and plans', () {
+    // Register and create transient data
+    final regResult = db!.register('transient-agent');
+    final reg = (regResult as Success<AgentRegistration, DbError>).value;
+    db!.activate('transient-agent');
+    db!.acquireLock(
+      'test.dart',
+      reg.agentName,
+      reg.agentKey,
+      'testing',
+      600000,
+    );
+    db!.updatePlan(reg.agentName, reg.agentKey, 'test goal', 'test task');
 
-      // Reset
-      db!.adminReset();
+    // Reset
+    db!.adminReset();
 
-      // Locks and plans should be empty
-      final locksResult = db!.listLocks();
-      expect(
-        locksResult,
-        isA<Success<List<FileLock>, DbError>>(),
-      );
-      final locks =
-          (locksResult as Success<List<FileLock>, DbError>)
-              .value;
-      expect(
-        locks,
-        isEmpty,
-        reason: 'Locks must be cleared after adminReset',
-      );
+    // Locks and plans should be empty
+    final locksResult = db!.listLocks();
+    expect(locksResult, isA<Success<List<FileLock>, DbError>>());
+    final locks = (locksResult as Success<List<FileLock>, DbError>).value;
+    expect(locks, isEmpty, reason: 'Locks must be cleared after adminReset');
 
-      final plansResult = db!.listPlans();
-      expect(
-        plansResult,
-        isA<Success<List<AgentPlan>, DbError>>(),
-      );
-      final plans =
-          (plansResult as Success<List<AgentPlan>, DbError>)
-              .value;
-      expect(
-        plans,
-        isEmpty,
-        reason: 'Plans must be cleared after adminReset',
-      );
-    },
-  );
+    final plansResult = db!.listPlans();
+    expect(plansResult, isA<Success<List<AgentPlan>, DbError>>());
+    final plans = (plansResult as Success<List<AgentPlan>, DbError>).value;
+    expect(plans, isEmpty, reason: 'Plans must be cleared after adminReset');
+  });
 }
