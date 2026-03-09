@@ -1,0 +1,17 @@
+[meta]
+name = Delete Agent Missing Name
+description = Verify 400 when agentName is missing from delete-agent
+
+[request]
+POST {{baseUrl}}/admin/delete-agent
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{}
+"""
+
+[assert]
+status = 400

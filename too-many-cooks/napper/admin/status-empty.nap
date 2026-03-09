@@ -1,0 +1,13 @@
+[meta]
+name = Status After Reset
+description = Confirm status returns empty arrays after a reset
+
+[request]
+GET {{baseUrl}}/admin/status
+
+[assert]
+status = 200
+body.agents.length = 0
+body.locks.length = 0
+body.plans.length = 0
+body.messages.length = 0

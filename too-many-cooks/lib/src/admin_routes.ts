@@ -39,7 +39,7 @@ const sendToServer = async (
   const [key, server] = entry;
   console.error(`[TMC] [PUSH] Sending to ${key}`);
   try {
-    await server.server.sendLoggingMessage({
+    await server.sendLoggingMessage({
       level: "info",
       logger: ADMIN_LOGGER_NAME,
       data,
@@ -69,15 +69,13 @@ export const createAdminEventHub = (): AdminEventHub => {
       timestamp: Date.now(),
       payload,
     };
-    const fireAndForget = async (): Promise<void> => {
-      await Promise.all(
-        [...servers.entries()].map(
-          async (entry) => sendToServer(entry, data, servers, transports),
-        ),
-      );
-    };
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    fireAndForget();
+    Promise.all(
+      [...servers.entries()].map(
+        // eslint-disable-next-line require-await
+        async (entry) => sendToServer(entry, data, servers, transports),
+      ),
+    );
   };
 
   return { transports, servers, pushEvent };

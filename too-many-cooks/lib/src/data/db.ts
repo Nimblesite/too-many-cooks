@@ -67,7 +67,7 @@ export type TooManyCooksDb = {
     filePath: string,
     agentName: string,
     agentKey: string,
-    reason: string | undefined,
+    reason: string | null,
     timeoutMs: number,
   ) => Result<LockResult, DbError>;
   readonly releaseLock: (
@@ -114,7 +114,7 @@ export type TooManyCooksDb = {
   ) => Result<void, DbError>;
   readonly getPlan: (
     agentName: string,
-  ) => Result<AgentPlan | undefined, DbError>;
+  ) => Result<AgentPlan | null, DbError>;
   readonly listPlans: () => Result<readonly AgentPlan[], DbError>;
   readonly listAllMessages: () => Result<readonly Message[], DbError>;
   readonly activate: (agentName: string) => Result<void, DbError>;
@@ -348,12 +348,12 @@ const queryLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
-): Result<FileLock | undefined, DbError> => {
+): Result<FileLock | null, DbError> => {
   log.trace(`Querying lock for ${filePath}`);
   try {
     const stmt = db.prepare("SELECT * FROM locks WHERE file_path = ?");
     const row = stmt.get(filePath) as Record<string, unknown> | undefined;
-    return row === undefined ? success(undefined) : success(fileLockFromJson(row));
+    return row === undefined ? success(null) : success(fileLockFromJson(row));
   } catch (e: unknown) {
     return error({ code: ERR_DATABASE, message: String(e) });
   }
@@ -379,7 +379,7 @@ const acquireLock = (
   filePath: string,
   agentName: string,
   agentKey: string,
-  reason: string | undefined,
+  reason: string | null,
   timeoutMs: number,
 ): Result<LockResult, DbError> => {
   log.debug(`Acquiring lock on ${filePath} for ${agentName}`);
@@ -391,11 +391,11 @@ const acquireLock = (
 
   const existing = queryLock(db, log, filePath);
   if (!existing.ok) {return existing;}
-  if (existing.value !== undefined) {
+  if (existing.value !== null) {
     if (existing.value.expiresAt > timestamp) {
       return success({
         acquired: false,
-        lock: undefined,
+        lock: null,
         error: `Held by ${existing.value.agentName} until ${String(existing.value.expiresAt)}`,
       });
     }
@@ -413,22 +413,22 @@ const insertLock = (
   agentName: string,
   timestamp: number,
   expiresAt: number,
-  reason: string | undefined,
+  reason: string | null,
 ): Result<LockResult, DbError> => {
   try {
     const stmt = db.prepare(
       "INSERT INTO locks (file_path, agent_name, acquired_at, expires_at, reason) VALUES (?, ?, ?, ?, ?)",
     );
-    stmt.run(filePath, agentName, timestamp, expiresAt, reason ?? null);
+    stmt.run(filePath, agentName, timestamp, expiresAt, reason);
     return success({
       acquired: true,
       lock: { filePath, agentName, acquiredAt: timestamp, expiresAt, reason, version: 1 },
-      error: undefined,
+      error: null,
     });
   } catch (e: unknown) {
     const msg = String(e);
     return msg.includes("UNIQUE")
-      ? success({ acquired: false, lock: undefined, error: "Lock race condition" })
+      ? success({ acquired: false, lock: null, error: "Lock race condition" })
       : error({ code: ERR_DATABASE, message: msg });
   }
 };
@@ -472,7 +472,7 @@ const forceReleaseLock = (
 
   const existing = queryLock(db, log, filePath);
   if (!existing.ok) {return existing;}
-  if (existing.value === undefined) {
+  if (existing.value === null) {
     return error({ code: ERR_NOT_FOUND, message: "No lock exists" });
   }
   if (existing.value.expiresAt > now()) {
@@ -683,12 +683,12 @@ const getPlan = (
   db: Database.Database,
   log: Logger,
   agentName: string,
-): Result<AgentPlan | undefined, DbError> => {
+): Result<AgentPlan | null, DbError> => {
   log.trace(`Getting plan for ${agentName}`);
   try {
     const stmt = db.prepare("SELECT * FROM plans WHERE agent_name = ?");
     const row = stmt.get(agentName) as Record<string, unknown> | undefined;
-    return row === undefined ? success(undefined) : success(agentPlanFromJson(row));
+    return row === undefined ? success(null) : success(agentPlanFromJson(row));
   } catch (e: unknown) {
     return error({ code: ERR_DATABASE, message: String(e) });
   }

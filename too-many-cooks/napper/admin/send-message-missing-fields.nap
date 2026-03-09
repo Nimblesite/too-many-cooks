@@ -1,0 +1,19 @@
+[meta]
+name = Send Message Missing Fields
+description = Verify 400 when required fields are missing
+
+[request]
+POST {{baseUrl}}/admin/send-message
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{
+  "fromAgent": "admin"
+}
+"""
+
+[assert]
+status = 400

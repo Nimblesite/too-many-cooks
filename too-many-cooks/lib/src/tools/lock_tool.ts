@@ -66,7 +66,7 @@ export const createLockHandler = (
     }
     const action = actionArg;
     const filePath = typeof args.file_path === "string" ? args.file_path : null;
-    const reason = typeof args.reason === "string" ? args.reason : undefined;
+    const reason = typeof args.reason === "string" ? args.reason : null;
     const log = logger.child({
       tool: "lock",
       action,
@@ -97,7 +97,7 @@ type DispatchParams = {
   readonly filePath: string | null;
   readonly agentName: string;
   readonly agentKey: string;
-  readonly reason: string | undefined;
+  readonly reason: string | null;
   readonly lockTimeoutMs: number;
 };
 
@@ -128,7 +128,7 @@ type AcquireParams = {
   readonly filePath: string | null;
   readonly agentName: string;
   readonly agentKey: string;
-  readonly reason: string | undefined;
+  readonly reason: string | null;
   readonly timeoutMs: number;
 };
 
@@ -239,7 +239,7 @@ const handleQuery = (
   }
   const result = db.queryLock(filePath);
   if (!result.ok) {return makeErrorResult(result.error);}
-  if (result.value !== undefined) {
+  if (result.value !== null) {
     return { content: [textContent(JSON.stringify({ locked: true, lock: fileLockToJson(result.value) }))], isError: false };
   }
   return { content: [textContent(JSON.stringify({ locked: false }))], isError: false };

@@ -1,0 +1,19 @@
+[meta]
+name = Reset Key Nonexistent
+description = Attempt to reset key for an agent that does not exist
+
+[request]
+POST {{baseUrl}}/admin/reset-key
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{
+  "agentName": "ghost-agent"
+}
+"""
+
+[assert]
+status = 400

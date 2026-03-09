@@ -1,0 +1,19 @@
+[meta]
+name = Delete Agent Nonexistent
+description = Attempt to delete an agent that does not exist
+
+[request]
+POST {{baseUrl}}/admin/delete-agent
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{
+  "agentName": "ghost-agent"
+}
+"""
+
+[assert]
+status = 400

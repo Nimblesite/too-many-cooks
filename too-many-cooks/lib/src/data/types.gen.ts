@@ -55,7 +55,7 @@ export type FileLock = {
   readonly agentName: string;
   readonly acquiredAt: number;
   readonly expiresAt: number;
-  readonly reason: string | undefined;
+  readonly reason: string | null;
   readonly version: number;
 };
 
@@ -67,7 +67,7 @@ export const fileLockToJson = (
   agent_name: fileLock.agentName,
   acquired_at: fileLock.acquiredAt,
   expires_at: fileLock.expiresAt,
-  ...(fileLock.reason === undefined ? {} : { reason: fileLock.reason }),
+  ...(fileLock.reason === null ? {} : { reason: fileLock.reason }),
   version: fileLock.version,
 });
 
@@ -80,15 +80,15 @@ export const fileLockFromJson = (
   acquiredAt:
     typeof json.acquired_at === "number" ? json.acquired_at : 0,
   expiresAt: typeof json.expires_at === "number" ? json.expires_at : 0,
-  reason: typeof json.reason === "string" ? json.reason : undefined,
+  reason: typeof json.reason === "string" ? json.reason : null,
   version: typeof json.version === "number" ? json.version : 0,
 });
 
 /** Lock acquisition result. */
 export type LockResult = {
   readonly acquired: boolean;
-  readonly lock: FileLock | undefined;
-  readonly error: string | undefined;
+  readonly lock: FileLock | null;
+  readonly error: string | null;
 };
 
 /** Serialize LockResult to a JSON-compatible map. */
@@ -96,10 +96,10 @@ export const lockResultToJson = (
   lockResult: LockResult,
 ): Record<string, unknown> => ({
   acquired: lockResult.acquired,
-  ...(lockResult.lock === undefined
+  ...(lockResult.lock === null
     ? {}
     : { lock: fileLockToJson(lockResult.lock) }),
-  ...(lockResult.error === undefined ? {} : { error: lockResult.error }),
+  ...(lockResult.error === null ? {} : { error: lockResult.error }),
 });
 
 /** Deserialize LockResult from a JSON map. */
@@ -110,8 +110,8 @@ export const lockResultFromJson = (
   lock:
     typeof json.lock === "object" && json.lock !== null
       ? fileLockFromJson(json.lock as Record<string, unknown>)
-      : undefined,
-  error: typeof json.error === "string" ? json.error : undefined,
+      : null,
+  error: typeof json.error === "string" ? json.error : null,
 });
 
 /** Inter-agent message. */

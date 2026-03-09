@@ -141,7 +141,7 @@ const handleGet = (
 ): CallToolResult => {
   const result = db.getPlan(agentName);
   if (!result.ok) {return makeErrorResult(result.error);}
-  if (result.value !== undefined) {
+  if (result.value !== null) {
     return {
       content: [
         textContent(

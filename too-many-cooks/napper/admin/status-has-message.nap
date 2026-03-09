@@ -1,0 +1,10 @@
+[meta]
+name = Status Has Message
+description = Verify status includes the message sent earlier
+
+[request]
+GET {{baseUrl}}/admin/status
+
+[assert]
+status = 200
+body.messages.length > 0

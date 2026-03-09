@@ -53,7 +53,7 @@
     "shard": null,
     "tags": [],
     "updateSnapshots": "missing",
-    "updateSourceMethod": "3way",
+    "updateSourceMethod": "patch",
     "version": "1.58.2",
     "workers": 7,
     "webServer": {
@@ -65,20 +65,20 @@
   },
   "suites": [
     {
-      "title": "code-blocks.spec.js",
-      "file": "code-blocks.spec.js",
+      "title": "i18n.spec.js",
+      "file": "i18n.spec.js",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Code Blocks",
-          "file": "code-blocks.spec.js",
+          "title": "Chinese Translation - Language Dropdown",
+          "file": "i18n.spec.js",
           "line": 3,
           "column": 6,
           "specs": [
             {
-              "title": "copy button appears on hover",
+              "title": "language dropdown contains Chinese option",
               "ok": true,
               "tags": [],
               "tests": [
@@ -93,12 +93,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 605,
+                      "duration": 1449,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.805Z",
+                      "startTime": "2026-03-09T09:25:12.672Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -106,30 +106,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "030cca5f4b3b2feb9590-8531292531f1e64f7465",
-              "file": "code-blocks.spec.js",
+              "id": "1a353259dd088e7db040-539be6ba5b7ef89af09f",
+              "file": "i18n.spec.js",
               "line": 4,
               "column": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "coverage-targeted.spec.js",
-      "file": "coverage-targeted.spec.js",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Event Handler Coverage",
-          "file": "coverage-targeted.spec.js",
-          "line": 7,
-          "column": 6,
-          "specs": [
+            },
             {
-              "title": "theme toggle click handler executes",
+              "title": "language dropdown contains Chinese option on docs page",
               "ok": true,
               "tags": [],
               "tests": [
@@ -144,12 +127,12 @@
                       "workerIndex": 1,
                       "parallelIndex": 1,
                       "status": "passed",
-                      "duration": 718,
+                      "duration": 1404,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.807Z",
+                      "startTime": "2026-03-09T09:25:12.671Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -157,13 +140,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "69c39c759946fd9c21e5-b9331c18d82b8de369d1",
-              "file": "coverage-targeted.spec.js",
-              "line": 8,
+              "id": "1a353259dd088e7db040-a5e78efd539a09dbabf9",
+              "file": "i18n.spec.js",
+              "line": 16,
               "column": 3
             },
             {
-              "title": "language button click opens dropdown",
+              "title": "Chinese language link saves zh preference to localStorage",
               "ok": true,
               "tags": [],
               "tests": [
@@ -178,12 +161,12 @@
                       "workerIndex": 2,
                       "parallelIndex": 2,
                       "status": "passed",
-                      "duration": 1887,
+                      "duration": 1578,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.799Z",
+                      "startTime": "2026-03-09T09:25:12.674Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -191,13 +174,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "69c39c759946fd9c21e5-6e837e69b152d0fda0d2",
-              "file": "coverage-targeted.spec.js",
-              "line": 30,
+              "id": "1a353259dd088e7db040-6bc33c3697454e3b4c80",
+              "file": "i18n.spec.js",
+              "line": 28,
               "column": 3
             },
             {
-              "title": "language link click saves preference",
+              "title": "English language link saves en preference to localStorage",
               "ok": true,
               "tags": [],
               "tests": [
@@ -212,12 +195,12 @@
                       "workerIndex": 3,
                       "parallelIndex": 3,
                       "status": "passed",
-                      "duration": 1978,
+                      "duration": 1699,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.801Z",
+                      "startTime": "2026-03-09T09:25:12.692Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -225,616 +208,21 @@
                   "status": "expected"
                 }
               ],
-              "id": "69c39c759946fd9c21e5-6fd2b8ac832249e2d682",
-              "file": "coverage-targeted.spec.js",
-              "line": 44,
-              "column": 3
-            },
-            {
-              "title": "language link click zh saves preference",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 2003,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.811Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-3084012cf799daefe680",
-              "file": "coverage-targeted.spec.js",
-              "line": 69,
-              "column": 3
-            },
-            {
-              "title": "click outside closes language dropdown",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 2011,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.815Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-6fd679a53cd6531e7623",
-              "file": "coverage-targeted.spec.js",
-              "line": 101,
-              "column": 3
-            },
-            {
-              "title": "escape key closes language dropdown",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 1990,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:14.813Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-f626a7202c3583d844e0",
-              "file": "coverage-targeted.spec.js",
-              "line": 122,
-              "column": 3
-            },
-            {
-              "title": "mobile menu toggle click",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 2019,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:16.007Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-fb877b167d526bacf3a8",
-              "file": "coverage-targeted.spec.js",
-              "line": 139,
-              "column": 3
-            },
-            {
-              "title": "click outside closes mobile menu",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 1901,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:16.191Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-ca5e3a3984b5f0643cac",
-              "file": "coverage-targeted.spec.js",
-              "line": 163,
-              "column": 3
-            },
-            {
-              "title": "sidebar toggle click",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 2035,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:17.340Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-88313d2a1a38ee7a9b5b",
-              "file": "coverage-targeted.spec.js",
-              "line": 187,
-              "column": 3
-            },
-            {
-              "title": "anchor link smooth scroll",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 2678,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:17.416Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-daac5751aff70d955b3a",
-              "file": "coverage-targeted.spec.js",
-              "line": 211,
-              "column": 3
-            },
-            {
-              "title": "code block mouseenter shows copy button",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 2124,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:17.444Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-4fabc420fc6d89c593cc",
-              "file": "coverage-targeted.spec.js",
-              "line": 261,
-              "column": 3
-            },
-            {
-              "title": "code block mouseleave hides copy button",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 2455,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:17.444Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-fac09a93c4a736467cfd",
-              "file": "coverage-targeted.spec.js",
-              "line": 281,
-              "column": 3
-            },
-            {
-              "title": "copy button click copies code",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 3,
-                      "parallelIndex": 3,
-                      "status": "passed",
-                      "duration": 4497,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:17.485Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-45242fc6114846dcfd9b",
-              "file": "coverage-targeted.spec.js",
-              "line": 303,
-              "column": 3
-            },
-            {
-              "title": "copy button shows Failed on error",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 1988,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:18.030Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-e5d27a0ca82fdaa9cfdc",
-              "file": "coverage-targeted.spec.js",
-              "line": 343,
-              "column": 3
-            },
-            {
-              "title": "heading anchor mouseenter/leave",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 2440,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:18.098Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "69c39c759946fd9c21e5-4602eff4724a8a703786",
-              "file": "coverage-targeted.spec.js",
-              "line": 372,
-              "column": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "mobile.spec.js",
-      "file": "mobile.spec.js",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Mobile Menu",
-          "file": "mobile.spec.js",
-          "line": 3,
-          "column": 6,
-          "specs": [
-            {
-              "title": "mobile menu toggle opens and closes menu",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 683,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:19.388Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-e7fb0cd90bb14f336f66",
-              "file": "mobile.spec.js",
-              "line": 4,
-              "column": 3
-            },
-            {
-              "title": "mobile menu toggle callback adds classes correctly",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 659,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:19.585Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-d99baf9b9412aa94eb4a",
-              "file": "mobile.spec.js",
-              "line": 31,
-              "column": 3
-            },
-            {
-              "title": "mobile menu closes when clicking outside",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 606,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:19.912Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-697df48ea4ff4eebe844",
-              "file": "mobile.spec.js",
-              "line": 63,
-              "column": 3
-            },
-            {
-              "title": "mobile menu toggle button exists on mobile homepage",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 598,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.029Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-24b3a9587ddc831ddc00",
-              "file": "mobile.spec.js",
-              "line": 85,
+              "id": "1a353259dd088e7db040-92a2e698fec360c8f2ac",
+              "file": "i18n.spec.js",
+              "line": 49,
               "column": 3
             }
           ]
         },
         {
-          "title": "Docs Sidebar Mobile",
-          "file": "mobile.spec.js",
-          "line": 109,
+          "title": "Chinese Translation - i18n Data Completeness",
+          "file": "i18n.spec.js",
+          "line": 71,
           "column": 6,
           "specs": [
             {
-              "title": "sidebar toggle button appears on mobile and toggles sidebar",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 577,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.081Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-5e2043d7fff6846069fd",
-              "file": "mobile.spec.js",
-              "line": 110,
-              "column": 3
-            },
-            {
-              "title": "sidebar toggle hidden on desktop",
+              "title": "Chinese i18n data has all keys that English has",
               "ok": true,
               "tags": [],
               "tests": [
@@ -848,301 +236,13 @@
                     {
                       "workerIndex": 4,
                       "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 556,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.109Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-7462a4917bed8ed46b5f",
-              "file": "mobile.spec.js",
-              "line": 133,
-              "column": 3
-            },
-            {
-              "title": "sidebar toggle responds to window resize",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 646,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.248Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-642386dbcbed83bcfb60",
-              "file": "mobile.spec.js",
-              "line": 144,
-              "column": 3
-            },
-            {
-              "title": "sidebar toggle text changes based on state",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 625,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.524Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-4875ae615688464285f1",
-              "file": "mobile.spec.js",
-              "line": 167,
-              "column": 3
-            },
-            {
-              "title": "sidebar toggle on multiple pages",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 697,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.549Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-d6d485ad7c8ae8fc5d82",
-              "file": "mobile.spec.js",
-              "line": 192,
-              "column": 3
-            }
-          ]
-        },
-        {
-          "title": "Language Dropdown Mobile",
-          "file": "mobile.spec.js",
-          "line": 213,
-          "column": 6,
-          "specs": [
-            {
-              "title": "language dropdown displays above page content on mobile",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 633,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.633Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-8ff190775433b9ded74b",
-              "file": "mobile.spec.js",
-              "line": 214,
-              "column": 3
-            },
-            {
-              "title": "language dropdown z-index is above page content",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 628,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.664Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-4af16757999878af8b6f",
-              "file": "mobile.spec.js",
-              "line": 237,
-              "column": 3
-            },
-            {
-              "title": "header container allows dropdown overflow",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 536,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.672Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-9bfe4bda6831c8180e17",
-              "file": "mobile.spec.js",
-              "line": 263,
-              "column": 3
-            }
-          ]
-        },
-        {
-          "title": "Mobile Layout",
-          "file": "mobile.spec.js",
-          "line": 285,
-          "column": 6,
-          "specs": [
-            {
-              "title": "no horizontal scroll on mobile docs page",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 538,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:20.899Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-fe723be98eb3c33962bf",
-              "file": "mobile.spec.js",
-              "line": 286,
-              "column": 3
-            },
-            {
-              "title": "no horizontal scroll on mobile homepage",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
                       "status": "passed",
                       "duration": 621,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.155Z",
+                      "startTime": "2026-03-09T09:25:12.688Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1150,55 +250,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "abb07b11bbd7ad334584-5f7bbc99776bd57acc75",
-              "file": "mobile.spec.js",
-              "line": 297,
-              "column": 3
-            }
-          ]
-        },
-        {
-          "title": "Mobile Responsive Breakpoints",
-          "file": "mobile.spec.js",
-          "line": 309,
-          "column": 6,
-          "specs": [
-            {
-              "title": "768px breakpoint applies correct styles",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 4,
-                      "parallelIndex": 4,
-                      "status": "passed",
-                      "duration": 545,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.219Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-2e52ef6de60ac98811b4",
-              "file": "mobile.spec.js",
-              "line": 310,
+              "id": "1a353259dd088e7db040-1005a0bf4a68841730fb",
+              "file": "i18n.spec.js",
+              "line": 72,
               "column": 3
             },
             {
-              "title": "480px breakpoint applies correct styles",
+              "title": "Chinese language entry exists in languages.json with correct nativeName",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1210,15 +268,15 @@
                   "projectName": "",
                   "results": [
                     {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
                       "status": "passed",
-                      "duration": 661,
+                      "duration": 1402,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.251Z",
+                      "startTime": "2026-03-09T09:25:12.675Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1226,106 +284,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "abb07b11bbd7ad334584-b5f809751511d1e55d3e",
-              "file": "mobile.spec.js",
-              "line": 327,
+              "id": "1a353259dd088e7db040-5e3ba72ec4b4b60ca86d",
+              "file": "i18n.spec.js",
+              "line": 83,
               "column": 3
             },
             {
-              "title": "language button hides text on small mobile",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 540,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.271Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "abb07b11bbd7ad334584-c3af1e97a45026201f64",
-              "file": "mobile.spec.js",
-              "line": 343,
-              "column": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "pages.spec.js",
-      "file": "pages.spec.js",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Homepage",
-          "file": "pages.spec.js",
-          "line": 3,
-          "column": 6,
-          "specs": [
-            {
-              "title": "homepage loads with all essential elements",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
-                      "status": "passed",
-                      "duration": 637,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.306Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "be617558c25566766473-ecbb671b0a43c43fb068",
-              "file": "pages.spec.js",
-              "line": 4,
-              "column": 3
-            }
-          ]
-        },
-        {
-          "title": "Docs Pages",
-          "file": "pages.spec.js",
-          "line": 21,
-          "column": 6,
-          "specs": [
-            {
-              "title": "getting started page loads with content",
+              "title": "English language entry exists in languages.json with correct nativeName",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1340,12 +305,12 @@
                       "workerIndex": 6,
                       "parallelIndex": 6,
                       "status": "passed",
-                      "duration": 557,
+                      "duration": 1400,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.446Z",
+                      "startTime": "2026-03-09T09:25:12.679Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1353,13 +318,21 @@
                   "status": "expected"
                 }
               ],
-              "id": "be617558c25566766473-04ec78f95e9f7b6a1900",
-              "file": "pages.spec.js",
-              "line": 22,
+              "id": "1a353259dd088e7db040-14aa0eec1f3529cf1ea0",
+              "file": "i18n.spec.js",
+              "line": 95,
               "column": 3
-            },
+            }
+          ]
+        },
+        {
+          "title": "Chinese Translation - HTML lang Attribute",
+          "file": "i18n.spec.js",
+          "line": 108,
+          "column": 6,
+          "specs": [
             {
-              "title": "all tool docs pages load",
+              "title": "default html lang is en",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1374,12 +347,12 @@
                       "workerIndex": 4,
                       "parallelIndex": 4,
                       "status": "passed",
-                      "duration": 978,
+                      "duration": 589,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.776Z",
+                      "startTime": "2026-03-09T09:25:13.782Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1387,106 +360,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "be617558c25566766473-3a268a918a6f35275343",
-              "file": "pages.spec.js",
-              "line": 35,
-              "column": 3
-            }
-          ]
-        },
-        {
-          "title": "XML Feeds",
-          "file": "pages.spec.js",
-          "line": 54,
-          "column": 6,
-          "specs": [
-            {
-              "title": "sitemap exists with valid XML",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 45,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.787Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "be617558c25566766473-6c27ef6a31f416af30c5",
-              "file": "pages.spec.js",
-              "line": 55,
-              "column": 3
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "theme.spec.js",
-      "file": "theme.spec.js",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Theme Persistence",
-          "file": "theme.spec.js",
-          "line": 3,
-          "column": 6,
-          "specs": [
-            {
-              "title": "dark theme persists after page reload",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 827,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.823Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "a256222dfb5f87c657fc-26fcb40a898a336be2d4",
-              "file": "theme.spec.js",
-              "line": 4,
+              "id": "1a353259dd088e7db040-3cf6206df5ed965f37ba",
+              "file": "i18n.spec.js",
+              "line": 109,
               "column": 3
             },
             {
-              "title": "light theme persists after page reload",
+              "title": "html lang updates to zh when Chinese preference is saved",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1498,15 +378,15 @@
                   "projectName": "",
                   "results": [
                     {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
                       "status": "passed",
-                      "duration": 744,
+                      "duration": 598,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.843Z",
+                      "startTime": "2026-03-09T09:25:14.375Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1514,13 +394,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "a256222dfb5f87c657fc-f85810c54461a069c0cb",
-              "file": "theme.spec.js",
-              "line": 44,
+              "id": "1a353259dd088e7db040-cabfff5df00d02e58df3",
+              "file": "i18n.spec.js",
+              "line": 118,
               "column": 3
             },
             {
-              "title": "theme toggle switches between dark and light",
+              "title": "html lang stays en when English preference is saved",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1535,12 +415,12 @@
                       "workerIndex": 1,
                       "parallelIndex": 1,
                       "status": "passed",
-                      "duration": 685,
+                      "duration": 630,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.932Z",
+                      "startTime": "2026-03-09T09:25:14.588Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1548,21 +428,131 @@
                   "status": "expected"
                 }
               ],
-              "id": "a256222dfb5f87c657fc-fd88dc573eff319a984f",
-              "file": "theme.spec.js",
-              "line": 67,
+              "id": "1a353259dd088e7db040-20e11344a3673ccc73ad",
+              "file": "i18n.spec.js",
+              "line": 127,
               "column": 3
             }
           ]
         },
         {
-          "title": "Theme Toggle Callback",
-          "file": "theme.spec.js",
-          "line": 89,
+          "title": "Chinese Translation - OG Locale Meta Tags",
+          "file": "i18n.spec.js",
+          "line": 137,
           "column": 6,
           "specs": [
             {
-              "title": "theme toggle click callback changes theme and saves to localStorage",
+              "title": "homepage has og:locale meta tag",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 531,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-09T09:25:14.613Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "1a353259dd088e7db040-13287af6ea06741686b4",
+              "file": "i18n.spec.js",
+              "line": 138,
+              "column": 3
+            },
+            {
+              "title": "homepage has og:locale:alternate meta tag",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 541,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-09T09:25:14.613Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "1a353259dd088e7db040-3617634c4937cdd03d0f",
+              "file": "i18n.spec.js",
+              "line": 150,
+              "column": 3
+            },
+            {
+              "title": "og:locale and og:locale:alternate are different",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 542,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-09T09:25:14.635Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "1a353259dd088e7db040-347b847a95325e6b7fb3",
+              "file": "i18n.spec.js",
+              "line": 162,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Chinese Translation - Language Switcher Links",
+          "file": "i18n.spec.js",
+          "line": 175,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Chinese link href points to zh prefixed path",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1577,12 +567,12 @@
                       "workerIndex": 2,
                       "parallelIndex": 2,
                       "status": "passed",
-                      "duration": 822,
+                      "duration": 1334,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.952Z",
+                      "startTime": "2026-03-09T09:25:14.763Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1590,21 +580,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "a256222dfb5f87c657fc-c81558927e9bab67c603",
-              "file": "theme.spec.js",
-              "line": 90,
+              "id": "1a353259dd088e7db040-41f01b36e1616edc37bc",
+              "file": "i18n.spec.js",
+              "line": 176,
               "column": 3
-            }
-          ]
-        },
-        {
-          "title": "System Theme Preference",
-          "file": "theme.spec.js",
-          "line": 123,
-          "column": 6,
-          "specs": [
+            },
             {
-              "title": "respects system dark mode preference when no saved theme",
+              "title": "English link href does not contain zh prefix",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1619,12 +601,12 @@
                       "workerIndex": 3,
                       "parallelIndex": 3,
                       "status": "passed",
-                      "duration": 728,
+                      "duration": 1341,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:21.995Z",
+                      "startTime": "2026-03-09T09:25:14.885Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1632,13 +614,47 @@
                   "status": "expected"
                 }
               ],
-              "id": "a256222dfb5f87c657fc-9a401f2725e16a97d593",
-              "file": "theme.spec.js",
-              "line": 124,
+              "id": "1a353259dd088e7db040-1d35dd4c6d528092097b",
+              "file": "i18n.spec.js",
+              "line": 187,
               "column": 3
             },
             {
-              "title": "respects system light mode preference when no saved theme",
+              "title": "both language options are present in dropdown",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1335,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-09T09:25:14.977Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "1a353259dd088e7db040-bc40c1b85a8e5da3c799",
+              "file": "i18n.spec.js",
+              "line": 198,
+              "column": 3
+            },
+            {
+              "title": "active language is marked with active class",
               "ok": true,
               "tags": [],
               "tests": [
@@ -1653,12 +669,12 @@
                       "workerIndex": 6,
                       "parallelIndex": 6,
                       "status": "passed",
-                      "duration": 636,
+                      "duration": 1343,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-03-09T09:22:22.013Z",
+                      "startTime": "2026-03-09T09:25:15.153Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -1666,145 +682,9 @@
                   "status": "expected"
                 }
               ],
-              "id": "a256222dfb5f87c657fc-7b07e1568cdf8fad56a1",
-              "file": "theme.spec.js",
-              "line": 138,
-              "column": 3
-            },
-            {
-              "title": "saved theme overrides system preference",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 5,
-                      "parallelIndex": 5,
-                      "status": "passed",
-                      "duration": 646,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:22.593Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "a256222dfb5f87c657fc-2f95f70169550019a9e1",
-              "file": "theme.spec.js",
-              "line": 152,
-              "column": 3
-            },
-            {
-              "title": "responds to system theme change when no saved theme",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
-                      "status": "passed",
-                      "duration": 733,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:22.624Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "a256222dfb5f87c657fc-c13b1695451db77743fe",
-              "file": "theme.spec.js",
-              "line": 166,
-              "column": 3
-            },
-            {
-              "title": "system theme change listener updates theme when no saved preference",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 6,
-                      "parallelIndex": 6,
-                      "status": "passed",
-                      "duration": 636,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:22.656Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "a256222dfb5f87c657fc-c32d464b09eaa8036c56",
-              "file": "theme.spec.js",
+              "id": "1a353259dd088e7db040-4fcb1ddd91f35ded68a5",
+              "file": "i18n.spec.js",
               "line": 209,
-              "column": 3
-            },
-            {
-              "title": "ignores system theme change when theme is saved",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 614,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-03-09T09:22:22.657Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "a256222dfb5f87c657fc-214d45e1d6f7d08cb2df",
-              "file": "theme.spec.js",
-              "line": 230,
               "column": 3
             }
           ]
@@ -1814,9 +694,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-03-09T09:22:13.877Z",
-    "duration": 9509.222999999998,
-    "expected": 47,
+    "startTime": "2026-03-09T09:25:12.096Z",
+    "duration": 4425.246999999999,
+    "expected": 17,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0
