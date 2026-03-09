@@ -14,6 +14,7 @@ import 'dart:async';
 
 import 'package:dart_node_core/dart_node_core.dart';
 import 'package:dart_node_mcp/dart_node_mcp.dart';
+import 'package:nadz/nadz.dart';
 
 /// Event type for agent registration.
 const eventAgentRegistered = 'agent_registered';
@@ -73,39 +74,49 @@ typedef AgentEventHub = ({
   EventPushToAgentFn pushToAgent,
 });
 
+/// Send a logging message to an MCP server session.
+Future<Result<void, String>> sendNotification(
+  McpServer server,
+  Map<String, Object?> data,
+) async {
+  try {
+    await server.sendLoggingMessage((
+      level: 'info',
+      logger: agentLoggerName,
+      data: data,
+    ));
+    return const Success(null);
+  } on Object catch (e) {
+    return Error('$e');
+  }
+}
+
 /// Create an agent event hub.
 AgentEventHub createAgentEventHub() {
   final servers = <String, McpServer>{};
   final sessionAgentNames = <String, String>{};
   final activeSseSessions = <String>{};
 
-  void send(
+  Future<void> send(
     String sessionId,
     McpServer server,
     Map<String, Object?> data,
-  ) {
+  ) async {
     if (!activeSseSessions.contains(sessionId)) return;
     consoleError('[TMC] [AGENT-PUSH] Sending to $sessionId');
-    unawaited(
-      server
-          .sendLoggingMessage((
-            level: 'info',
-            logger: agentLoggerName,
-            data: data,
-          ))
-          .then((_) {
-            consoleError(
-              '[TMC] [AGENT-PUSH] Sent OK to $sessionId',
-            );
-          }, onError: (Object e) {
-            consoleError(
-              '[TMC] [AGENT-PUSH] FAILED $sessionId: $e',
-            );
-            servers.remove(sessionId);
-            sessionAgentNames.remove(sessionId);
-            activeSseSessions.remove(sessionId);
-          }),
-    );
+    switch (await sendNotification(server, data)) {
+      case Success():
+        consoleError(
+          '[TMC] [AGENT-PUSH] Sent OK to $sessionId',
+        );
+      case Error(:final error):
+        consoleError(
+          '[TMC] [AGENT-PUSH] FAILED $sessionId: $error',
+        );
+        servers.remove(sessionId);
+        sessionAgentNames.remove(sessionId);
+        activeSseSessions.remove(sessionId);
+    }
   }
 
   void pushEvent(String event, Map<String, Object?> payload) {
@@ -118,7 +129,7 @@ AgentEventHub createAgentEventHub() {
       'payload': payload,
     };
     for (final entry in [...servers.entries]) {
-      send(entry.key, entry.value, data);
+      unawaited(send(entry.key, entry.value, data));
     }
   }
 
@@ -138,13 +149,15 @@ AgentEventHub createAgentEventHub() {
         '${servers.length} agent(s)',
       );
       for (final entry in [...servers.entries]) {
-        send(entry.key, entry.value, data);
+        unawaited(send(entry.key, entry.value, data));
       }
     } else {
       for (final entry in [...sessionAgentNames.entries]) {
         if (entry.value == toAgent) {
           final server = servers[entry.key];
-          if (server != null) send(entry.key, server, data);
+          if (server != null) {
+            unawaited(send(entry.key, server, data));
+          }
         }
       }
     }

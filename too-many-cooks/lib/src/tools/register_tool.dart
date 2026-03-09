@@ -115,23 +115,34 @@ ToolCallback createRegisterHandler(
   }
 
   // First registration: name only
-  final name = nameArg!;
-  final log = logger.child({
-    'tool': 'register',
-    'agentName': name,
-  });
-  final regResult = db.register(name);
-  final AgentRegistration reg;
-  switch (regResult) {
-    case Success(:final value):
-      reg = value;
-    case Error(:final error) when error.message.contains('already registered'):
-      // Re-registration: reset key so agent gets a fresh identity
-      switch (db.adminResetKey(name)) {
+  switch (nameArg) {
+    case final String name:
+      final log = logger.child({
+        'tool': 'register',
+        'agentName': name,
+      });
+      final regResult = db.register(name);
+      final AgentRegistration reg;
+      switch (regResult) {
         case Success(:final value):
           reg = value;
+        case Error(:final error)
+            when error.message.contains('already registered'):
+          // Re-registration: reset key so agent gets a fresh identity
+          switch (db.adminResetKey(name)) {
+            case Success(:final value):
+              reg = value;
+            case Error(:final error):
+              log.warn('Re-registration failed: ${error.code}');
+              return (
+                content: <Object>[
+                  textContent(jsonEncode(dbErrorToJson(error))),
+                ],
+                isError: true,
+              );
+          }
         case Error(:final error):
-          log.warn('Re-registration failed: ${error.code}');
+          log.warn('Registration failed: ${error.code}');
           return (
             content: <Object>[
               textContent(jsonEncode(dbErrorToJson(error))),
@@ -139,26 +150,27 @@ ToolCallback createRegisterHandler(
             isError: true,
           );
       }
-    case Error(:final error):
-      log.warn('Registration failed: ${error.code}');
+      setSession(reg.agentName, reg.agentKey);
+      db.activate(reg.agentName);
+      emitter.emit(eventAgentRegistered, {
+        'agent_name': reg.agentName,
+        'registered_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      log.info('Agent registered: ${reg.agentName}');
       return (
         content: <Object>[
-          textContent(jsonEncode(dbErrorToJson(error))),
+          textContent(jsonEncode(agentRegistrationToJson(reg))),
+        ],
+        isError: false,
+      );
+    default:
+      return (
+        content: <Object>[
+          textContent(
+            jsonEncode({'error': 'missing_parameter: name required'}),
+          ),
         ],
         isError: true,
       );
   }
-  setSession(reg.agentName, reg.agentKey);
-  db.activate(reg.agentName);
-  emitter.emit(eventAgentRegistered, {
-    'agent_name': reg.agentName,
-    'registered_at': DateTime.now().millisecondsSinceEpoch,
-  });
-  log.info('Agent registered: ${reg.agentName}');
-  return (
-    content: <Object>[
-      textContent(jsonEncode(agentRegistrationToJson(reg))),
-    ],
-    isError: false,
-  );
 };

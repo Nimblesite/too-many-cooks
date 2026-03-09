@@ -28,12 +28,12 @@ external String _jsRandomUUID();
 
 String _randomUUID() => _jsRandomUUID();
 
-// JSON-RPC bad request error response.
-// ignore: lines_longer_than_80_chars
-const _badRequestJson = '{"jsonrpc":"2.0","error":{"code":-32000,"message":"Bad Request"},"id":null}';
+/// JSON-RPC bad request error response.
+const _badRequestJson =
+    '{"jsonrpc":"2.0","error":{"code":-32000,'
+    '"message":"Bad Request"},"id":null}';
 
-// JSON-RPC session-not-found error response (404).
-// ignore: lines_longer_than_80_cols
+/// JSON-RPC session-not-found error response (404).
 const _sessionNotFoundJson =
     '{"jsonrpc":"2.0","error":{"code":-32001,'
     '"message":"Session not found"},"id":null}';
@@ -131,30 +131,26 @@ Future<void> _startServer(Logger log) async {
 /// Check if a parsed JSON body is an MCP initialize
 /// request.
 bool _isInitializeRequest(JSAny? body) {
-  if (body == null || body.isUndefinedOrNull) {
-    return false;
-  }
-  try {
-    final obj = body as JSObject;
-    final method = obj['method'];
-    if (method == null || method.isUndefinedOrNull) {
-      return false;
-    }
-    return (method as JSString).toDart == 'initialize';
-  } on Object {
-    return false;
-  }
+  if (body == null || body.isUndefinedOrNull) return false;
+  if (!body.isA<JSObject>()) return false;
+  final method = (body as JSObject)['method'];
+  if (method == null || method.isUndefinedOrNull) return false;
+  if (!method.isA<JSString>()) return false;
+  return (method as JSString).toDart == 'initialize';
 }
 
 /// Get a request header value.
 String? _getHeader(Request req, String name) {
-  final headers =
-      (req as JSObject)['headers'] as JSObject?;
-  if (headers == null) return null;
-  final value = headers[name];
+  final headers = req['headers'];
+  if (headers == null || headers.isUndefinedOrNull) {
+    return null;
+  }
+  if (!headers.isA<JSObject>()) return null;
+  final value = (headers as JSObject)[name];
   if (value == null || value.isUndefinedOrNull) {
     return null;
   }
+  if (!value.isA<JSString>()) return null;
   return (value as JSString).toDart;
 }
 
@@ -175,11 +171,7 @@ Future<void> Function(Request, Response)
   if (sessionId != null &&
       transports.containsKey(sessionId)) {
     await transports[sessionId]
-        ?.handleRequest(
-          req as JSObject,
-          res as JSObject,
-          body,
-        )
+        ?.handleRequest(req, res, body)
         .toDart;
     return;
   }
@@ -194,7 +186,7 @@ Future<void> Function(Request, Response)
   }
 
   if (_isInitializeRequest(body)) {
-    late final StreamableHttpTransport transport;
+    StreamableHttpTransport? transportRef;
     final transportResult =
         createStreamableHttpTransport(
           sessionIdGenerator: _randomUUID,
@@ -203,15 +195,21 @@ Future<void> Function(Request, Response)
               'Session init',
               structuredData: {'sessionId': sid},
             );
-            transports[sid] = transport;
+            switch (transportRef) {
+              case final StreamableHttpTransport t:
+                transports[sid] = t;
+              case null:
+                break;
+            }
           },
         );
-    transport = switch (transportResult) {
+    final transport = switch (transportResult) {
       Success(:final value) => value,
       Error(:final error) => throw Exception(error),
     };
+    transportRef = transport;
 
-    (transport as JSObject)['onclose'] = (() {
+    transport['onclose'] = (() {
       final sid = transport.sessionId;
       if (sid != null) {
         log.info(
@@ -244,11 +242,7 @@ Future<void> Function(Request, Response)
     await server.connect(transport);
 
     await transport
-        .handleRequest(
-          req as JSObject,
-          res as JSObject,
-          body,
-        )
+        .handleRequest(req, res, body)
         .toDart;
 
     // Track agent server for push notifications.
@@ -291,10 +285,7 @@ Future<void> Function(Request, Response)
   // the agent hub delivers push notifications to it.
   agentHub.activeSseSessions.add(sessionId);
   await transports[sessionId]
-      ?.handleRequest(
-        req as JSObject,
-        res as JSObject,
-      )
+      ?.handleRequest(req, res)
       .toDart;
 };
 
@@ -312,11 +303,7 @@ Future<void> Function(Request, Response)
   if (sessionId != null &&
       hub.transports.containsKey(sessionId)) {
     await hub.transports[sessionId]
-        ?.handleRequest(
-          req as JSObject,
-          res as JSObject,
-          body,
-        )
+        ?.handleRequest(req, res, body)
         .toDart;
     return;
   }
@@ -330,7 +317,7 @@ Future<void> Function(Request, Response)
   }
 
   if (_isInitializeRequest(body)) {
-    late final StreamableHttpTransport transport;
+    StreamableHttpTransport? transportRef;
     final transportResult =
         createStreamableHttpTransport(
           sessionIdGenerator: _randomUUID,
@@ -339,15 +326,21 @@ Future<void> Function(Request, Response)
               'Admin session init',
               structuredData: {'sessionId': sid},
             );
-            hub.transports[sid] = transport;
+            switch (transportRef) {
+              case final StreamableHttpTransport t:
+                hub.transports[sid] = t;
+              case null:
+                break;
+            }
           },
         );
-    transport = switch (transportResult) {
+    final transport = switch (transportResult) {
       Success(:final value) => value,
       Error(:final error) => throw Exception(error),
     };
+    transportRef = transport;
 
-    (transport as JSObject)['onclose'] = (() {
+    transport['onclose'] = (() {
       final sid = transport.sessionId;
       if (sid != null) {
         log.info(
@@ -378,11 +371,7 @@ Future<void> Function(Request, Response)
     await server.connect(transport);
 
     await transport
-        .handleRequest(
-          req as JSObject,
-          res as JSObject,
-          body,
-        )
+        .handleRequest(req, res, body)
         .toDart;
 
     // Track server for event pushing.
@@ -422,10 +411,7 @@ Future<void> Function(Request, Response)
     return;
   }
   await hub.transports[sessionId]
-      ?.handleRequest(
-        req as JSObject,
-        res as JSObject,
-      )
+      ?.handleRequest(req, res)
       .toDart;
 };
 
@@ -434,12 +420,16 @@ JSFunction _asyncHandler(
   Future<void> Function(Request, Response) fn,
   Logger log,
 ) => ((Request req, Response res) {
-  unawaited(fn(req, res).catchError((Object e) {
-    log.error(
-      'Request error',
-      structuredData: {'error': '$e'},
-    );
-  }));
+  unawaited(() async {
+    try {
+      await fn(req, res);
+    } on Object catch (e) {
+      log.error(
+        'Request error',
+        structuredData: {'error': '$e'},
+      );
+    }
+  }());
 }).toJS;
 
 String _resolveLogFilePath() {
