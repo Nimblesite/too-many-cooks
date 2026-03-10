@@ -1,6 +1,7 @@
 /** @type {import('eslint').Linter.Config} */
 module.exports = {
   root: true,
+  ignorePatterns: ['out/', 'coverage/', '.eslintrc.js', 'scripts/', 'playwright.config.ts'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,
