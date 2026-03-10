@@ -75,6 +75,19 @@
         {
           "text": "GitHub",
           "url": "https://github.com/MelbourneDeveloper/too-many-cooks"
+        },
+        {
+          "text": "npm",
+          "url": "https://www.npmjs.com/package/too-many-cooks"
+        }
+      ]
+    },
+    {
+      "title": "公司",
+      "items": [
+        {
+          "text": "Nimblesite",
+          "url": "https://www.nimblesite.co"
         }
       ]
     }
