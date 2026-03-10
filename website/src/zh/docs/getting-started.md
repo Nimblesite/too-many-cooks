@@ -41,4 +41,4 @@ too-many-cooks
 
 ## 源代码
 
-可在 [GitHub](https://github.com/melbournedeveloper/too_many_cooks) 上获取。
+可在 [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks) 上获取。

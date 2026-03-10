@@ -11,7 +11,7 @@ The Too Many Cooks VSCode extension provides a real-time view of agent coordinat
 
 ## Install
 
-Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or download the `.vsix` file from the [GitHub releases page](https://github.com/MelbourneDeveloper/too_many_cooks/releases) and install manually:
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or download the `.vsix` file from the [GitHub releases page](https://github.com/MelbourneDeveloper/too-many-cooks/releases) and install manually:
 
 1. Open VS Code
 2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
@@ -42,4 +42,4 @@ From the extension you can:
 
 ## Source Code
 
-Available on [GitHub](https://github.com/melbournedeveloper/too_many_cooks).
+Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).
