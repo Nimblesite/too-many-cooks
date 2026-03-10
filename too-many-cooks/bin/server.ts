@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /// Entry point for Too Many Cooks MCP server.
 ///
 /// Starts a single Express HTTP server on port 4040 with:
