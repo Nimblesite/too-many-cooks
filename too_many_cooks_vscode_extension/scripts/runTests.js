@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { runTests } = require('@vscode/test-electron');
+const { runTests, downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
 const LOG_DIR = path.resolve(__dirname, '..', 'logs');
 const LOG_FILE = path.join(
@@ -65,14 +65,23 @@ async function main() {
   logToFile('INFO', 'Extension tests path:', extensionTestsPath);
 
   try {
+    // Download VSCode Electron binary (NOT the CLI script which delegates to running instances)
+    const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || await downloadAndUnzipVSCode();
+
+    logToFile('INFO', 'VSCode executable path:', vscodeExecutablePath);
     logToFile('INFO', 'Platform:', process.platform);
     logToFile('INFO', 'CI:', process.env.CI || 'false');
     logToFile('INFO', 'DISPLAY:', process.env.DISPLAY || 'unset');
 
     const exitCode = await runTests({
+      vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs: [extensionDevelopmentPath],
+      launchArgs: [
+        extensionDevelopmentPath,
+        '--disable-gpu',
+        '--no-sandbox',
+      ],
       extensionTestsEnv: {
         VERBOSE_LOGGING: 'true',
         TMC_TEST_LOG_FILE: LOG_FILE,
