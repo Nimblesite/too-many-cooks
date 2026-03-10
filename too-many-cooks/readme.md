@@ -14,8 +14,8 @@ Multi-agent coordination MCP server for AI agents editing the same codebase simu
 
 <br>
 
-<a href="https://toomanycooks.dev/docs/getting-started/" style="display:inline-block;padding:0.5rem 2rem;background:#c46d3b;color:#fff;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #c46d3b;">Get Started</a>&nbsp;&nbsp;
-<a href="https://toomanycooks.dev" style="display:inline-block;padding:0.5rem 2rem;background:transparent;color:#1a1a1a;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #b0a99f;">Documentation</a>&nbsp;&nbsp;
+<a href="https://tmc-mcp.dev/docs/getting-started/" style="display:inline-block;padding:0.5rem 2rem;background:#c46d3b;color:#fff;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #c46d3b;">Get Started</a>&nbsp;&nbsp;
+<a href="https://tmc-mcp.dev" style="display:inline-block;padding:0.5rem 2rem;background:transparent;color:#1a1a1a;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #b0a99f;">Documentation</a>&nbsp;&nbsp;
 <a href="https://www.npmjs.com/package/too-many-cooks" style="display:inline-block;padding:0.5rem 2rem;background:transparent;color:#1a1a1a;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #b0a99f;">npm</a>
 
 </div>
