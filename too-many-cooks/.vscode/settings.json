@@ -1,0 +1,10 @@
+{
+  "nodejs-testing.enabled": true,
+  "nodejs-testing.include": [
+    "test/**/*_test.ts"
+  ],
+  "nodejs-testing.nodeArgs": [
+    "--import",
+    "tsx"
+  ]
+}

@@ -1,20 +1,24 @@
 {
   "name": "too-many-cooks",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Multi-agent Git coordination MCP server - enables multiple AI agents to safely edit a git repository simultaneously with file locking, messaging, and plan visibility",
+  "type": "module",
   "main": "build/bin/server.js",
   "bin": {
     "too-many-cooks": "build/bin/server.js"
   },
   "scripts": {
-    "start": "node build/bin/server.js"
+    "build": "tsc",
+    "start": "node build/bin/server.js",
+    "lint": "eslint .",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.ts"
   },
   "keywords": [
     "mcp",
     "model-context-protocol",
     "ai-agents",
     "multi-agent",
-    "dart"
+    "typescript"
   ],
   "author": "Christian Findlay",
   "license": "MIT",
@@ -31,7 +35,20 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "better-sqlite3": "^12.5.0"
+    "better-sqlite3": "^12.5.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^10.0.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.56.1"
   },
   "files": [
     "build/bin/server.js",

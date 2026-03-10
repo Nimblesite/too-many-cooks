@@ -9,25 +9,95 @@ eleventyNavigation:
 
 Too Many Cooks is an MCP server that lets multiple AI agents coordinate when editing the same codebase. Agents lock files before editing, post messages to each other, and share plans to avoid conflicts.
 
-## Install
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 18 or later
+
+## Install and start the server
+
+Install globally and start:
 
 ```bash
 npm install -g too-many-cooks
-```
-
-## Add to Claude Code
-
-```bash
-claude mcp add --transport http too-many-cooks -- too-many-cooks
-```
-
-## Start the server
-
-```bash
 too-many-cooks
 ```
 
-The server runs on `http://localhost:4040` by default.
+Or run without installing:
+
+```bash
+npx too-many-cooks
+```
+
+The server starts on `http://localhost:4040` with two endpoints:
+
+- `/mcp` — MCP Streamable HTTP endpoint for AI agents
+- `/admin/*` — REST + event stream for the VSCode extension
+
+To use a different port, set the `TMC_PORT` environment variable:
+
+```bash
+TMC_PORT=5050 too-many-cooks
+```
+
+To target a specific workspace:
+
+```bash
+TMC_WORKSPACE=/path/to/your/project too-many-cooks
+```
+
+## Connect your AI agent
+
+Start the server first, then point your agent at it. Too Many Cooks uses Streamable HTTP transport so all agents connect to the same running server.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "too-many-cooks": {
+      "url": "http://localhost:4040/mcp"
+    }
+  }
+}
+```
+
+### Cline
+
+In VS Code, open **Cline MCP Settings** and add:
+
+```json
+{
+  "mcpServers": {
+    "too-many-cooks": {
+      "url": "http://localhost:4040/mcp"
+    }
+  }
+}
+```
+
+### Codex
+
+```bash
+codex --mcp-server http://localhost:4040/mcp
+```
+
+### Any MCP client
+
+Any client that supports [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) can connect to `http://localhost:4040/mcp`.
+
+## Install the VSCode extension
+
+The companion VSCode extension gives you a live dashboard of agents, locks, messages, and plans. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks) or download the `.vsix` from the [GitHub releases page](https://github.com/MelbourneDeveloper/too-many-cooks/releases).
+
+The extension connects to the server on port 4040 automatically. If you changed the server port with `TMC_PORT`, update the extension setting `tooManyCooks.port` to match.
 
 ## Agent workflow
 
@@ -38,6 +108,18 @@ The server runs on `http://localhost:4040` by default.
 5. **Communicate** — Use `message send` to tell other agents what you're doing.
 6. **Share your plan** — Use `plan update` so others can see your intent.
 
-## Source Code
+## Example CLAUDE.md rules
 
-Available on [GitHub](https://github.com/melbournedeveloper/too_many_cooks).
+Add these to your project's `CLAUDE.md` so agents coordinate automatically:
+
+```markdown
+## Multi-Agent Coordination (Too Many Cooks)
+- Register on TMC immediately. Keep your key! It's critical. Do not lose it!
+- If disconnected, reconnect by calling register with ONLY your key
+- Check messages regularly, lock files before editing, unlock after
+- Don't edit locked files; signal intent via plans and messages
+```
+
+## Source code
+
+Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).

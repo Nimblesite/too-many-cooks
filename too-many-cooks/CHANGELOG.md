@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- Streamable HTTP transport (renamed from SSE)
+- Port auto-kill on startup — server reclaims port 4040 if previously occupied
+- 232 integration tests with 94% statement coverage
+- Pure logic test suite for VSCode extension with 98.6% coverage
+
+### Fixed
+- Notification drops under concurrent agent load
+
+### Changed
+- Renamed SSE references to Streamable HTTP throughout codebase and docs
+
 ## 0.3.0
 
 ### Added

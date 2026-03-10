@@ -1,0 +1,6 @@
+[meta]
+name = Smoke Tests
+description = Quick health checks for the TMC server
+
+[steps]
+./health/status.nap

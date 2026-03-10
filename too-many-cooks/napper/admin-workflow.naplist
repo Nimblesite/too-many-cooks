@@ -1,0 +1,16 @@
+[meta]
+name = Admin Workflow Tests
+description = End-to-end admin workflow: reset, verify empty, send message, verify state
+
+[steps]
+# Start clean
+./admin/reset.nap
+./admin/status-empty.nap
+
+# Send a message and verify it appears
+./admin/send-message.nap
+./admin/status-has-message.nap
+
+# Reset again and verify clean
+./admin/reset.nap
+./admin/status-empty.nap

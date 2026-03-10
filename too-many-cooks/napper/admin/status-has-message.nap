@@ -1,0 +1,14 @@
+[meta]
+name = Status Has Message
+description = Verify status includes the message sent earlier
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = GET
+url = {{baseUrl}}/admin/status
+
+[assert]
+status = 200
+body.messages.length > 0

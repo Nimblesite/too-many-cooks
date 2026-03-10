@@ -110,7 +110,7 @@ test.describe('Docs Sidebar Mobile', () => {
   test('sidebar toggle button appears on mobile and toggles sidebar', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     const sidebarToggle = page.locator('.sidebar-toggle');
     const sidebar = page.locator('#docs-sidebar');
@@ -133,7 +133,7 @@ test.describe('Docs Sidebar Mobile', () => {
   test('sidebar toggle hidden on desktop', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     const sidebarToggle = page.locator('.sidebar-toggle');
 
@@ -144,7 +144,7 @@ test.describe('Docs Sidebar Mobile', () => {
   test('sidebar toggle responds to window resize', async ({ page }) => {
     // Start at desktop
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     const sidebarToggle = page.locator('.sidebar-toggle');
 
@@ -166,7 +166,7 @@ test.describe('Docs Sidebar Mobile', () => {
 
   test('sidebar toggle text changes based on state', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     const sidebarToggle = page.locator('.sidebar-toggle');
     const sidebar = page.locator('#docs-sidebar');
@@ -193,13 +193,13 @@ test.describe('Docs Sidebar Mobile', () => {
     await page.setViewportSize({ width: 375, height: 667 });
 
     // Test on core page
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     let sidebarToggle = page.locator('.sidebar-toggle');
     await expect(sidebarToggle).toBeVisible();
     await expect(sidebarToggle).toHaveText('Menu');
 
     // Test on express page
-    await page.goto('/docs/express/');
+    await page.goto('/docs/how-it-works/');
     sidebarToggle = page.locator('.sidebar-toggle');
     await expect(sidebarToggle).toBeVisible();
     await expect(sidebarToggle).toHaveText('Menu');
@@ -282,40 +282,7 @@ test.describe('Language Dropdown Mobile', () => {
   });
 });
 
-test.describe('Blog Mobile Layout', () => {
-  test('blog post has consistent padding with other sections', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/blog/');
-
-    // Get blog list padding
-    const blogPadding = await page.evaluate(() => {
-      const blogList = document.querySelector('.blog-list');
-      if (!blogList) return null;
-      const style = getComputedStyle(blogList);
-      return {
-        paddingTop: style.paddingTop,
-        paddingBottom: style.paddingBottom,
-      };
-    });
-
-    expect(blogPadding).not.toBeNull();
-    // Should have reasonable padding (not 0)
-    expect(parseInt(blogPadding.paddingTop)).toBeGreaterThan(0);
-    expect(parseInt(blogPadding.paddingBottom)).toBeGreaterThan(0);
-  });
-
-  test('no horizontal scroll on mobile blog page', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/blog/');
-
-    // Check if page has horizontal scroll
-    const hasHorizontalScroll = await page.evaluate(() => {
-      return document.documentElement.scrollWidth > document.documentElement.clientWidth;
-    });
-
-    expect(hasHorizontalScroll).toBe(false);
-  });
-
+test.describe('Mobile Layout', () => {
   test('no horizontal scroll on mobile docs page', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/docs/getting-started/');

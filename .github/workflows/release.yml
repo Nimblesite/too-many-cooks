@@ -9,20 +9,12 @@ permissions:
   contents: write
   id-token: write
 
-env:
-  DART_COMPILED_JS: too-many-cooks/build/bin/server.js
-
 jobs:
   build-mcp:
     name: Build MCP npm Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: ${{ vars.DART_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,22 +24,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: too-many-cooks/package-lock.json
 
-      - name: Get MCP server dependencies
+      - name: Install MCP server dependencies
         working-directory: too-many-cooks
-        run: |
-          dart pub get
-          npm ci
+        run: npm ci
 
-      - name: Compile MCP server
-        run: |
-          set -e
-          dart compile js -o ${{ env.DART_COMPILED_JS }} too-many-cooks/bin/server.dart
+      - name: Build MCP server
+        working-directory: too-many-cooks
+        run: npm run build
 
       - name: Verify server binary
         run: |
           set -e
-          test -f ${{ env.DART_COMPILED_JS }} || (echo "Server build failed!" && exit 1)
-          echo "MCP server built: ${{ env.DART_COMPILED_JS }}"
+          test -f too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
+          echo "MCP server built successfully"
 
       - name: Set version from tag
         id: version
@@ -74,11 +63,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: ${{ vars.DART_VERSION }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -86,19 +70,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
 
-      - name: Build MCP server (required by extension build)
+      - name: Build MCP server
+        working-directory: too-many-cooks
         run: |
-          set -e
-          cd too-many-cooks
-          dart pub get
           npm ci
-          dart compile js -o build/bin/server.js bin/server.dart
+          npm run build
 
-      - name: Get extension Dart dependencies
-        working-directory: too_many_cooks_vscode_extension
-        run: dart pub get
-
-      - name: Install extension npm dependencies
+      - name: Install extension dependencies
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
 

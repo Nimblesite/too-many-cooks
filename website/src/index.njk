@@ -7,6 +7,7 @@ keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Mod
 
 <section class="hero">
   <div class="container">
+    <img src="/assets/images/tmclogo.png" alt="Too Many Cooks logo" class="hero-logo">
     <h1>Too Many Cooks</h1>
     <p class="hero-subtitle">
       Coordinate multiple AI agents working on the same codebase.
@@ -14,16 +15,17 @@ keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Mod
     </p>
     <div class="hero-buttons">
       <a href="/docs/getting-started/" class="btn btn-primary btn-large">Get Started</a>
-      <a href="https://github.com/melbournedeveloper/too_many_cooks" class="btn btn-secondary btn-large">GitHub</a>
+      <a href="https://github.com/MelbourneDeveloper/too-many-cooks" class="btn btn-secondary btn-large">GitHub</a>
     </div>
 
     <div class="hero-code">
 {% highlight "bash" %}
-# Install globally
+# Install and start the server
 npm install -g too-many-cooks
+too-many-cooks
 
 # Add to Claude Code
-claude mcp add --transport stdio too-many-cooks -- too-many-cooks
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
 {% endhighlight %}
     </div>
   </div>

@@ -1,0 +1,23 @@
+[meta]
+name = Delete Lock Nonexistent
+description = Attempt to delete a lock that does not exist
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = POST
+url = {{baseUrl}}/admin/delete-lock
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{
+  "filePath": "/nonexistent/path.ts"
+}
+"""
+
+[assert]
+status = 400

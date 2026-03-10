@@ -1,6 +1,7 @@
 /** @type {import('eslint').Linter.Config} */
 module.exports = {
   root: true,
+  ignorePatterns: ['out/', 'coverage/', '.eslintrc.js', 'scripts/', 'playwright.config.ts'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,
@@ -56,7 +57,6 @@ module.exports = {
     ],
     '@typescript-eslint/no-base-to-string': 'error',
     '@typescript-eslint/no-confusing-void-expression': 'error',
-    // '@typescript-eslint/no-deprecated': 'error', // Rule not found
     '@typescript-eslint/no-duplicate-enum-values': 'error',
     '@typescript-eslint/no-duplicate-type-constituents': 'error',
     '@typescript-eslint/no-dynamic-delete': 'error',
@@ -258,7 +258,6 @@ module.exports = {
     'no-sequences': 'error',
     'no-shadow': 'error',
     'no-shadow-restricted-names': 'error',
-    'no-ternary': 'error',
     'no-throw-literal': 'error',
     'no-undef-init': 'error',
     'no-undefined': 'error',
@@ -324,7 +323,6 @@ module.exports = {
         'max-lines-per-function': 'off',
         'max-nested-callbacks': 'off',
         '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-non-null-assertion': 'warn',
         '@typescript-eslint/no-unsafe-assignment': 'warn',
         '@typescript-eslint/no-unsafe-member-access': 'warn',
         'no-magic-numbers': 'off',

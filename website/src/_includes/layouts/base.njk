@@ -17,7 +17,7 @@
   <meta name="title" content="{{ title | default(site.title) }}">
   <meta name="description" content="{{ description | default(site.description) }}">
   <meta name="author" content="{{ site.author }}">
-  <meta name="keywords" content="{{ keywords | default('Dart, JavaScript, TypeScript, React, Express, Node.js, full-stack, web development, mobile development, React Native, Too Many Cooks, MCP, multi-agent coordination') }}">
+  <meta name="keywords" content="{{ keywords | default('Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Model Context Protocol, file locking, messaging, shared plans, VSCode extension') }}">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
   <meta name="generator" content="Eleventy">
 
@@ -60,6 +60,8 @@
   <link rel="stylesheet" href="/assets/css/styles.css">
 
   <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16.png">
   <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
   <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
 
@@ -109,13 +111,13 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "too_many_cooks",
-    "description": "Full-Stack Dart for the JavaScript Ecosystem - Write React, React Native, and Express applications entirely in Dart",
+    "description": "Multi-Agent Coordination MCP Server - Coordinate multiple AI agents editing the same codebase with file locking, messaging, and shared plans",
     "codeRepository": "{{ site.github }}",
     "programmingLanguage": {
       "@type": "ComputerLanguage",
-      "name": "Dart"
+      "name": "TypeScript"
     },
-    "runtimePlatform": ["Node.js", "Browser"],
+    "runtimePlatform": ["Node.js"],
     "targetProduct": {
       "@type": "SoftwareApplication",
       "name": "too_many_cooks",
@@ -159,7 +161,7 @@
     },
     "about": {
       "@type": "Thing",
-      "name": "Dart programming language"
+      "name": "Model Context Protocol (MCP)"
     },
     "proficiencyLevel": "Beginner to Advanced"
   }
@@ -235,6 +237,7 @@
   <header class="header">
     <nav class="nav container">
       <a href="{% if lang == 'zh' %}/zh/{% else %}/{% endif %}" class="logo">
+        <img src="/assets/images/tmclogo.png" alt="Too Many Cooks" class="logo-icon">
         <span class="logo-text">Too Many Cooks</span>
       </a>
 
@@ -323,8 +326,8 @@
     </div>
 
     <div class="container footer-bottom">
-      <p>&copy; {% year %} Too Many Cooks.</p>
-      <p>Made for React developers. Made for Flutter developers. Made for everyone.</p>
+      <p>&copy; {% year %} <a href="https://www.nimblesite.co">Nimblesite Pty Ltd</a>. All rights reserved.</p>
+      <p>Multi-agent coordination for AI-assisted development.</p>
     </div>
   </footer>
 

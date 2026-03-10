@@ -6,7 +6,7 @@ import { test, expect } from './coverage.setup.js';
 
 test.describe('Event Handler Coverage', () => {
   test('theme toggle click handler executes', async ({ page }) => {
-    await page.goto('/docs/core/', { waitUntil: 'load' });
+    await page.goto('/docs/getting-started/', { waitUntil: 'load' });
     await page.waitForSelector('#theme-toggle', { state: 'visible', timeout: 10000 });
 
     // Get initial theme
@@ -28,7 +28,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('language button click opens dropdown', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -42,7 +42,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('language link click saves preference', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -67,7 +67,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('language link click zh saves preference', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -99,7 +99,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('click outside closes language dropdown', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -120,7 +120,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('escape key closes language dropdown', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -186,7 +186,7 @@ test.describe('Event Handler Coverage', () => {
 
   test('sidebar toggle click', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -209,7 +209,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('anchor link smooth scroll', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -259,7 +259,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('code block mouseenter shows copy button', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -279,7 +279,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('code block mouseleave hides copy button', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -302,7 +302,7 @@ test.describe('Event Handler Coverage', () => {
 
   test('copy button click copies code', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -341,7 +341,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('copy button shows Failed on error', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
@@ -370,7 +370,7 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('heading anchor mouseenter/leave', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 

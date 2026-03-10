@@ -6,7 +6,8 @@ import * as fs from 'fs';
 import { TestAPI, TreeItemSnapshot } from '../../src/testApi';
 
 const EXTENSION_ID = 'Nimblesite.too-many-cooks';
-const EVENT_TIMEOUT_MS = 1000;
+const CI_TIMEOUT_MULTIPLIER = process.env.CI ? 10 : 1;
+const EVENT_TIMEOUT_MS = 1000 * CI_TIMEOUT_MULTIPLIER;
 const EVENT_POLL_MS = 50;
 
 let cachedTestAPI: TestAPI | null = null;

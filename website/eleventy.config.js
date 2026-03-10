@@ -27,7 +27,7 @@ const techdocOptions = {
       name: "too_many_cooks",
       logo: "/assets/images/og-image.png",
       sameAs: [
-        "https://github.com/melbournedeveloper/too_many_cooks"
+        "https://github.com/MelbourneDeveloper/too-many-cooks"
       ]
     }
   },
@@ -35,11 +35,11 @@ const techdocOptions = {
     blog: false,
     docs: true,
     darkMode: true,
-    i18n: false,
+    i18n: true,
   },
   i18n: {
     defaultLanguage: "en",
-    languages: ["en"],
+    languages: ["en", "zh"],
   },
 };
 

@@ -1,0 +1,17 @@
+[meta]
+name = Status After Reset
+description = Confirm status returns empty arrays after a reset
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = GET
+url = {{baseUrl}}/admin/status
+
+[assert]
+status = 200
+body.agents.length = 0
+body.locks.length = 0
+body.plans.length = 0
+body.messages.length = 0

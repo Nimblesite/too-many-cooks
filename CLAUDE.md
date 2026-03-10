@@ -16,24 +16,21 @@ Multi-agent coordination MCP server for AI agents editing the same codebase. Inc
 - Literals are illegal. Move all literals to named constants
 - NO DUPLICATION. search before adding, move don't copy
 - Functions < 20 lines, files < 500 LOC
+- No manual serialization or deserialization of JSON
 - Switch expressions/ternaries over if/else (except in declarative contexts)
-- NO GLOBAL STATE. Keep all app state in one place.
+- **Avoid global state**. If necessary, CENTRALIZE GLOBAL STATE with immutable types
 - Return `Result<T,E>` instead of throwing exceptions
-
-### Dart
-- All Dart, minimal JS. Use `dart:js_interop` (not deprecated `dart:js_util`/`package:js`)
-- AVOID `JSObject`/`JSAny`/`dynamic`!
-- Prefer typedef records over classes for data (structural typing)
-- ILLEGAL: `as`, `late`, `!`, `.then()`, global state
-- All packages require: `austerity` (linting), `nadz` (Result types)
-- `node_preamble` for dart2js Node.js compatibility
 
 ### Typescript
 - Turn ALL lints on and turn them to error
+- AVOID `any`! Use proper types, generics, and type guards
+- Prefer interfaces/type aliases over classes for data (structural typing)
+- **ILLEGAL: non-null assertion `!`, type assertion `as`, `.then()` (use async/await)** - Use type narrowing
+- Use `neverthrow` for Result types
 
 ### Testing
 - 100% coverage with high-level integration tests, not unit tests/mocks
-- Tests in separate files, not groups. Dart only (JS only for interop testing)
+- Tests in separate files, not groups
 - Never skip tests. Never remove assertions. Failing tests OK, silent failures = ⛔️ ILLEGAL. Aggressively unskip tests.
 - Make sure the logs are giving you enough information to diagnose the issue. If not, add logging
 - NO PLACEHOLDERS—throw if incomplete
@@ -60,9 +57,9 @@ When generating web content, read these first:
 ## Codebase Structure
 
 ```
-too-many-cooks/                     # MCP server (Dart/Node.js)
+too-many-cooks/                     # MCP server (TypeScript/Node.js)
 
-too_many_cooks_vscode_extension/    # VSCode extension (TypeScript/Dart)
+too_many_cooks_vscode_extension/    # VSCode extension (TypeScript)
 docs/                               # Specification
 website/                            # Documentation website (Eleventy)
 scripts/                            # Build/test scripts

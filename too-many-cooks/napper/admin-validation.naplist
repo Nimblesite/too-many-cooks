@@ -1,0 +1,15 @@
+[meta]
+name = Admin Validation Tests
+description = Verify all admin endpoints reject invalid input with 400
+
+[steps]
+# Missing required fields
+./admin/send-message-missing-fields.nap
+./admin/delete-lock-missing-path.nap
+./admin/delete-agent-missing-name.nap
+./admin/reset-key-missing-name.nap
+
+# Nonexistent resources
+./admin/delete-lock-nonexistent.nap
+./admin/delete-agent-nonexistent.nap
+./admin/reset-key-nonexistent.nap

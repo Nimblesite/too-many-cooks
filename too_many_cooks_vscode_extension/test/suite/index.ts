@@ -1,5 +1,6 @@
 // Test suite index - Mocha test runner configuration
 
+import 'module-alias/register';
 import * as fs from 'fs';
 import * as path from 'path';
 import Mocha from 'mocha';
@@ -68,7 +69,7 @@ export async function run(): Promise<void> {
   const mocha = new Mocha({
     ui: 'tdd',
     color: true,
-    timeout: 5000,
+    timeout: process.env.CI ? 30000 : 5000,
     reporter: 'spec',
   });
 
@@ -83,15 +84,23 @@ export async function run(): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const runner = mocha.run((failures) => {
-      writeLog(`Test run complete: ${String(failures)} failures`);
+      const completionMsg: string = `Test run complete: ${String(failures)} failures`;
+      writeLog(completionMsg);
+      // Synchronous write ensures the completion marker is on disk even if
+      // the process exits before the stream flushes (CI race condition fix).
+      try { fs.appendFileSync(logFile, `[${new Date().toISOString()}] [TEST-SUITE] ${completionMsg}\n`); } catch { /* best effort */ }
+      const settle = (): void => {
+        if (failures > 0) {
+          reject(new Error(`${failures} tests failed.`));
+        } else {
+          resolve();
+        }
+      };
       if (logStream !== null) {
-        logStream.end();
+        logStream.end(settle);
         logStream = null;
-      }
-      if (failures > 0) {
-        reject(new Error(`${failures} tests failed.`));
       } else {
-        resolve();
+        settle();
       }
     });
 

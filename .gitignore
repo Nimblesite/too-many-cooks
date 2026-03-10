@@ -1,26 +1,28 @@
 .commandtree/commandtree.sqlite3
 
-
 node_modules/
 
 too_many_cooks_vscode_extension/.vscode-test/
-too_many_cooks_data/too_many_cooks_vscode_extension/.vscode-test/
-
 too_many_cooks_vscode_extension/logs/
+too_many_cooks_vscode_extension/out/
 
-.dart_tool/
+.DS_Store
 
 too-many-cooks/build/
 
-.DS_Store
-too_many_cooks_vscode_extension/out/
-
 .too_many_cooks/
 
-
 too-many-cooks/logs/
-website/playwright-report/
+too-many-cooks/coverage/
 
+website/playwright-report/
 website/_site/
+website/coverage/
 
 *.vsix
+
+test-results/
+
+codegen/.dart_tool/
+
+too_many_cooks_vscode_extension/coverage/

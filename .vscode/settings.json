@@ -1,0 +1,11 @@
+{
+  "nodejs-testing.enabled": true,
+  "nodejs-testing.include": [
+    "too-many-cooks/test/**/*_test.ts"
+  ],
+  "nodejs-testing.nodeArgs": [
+    "--import",
+    "tsx"
+  ],
+  "nodejs-testing.cwd": "${workspaceFolder}/too-many-cooks"
+}

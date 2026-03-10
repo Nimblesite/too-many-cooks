@@ -120,9 +120,9 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   });
 
   // -------------------------------------------------------------------------
-  // PIECE 2: Does GET /admin/events return an SSE stream?
+  // PIECE 2: Does GET /admin/events return a Streamable HTTP stream?
   // -------------------------------------------------------------------------
-  test('UNIT: GET /admin/events returns SSE stream (content-type check)', async () => {
+  test('UNIT: GET /admin/events returns Streamable HTTP stream (content-type check)', async () => {
     const sessionId = await initAdminSessionDirect();
 
     const controller = new AbortController();
@@ -156,7 +156,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
       if (!contentType.includes('text/event-stream')) {
         throw new Error(
           `Expected text/event-stream content-type, got: "${contentType}". ` +
-          `This means the server is NOT returning an SSE stream!`
+          `This means the server is NOT returning a Streamable HTTP stream!`
         );
       }
 
@@ -165,7 +165,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
         throw new Error('Response body is null - no stream available');
       }
 
-      console.log('[UNIT] SSE stream opened successfully');
+      console.log('[UNIT] Streamable HTTP stream opened successfully');
     } finally {
       clearTimeout(timeout);
       controller.abort();
@@ -175,13 +175,13 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // -------------------------------------------------------------------------
   // PIECE 3: Does the server PUSH events when state changes?
   // -------------------------------------------------------------------------
-  test('UNIT: Server pushes SSE event when agent registered', async function () {
+  test('UNIT: Server pushes stream event when agent registered', async function () {
     this.timeout(10000);
 
     const adminSessionId = await initAdminSessionDirect();
     const mcpSessionId = await initMcpSessionDirect();
 
-    // Open SSE stream
+    // Open stream
     const controller = new AbortController();
     const receivedChunks: string[] = [];
     let streamError: string | null = null;
@@ -194,15 +194,15 @@ suite('Streaming Unit - Isolate Pipeline', () => {
       method: 'GET',
       signal: controller.signal,
     }).then(async (response) => {
-      console.log(`[UNIT] SSE stream response status: ${response.status}`);
-      console.log(`[UNIT] SSE stream content-type: ${response.headers.get('content-type')}`);
+      console.log(`[UNIT] Stream response status: ${response.status}`);
+      console.log(`[UNIT] Stream content-type: ${response.headers.get('content-type')}`);
 
       if (!response.ok) {
-        streamError = `SSE stream failed: ${response.status}`;
+        streamError = `Stream failed: ${response.status}`;
         return;
       }
       if (!response.body) {
-        streamError = 'SSE stream body is null';
+        streamError = 'Stream body is null';
         return;
       }
 
@@ -213,11 +213,11 @@ suite('Streaming Unit - Isolate Pipeline', () => {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) {
-            console.log('[UNIT] SSE stream ended (done=true)');
+            console.log('[UNIT] Stream ended (done=true)');
             break;
           }
           const chunk = decoder.decode(value, { stream: true });
-          console.log(`[UNIT] SSE chunk received (${chunk.length} bytes): "${chunk.substring(0, 200)}"`);
+          console.log(`[UNIT] Stream chunk received (${chunk.length} bytes): "${chunk.substring(0, 200)}"`);
           receivedChunks.push(chunk);
         }
       } catch (err: unknown) {
@@ -242,7 +242,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     await registerAgentDirect(mcpSessionId, agentName);
 
     // Wait for events to arrive
-    console.log('[UNIT] Waiting for SSE events...');
+    console.log('[UNIT] Waiting for stream events...');
     await delay(2000);
 
     // Abort the stream
@@ -258,19 +258,19 @@ suite('Streaming Unit - Isolate Pipeline', () => {
       throw new Error(`Stream error: ${streamError}`);
     }
 
-    // Check if we got any SSE data
+    // Check if we got any stream data
     const allData = receivedChunks.join('');
-    console.log(`[UNIT] All SSE data (${allData.length} bytes): "${allData.substring(0, 500)}"`);
+    console.log(`[UNIT] All stream data (${allData.length} bytes): "${allData.substring(0, 500)}"`);
 
     const dataLines = allData.split('\n').filter(l => l.startsWith('data: '));
-    console.log(`[UNIT] SSE data lines: ${dataLines.length}`);
+    console.log(`[UNIT] Stream data lines: ${dataLines.length}`);
     for (const line of dataLines) {
       console.log(`[UNIT]   ${line.substring(0, 200)}`);
     }
 
     if (dataLines.length === 0) {
       throw new Error(
-        'NO SSE events received after registering agent! ' +
+        'NO stream events received after registering agent! ' +
         `Total chunks: ${receivedChunks.length}, total bytes: ${allData.length}. ` +
         'The server is NOT pushing events on state changes.'
       );
@@ -278,14 +278,14 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   });
 
   // -------------------------------------------------------------------------
-  // PIECE 4: Does readEventStream parse SSE correctly? (In-memory test)
+  // PIECE 4: Does readEventStream parse stream correctly? (In-memory test)
   // -------------------------------------------------------------------------
-  test('UNIT: readEventStream parses SSE data lines and calls onEvent', async () => {
-    // Simulate an SSE stream using a ReadableStream
+  test('UNIT: readEventStream parses stream data lines and calls onEvent', async () => {
+    // Simulate a stream using a ReadableStream
     let eventCount = 0;
     const onEvent = (): void => { eventCount += 1; };
 
-    const ssePayload = [
+    const streamPayload = [
       'event: message\n',
       'data: {"jsonrpc":"2.0","method":"notifications/resources/list_changed"}\n',
       '\n',
@@ -297,7 +297,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(encoder.encode(ssePayload));
+        controller.enqueue(encoder.encode(streamPayload));
         controller.close();
       },
     });

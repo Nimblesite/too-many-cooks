@@ -1,6 +1,0 @@
-[TMC] [2026-03-08T06:20:19.790Z] [INFO] Server starting...
-[TMC] [2026-03-08T06:20:19.792Z] [INFO] Creating server...
-[TMC] [2026-03-08T06:20:19.798Z] [INFO] Database created.
-[TMC] [2026-03-08T06:20:19.823Z] [INFO] Server listening {port: 4040}
-[TMC] [2026-03-08T06:20:20.006Z] [DEBUG] MCP server created
-[TMC] [2026-03-08T06:20:20.008Z] [INFO] Server initialized with all tools registered

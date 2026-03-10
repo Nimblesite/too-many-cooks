@@ -8,7 +8,9 @@ MCP server enabling multiple AI agents to safely edit a git repository simultane
 
 **Location**: `examples/too-many-cooks/`
 
-**Tech Stack**: Dart on Node.js, better-sqlite3 via JS interop, dart_node_mcp, dart_node_express, FP (typedef records, Result<T,E>)
+**Tech Stack**: TypeScript on Node.js, better-sqlite3, express, @modelcontextprotocol/sdk
+
+> **Why TypeScript, not Dart?** The server was originally written in Dart compiled to JS via dart2js. We abandoned Dart because `dart:js_interop` made interop with Node.js libraries (better-sqlite3, express, MCP SDK) painful — every call required manual JSObject wrappers, type bridging was brittle, and debugging compiled JS was a nightmare. TypeScript gives us native access to the entire Node.js ecosystem with zero interop friction.
 
 ---
 
@@ -115,7 +117,7 @@ When ANY of the following happen, the server IMMEDIATELY pushes an MCP `notifica
 
 The server maintains an **agent event hub** — a registry of all connected agent McpServer instances. When any tool handler modifies state, the notification emitter pushes a logging notification to EVERY registered agent server (with a 50ms delay to avoid racing with the tool-call HTTP response on the same session).
 
-Wire format (MCP JSON-RPC notification over SSE):
+Wire format (MCP JSON-RPC notification over Streamable HTTP):
 ```json
 {
   "jsonrpc": "2.0",
@@ -225,6 +227,6 @@ Black-box, end-to-end tests. Interact via MCP protocol (HTTP) or VSCode UI, veri
 | Test suite | Location |
 |------------|----------|
 | Data layer | `too-many-cooks/test/` |
-| MCP server (integration) | `too-many-cooks/test/integration_test.dart` |
-| Tool schemas | `too-many-cooks/test/tool_schemas_test.dart` |
+| MCP server (integration) | `too-many-cooks/test/` |
+| Tool schemas | `too-many-cooks/test/tool_schemas_test.ts` |
 | VSCode extension | `too_many_cooks_vscode_extension/test/suite/` |

@@ -1,0 +1,21 @@
+[meta]
+name = Delete Lock Missing Path
+description = Verify 400 when filePath is missing from delete-lock
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = POST
+url = {{baseUrl}}/admin/delete-lock
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{}
+"""
+
+[assert]
+status = 400

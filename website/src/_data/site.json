@@ -6,17 +6,17 @@
   "author": "Christian Findlay",
   "language": "en",
   "themeColor": "#0E7C6B",
-  "github": "https://github.com/melbournedeveloper/too_many_cooks",
+  "github": "https://github.com/MelbourneDeveloper/too-many-cooks",
   "stylesheet": "/assets/css/styles.css",
   "ogImage": "/assets/images/og-image.png",
   "ogImageWidth": "1200",
   "ogImageHeight": "630",
-  "keywords": "Too Many Cooks, MCP, multi-agent, AI coordination, Claude, Model Context Protocol, Dart, Node.js",
+  "keywords": "Too Many Cooks, MCP, multi-agent, AI coordination, Claude, Model Context Protocol, TypeScript, Node.js",
   "organization": {
     "name": "too_many_cooks",
     "logo": "/assets/images/og-image.png",
     "sameAs": [
-      "https://github.com/melbournedeveloper/too_many_cooks"
+      "https://github.com/MelbourneDeveloper/too-many-cooks"
     ]
   }
 }

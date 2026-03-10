@@ -1,0 +1,14 @@
+name: tmc_codegen
+description: JSON Schema to Dart records and TypeScript types
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  austerity: 1.3.0
+  nadz: 0.0.7-beta
+
+dev_dependencies:
+  test: ^1.24.0

@@ -4,87 +4,73 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  SERVER_BINARY: build/bin/server_node.js
-
 jobs:
-  too-many-cooks-mcp:
-    name: Too Many Cooks MCP Server
+  build-lint-test:
+    name: Build, Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: ${{ vars.DART_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: too-many-cooks/package-lock.json
+          cache-dependency-path: |
+            too-many-cooks/package-lock.json
+            too_many_cooks_vscode_extension/package-lock.json
 
-      - name: Get MCP server dependencies
+      # ── Install & Build ────────────────────────────────
+      - name: Install MCP server dependencies
         working-directory: too-many-cooks
-        run: |
-          dart pub get
-          npm ci
+        run: npm ci
 
-      - name: Compile MCP server
-        run: |
-          set -e
-          dart compile js -o too-many-cooks/build/bin/server.js too-many-cooks/bin/server.dart
+      - name: Build MCP server
+        working-directory: too-many-cooks
+        run: npm run build
 
-      - name: Verify server exists
-        run: |
-          set -e
-          test -f too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
-          echo "MCP server built successfully"
-
-  vscode-extension:
-    name: VSCode Extension Tests
-    runs-on: ubuntu-latest
-    needs: too-many-cooks-mcp
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: ${{ vars.DART_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
-
-      - name: Build Too Many Cooks MCP server
-        run: |
-          set -e
-          cd too-many-cooks
-          dart pub get
-          npm ci
-          dart compile js -o build/bin/server.js bin/server.dart
-
-      - name: Get extension dependencies (Dart)
-        working-directory: too_many_cooks_vscode_extension
-        run: dart pub get
-
-      - name: Get extension dependencies (npm)
+      - name: Install extension dependencies
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
 
       - name: Compile extension and tests
         working-directory: too_many_cooks_vscode_extension
-        run: |
-          set -e
-          npm run pretest
+        run: npm run pretest
 
-      - name: Run VSCode extension tests
+      # ── Lint ───────────────────────────────────────────
+      - name: Lint MCP server
+        working-directory: too-many-cooks
+        run: npm run lint
+
+      - name: Lint extension
+        working-directory: too_many_cooks_vscode_extension
+        run: npm run lint
+
+      # ── Start MCP server ──────────────────────────────
+      - name: Start MCP server
+        working-directory: too-many-cooks
+        run: node build/bin/server.js &
+        env:
+          TMC_PORT: '4040'
+
+      - name: Wait for MCP server to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:4040/admin/status > /dev/null 2>&1; then
+              echo "MCP server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "MCP server failed to start"
+          exit 1
+
+      # ── Tests ──────────────────────────────────────────
+      - name: Test MCP server
+        working-directory: too-many-cooks
+        run: npm test
+
+      - name: Test extension
         uses: coactions/setup-xvfb@v1
         with:
           run: npm test

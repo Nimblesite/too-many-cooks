@@ -14,7 +14,7 @@ Too Many Cooks runs a single HTTP server per workspace. Agents connect via MCP S
 One server, three clients:
 
 - **AI agents** — connect via `/mcp` (MCP Streamable HTTP)
-- **VSCode extension** — connects via `/admin/*` (REST + SSE)
+- **VSCode extension** — connects via `/admin/*` (REST + Streamable HTTP)
 - **SQLite database** — single source of truth at `.too_many_cooks/data.db`
 
 ## Real-time events

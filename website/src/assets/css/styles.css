@@ -124,6 +124,7 @@ html {
   font-size: 16px;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -134,6 +135,7 @@ body {
   background: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* Dot-grid background texture — subtle, not overwhelming */
@@ -241,7 +243,7 @@ strong {
 .header {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000;
   height: var(--header-height);
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
@@ -276,12 +278,28 @@ strong {
   flex-shrink: 0;
 }
 
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .logo-text {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
+}
+
+.hero-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-inline: auto;
+  display: block;
+  margin-bottom: var(--space-6);
+  position: relative;
 }
 
 .nav-links {
@@ -366,7 +384,7 @@ strong {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-md);
-  z-index: 50;
+  z-index: 1000;
 }
 
 .language-switcher.open .language-dropdown {
@@ -738,7 +756,6 @@ strong {
 /* Docs content */
 .docs-content {
   padding: var(--space-10) var(--space-12);
-  max-width: 780px;
 }
 
 .docs-content h1 {
@@ -1150,6 +1167,10 @@ pre code {
 
   .feature-card {
     padding: var(--space-6);
+  }
+
+  .language-btn span:not(.chevron) {
+    display: none;
   }
 }
 

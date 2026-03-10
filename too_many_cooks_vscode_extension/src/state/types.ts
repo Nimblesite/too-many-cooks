@@ -1,39 +1,8 @@
 // State types for Too Many Cooks VSCode extension.
 
-// Agent identity (public info only - no key).
-export interface AgentIdentity {
-  readonly agentName: string;
-  readonly lastActive: number;
-  readonly registeredAt: number;
-}
-
-// File lock info.
-export interface FileLock {
-  readonly acquiredAt: number;
-  readonly agentName: string;
-  readonly expiresAt: number;
-  readonly filePath: string;
-  readonly reason: string | null;
-  readonly version: number;
-}
-
-// Inter-agent message.
-export interface Message {
-  readonly content: string;
-  readonly createdAt: number;
-  readonly fromAgent: string;
-  readonly id: string;
-  readonly readAt: number | null;
-  readonly toAgent: string;
-}
-
-// Agent plan (what they're doing and why).
-export interface AgentPlan {
-  readonly agentName: string;
-  readonly currentTask: string;
-  readonly goal: string;
-  readonly updatedAt: number;
-}
+// Re-export generated model types.
+export type { AgentIdentity, AgentPlan, FileLock, Message } from 'state/types.gen';
+import type { AgentIdentity, AgentPlan, FileLock, Message } from 'state/types.gen';
 
 // Connection status to the MCP server.
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';

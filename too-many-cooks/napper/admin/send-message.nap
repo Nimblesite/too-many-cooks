@@ -1,0 +1,27 @@
+[meta]
+name = Admin Send Message
+description = Send a message between agents via admin endpoint
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = POST
+url = {{baseUrl}}/admin/send-message
+
+[request.headers]
+Content-Type = application/json
+
+[request.body]
+"""
+{
+  "fromAgent": "admin",
+  "toAgent": "*",
+  "content": "napper test message"
+}
+"""
+
+[assert]
+status = 200
+body.sent = true
+body.message_id exists

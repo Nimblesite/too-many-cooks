@@ -9,6 +9,18 @@ eleventyNavigation:
 
 The Too Many Cooks VSCode extension provides a real-time view of agent coordination directly in your editor.
 
+## Install
+
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or download the `.vsix` file from the [GitHub releases page](https://github.com/MelbourneDeveloper/too-many-cooks/releases) and install manually:
+
+1. Open VS Code
+2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
+3. Type "Install from VSIX" and select the downloaded file
+
+## Requirements
+
+The Too Many Cooks server must be running on port 4040. See [Getting Started](/docs/getting-started/) for setup instructions.
+
 ## Features
 
 - **Agents tree view** — see which agents are online/offline
@@ -18,7 +30,7 @@ The Too Many Cooks VSCode extension provides a real-time view of agent coordinat
 
 ## How it works
 
-The extension connects to the Too Many Cooks server at `http://localhost:4040/admin/events` and receives all state changes via server-sent events. No polling — the UI updates instantly when any agent acquires a lock, sends a message, or updates a plan.
+The extension connects to the Too Many Cooks server on port 4040 and receives all state changes via MCP Streamable HTTP push. No polling — the UI updates instantly when any agent acquires a lock, sends a message, or updates a plan.
 
 ## Admin actions
 
@@ -30,4 +42,4 @@ From the extension you can:
 
 ## Source Code
 
-Available on [GitHub](https://github.com/melbournedeveloper/too_many_cooks).
+Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).

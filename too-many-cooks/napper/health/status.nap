@@ -1,0 +1,18 @@
+[meta]
+name = Admin Status
+description = Verify the admin status endpoint returns system state
+
+[vars]
+baseUrl = http://localhost:4040
+
+[request]
+method = GET
+url = {{baseUrl}}/admin/status
+
+[assert]
+status = 200
+headers.Content-Type contains "application/json"
+body.agents exists
+body.locks exists
+body.plans exists
+body.messages exists

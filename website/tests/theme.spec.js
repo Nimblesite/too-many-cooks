@@ -2,7 +2,7 @@ import { test, expect } from './coverage.setup.js';
 
 test.describe('Theme Persistence', () => {
   test('dark theme persists after page reload', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Get initial theme to determine expected result
     const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
@@ -42,7 +42,7 @@ test.describe('Theme Persistence', () => {
   });
 
   test('light theme persists after page reload', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
@@ -65,7 +65,7 @@ test.describe('Theme Persistence', () => {
   });
 
   test('theme toggle switches between dark and light', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
@@ -88,7 +88,7 @@ test.describe('Theme Persistence', () => {
 
 test.describe('Theme Toggle Callback', () => {
   test('theme toggle click callback changes theme and saves to localStorage', async ({ page }) => {
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Clear localStorage to start fresh
     await page.evaluate(() => localStorage.removeItem('theme'));
@@ -125,7 +125,7 @@ test.describe('System Theme Preference', () => {
     // Emulate dark mode preference
     await page.emulateMedia({ colorScheme: 'dark' });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Clear any saved theme
     await page.evaluate(() => localStorage.removeItem('theme'));
@@ -139,7 +139,7 @@ test.describe('System Theme Preference', () => {
     // Emulate light mode preference
     await page.emulateMedia({ colorScheme: 'light' });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Clear any saved theme
     await page.evaluate(() => localStorage.removeItem('theme'));
@@ -153,7 +153,7 @@ test.describe('System Theme Preference', () => {
     // Emulate dark mode preference
     await page.emulateMedia({ colorScheme: 'dark' });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Set light theme in localStorage
     await page.evaluate(() => localStorage.setItem('theme', 'light'));
@@ -167,7 +167,7 @@ test.describe('System Theme Preference', () => {
     // Start with light mode
     await page.emulateMedia({ colorScheme: 'light' });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Clear saved theme so system preference takes effect
     await page.evaluate(() => localStorage.removeItem('theme'));
@@ -212,7 +212,7 @@ test.describe('System Theme Preference', () => {
 
     // Start with light mode
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // The setTheme function saves to localStorage, so clear it AFTER initial load
     await page.evaluate(() => localStorage.removeItem('theme'));
@@ -231,7 +231,7 @@ test.describe('System Theme Preference', () => {
     // Start with dark mode preference
     await page.emulateMedia({ colorScheme: 'dark' });
 
-    await page.goto('/docs/core/');
+    await page.goto('/docs/getting-started/');
 
     // Save light theme
     await page.evaluate(() => localStorage.setItem('theme', 'light'));

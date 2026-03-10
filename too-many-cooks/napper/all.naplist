@@ -1,0 +1,8 @@
+[meta]
+name = Full Test Suite
+description = Run all TMC Napper tests in sequence
+
+[steps]
+./smoke.naplist
+./admin-validation.naplist
+./admin-workflow.naplist

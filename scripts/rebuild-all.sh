@@ -3,10 +3,8 @@ set -euo pipefail
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPTS/.." && pwd)"
-DART_NODE="$(cd "$ROOT/../dart_node" && pwd)"
 MCP_DIR="$ROOT/too-many-cooks"
 VSIX_DIR="$ROOT/too_many_cooks_vscode_extension"
-SERVER_BINARY="build/bin/server_node.js"
 PORT=4040
 
 echo "=== Clean build artifacts ==="
@@ -15,16 +13,11 @@ rm -rf "$VSIX_DIR/out"
 echo "Cleaned build artifacts (database preserved)"
 
 echo ""
-echo "=== Build MCP server (Dart → JS) ==="
+echo "=== Build MCP server (TypeScript) ==="
 cd "$MCP_DIR"
-dart pub get
-dart compile js -o build/bin/server.js bin/server.dart
-cd "$DART_NODE"
-dart run tools/build/add_preamble.dart \
-  "$MCP_DIR/build/bin/server.js" \
-  "$MCP_DIR/$SERVER_BINARY" \
-  --shebang
-echo "MCP server compiled: $MCP_DIR/$SERVER_BINARY"
+npm install
+npm run build
+echo "MCP server compiled: $MCP_DIR/build/"
 
 echo ""
 echo "=== Build VSCode extension (TypeScript) ==="
@@ -39,7 +32,8 @@ echo "=== Starting MCP server on port $PORT ==="
 cleanup() { [ -n "${MCP_PID:-}" ] && kill "$MCP_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
-node "$MCP_DIR/$SERVER_BINARY" &
+cd "$MCP_DIR"
+node --import tsx bin/server.ts &
 MCP_PID=$!
 
 for i in $(seq 1 50); do

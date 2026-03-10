@@ -77,48 +77,52 @@ async function readEventStream(
   }
 }
 
-function listenAdminEvents(
+async function listenAdminEvents(
   sessionId: string,
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   signal: AbortSignal,
   config: Readonly<AdminEventStreamConfig>,
-): void {
+): Promise<void> {
   const headers: Headers = new Headers();
   headers.set('accept', 'application/json, text/event-stream');
   headers.set('mcp-session-id', sessionId);
-  fetch(`${config.baseUrl}${ADMIN_EVENTS_PATH}`, {
-    headers,
-    method: 'GET',
-    signal,
-  }).then(
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (response: Response): Promise<void> => {
-      if (!response.ok || response.body === null) {
-        config.log(`[AdminEventStream] GET failed: ${String(response.status)}`);
-        return;
+  try {
+    const response: Response = await fetch(`${config.baseUrl}${ADMIN_EVENTS_PATH}`, {
+      headers,
+      method: 'GET',
+      signal,
+    });
+    const { body }: { readonly body: ReadableStream<Uint8Array> | null } = response;
+    if (!response.ok || body === null) {
+      config.log(`[AdminEventStream] GET failed: ${String(response.status)}`);
+      return;
+    }
+    // Read events in background — don't await (runs indefinitely)
+    // eslint-disable-next-line no-void
+    void (async (): Promise<void> => {
+      try {
+        await readEventStream(body, config.onEvent, config.log);
+        config.log('[AdminEventStream] Event stream ended');
+      } catch (err: unknown) {
+        if (!signal.aborted) {
+          config.log(`[AdminEventStream] Stream read error: ${String(err)}`);
+        }
       }
-      await readEventStream(response.body, config.onEvent, config.log);
-      config.log('[AdminEventStream] Event stream ended');
-    },
-  ).catch((err: unknown): void => {
+    })();
+  } catch (err: unknown) {
     if (!signal.aborted) {
       config.log(`[AdminEventStream] Stream error: ${String(err)}`);
     }
-  });
+  }
 }
 
-export function startAdminEventStream(
+export async function startAdminEventStream(
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   abortController: AbortController,
   config: Readonly<AdminEventStreamConfig>,
-): void {
+): Promise<void> {
   const { signal }: { readonly signal: AbortSignal } = abortController;
-  initAdminSession(config.baseUrl)
-    .then((sessionId: string): void => {
-      config.log(`[AdminEventStream] Session started: ${sessionId}`);
-      listenAdminEvents(sessionId, signal, config);
-    })
-    .catch((err: unknown): void => {
-      config.log(`[AdminEventStream] Session error: ${String(err)}`);
-    });
+  const sessionId: string = await initAdminSession(config.baseUrl);
+  config.log(`[AdminEventStream] Session started: ${sessionId}`);
+  await listenAdminEvents(sessionId, signal, config);
 }

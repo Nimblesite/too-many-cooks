@@ -7,38 +7,38 @@
       "github": "GitHub"
     },
     "hero": {
-      "title": "Full-Stack Dart for the<br>JavaScript Ecosystem",
-      "subtitle": "Write React, React Native, and Express applications entirely in Dart. One language. Runtime type safety. Sound null safety. No compromises.",
+      "title": "Multi-Agent Coordination<br>MCP Server",
+      "subtitle": "Coordinate multiple AI agents editing the same codebase. File locking, messaging, and shared plans — no more conflicts.",
       "getStarted": "Get Started",
-      "whyDart": "Why Dart?"
+      "whyCoordinate": "Why Coordinate?"
     },
     "audience": {
       "title": "Built for You",
-      "subtitle": "Whether you're coming from React or Flutter, Too Many Cooks is for you.",
-      "reactTab": "React / React Native Developers",
-      "flutterTab": "Flutter Developers",
-      "sameParadigms": "Same Paradigms",
-      "sameParadigmsDesc": "Hooks, components, props, state — everything you know from React works the same way in Dart.",
-      "runtimeTypeSafety": "Runtime Type Safety",
-      "runtimeTypeSafetyDesc": "Unlike TypeScript, Dart preserves types at runtime. No more any escapes or erased generics.",
-      "simplerTooling": "Simpler Tooling",
-      "simplerToolingDesc": "No webpack, no babel, no tsconfig. Just dart compile js and you're done.",
-      "sameLanguage": "Same Language",
-      "sameLanguageDesc": "Use your existing Dart skills. Share models, utilities, and business logic across platforms.",
-      "webEcosystem": "Web Ecosystem Access",
-      "webEcosystemDesc": "Leverage the massive React and npm ecosystems while writing pure Dart code.",
-      "fullStackDart": "Full-Stack Dart",
-      "fullStackDartDesc": "Backend (Express), web (React), mobile (React Native) — all in one language."
+      "subtitle": "Whether you run one agent or ten, Too Many Cooks keeps them in sync.",
+      "agentTab": "AI Agent Teams",
+      "soloTab": "Solo Developers",
+      "coordination": "Coordination",
+      "coordinationDesc": "Agents register, lock files, share plans, and message each other — all through MCP tools.",
+      "realTime": "Real-Time Events",
+      "realTimeDesc": "Server-sent events push lock changes, messages, and plan updates instantly to all connected agents.",
+      "conflictFree": "Conflict-Free Editing",
+      "conflictFreeDesc": "Advisory file locking prevents agents from editing the same file simultaneously.",
+      "sameWorkspace": "Same Workspace",
+      "sameWorkspaceDesc": "All agents connect to one server per workspace. Shared state via SQLite.",
+      "vsCodeIntegration": "VSCode Integration",
+      "vsCodeIntegrationDesc": "See agents, locks, messages, and plans in real-time from your editor.",
+      "fullVisibility": "Full Visibility",
+      "fullVisibilityDesc": "Status tool gives every agent a snapshot of who is doing what."
     },
     "stack": {
       "title": "Coordination Tools",
-      "subtitle": "Packages and tools that give you full-stack superpowers.",
+      "subtitle": "Five MCP tools for multi-agent coordination.",
       "learnMore": "Learn more"
     },
     "types": {
-      "title": "Why Types Matter at Runtime",
-      "subtitle": "TypeScript erases types when it compiles to JavaScript. Dart doesn't.",
-      "learnMore": "Learn More About Dart's Type System"
+      "title": "Why Coordination Matters",
+      "subtitle": "Without coordination, multiple agents create conflicts, duplicate work, and overwrite each other's changes.",
+      "learnMore": "Learn More About Coordination"
     },
     "getStarted": {
       "title": "Get Started in Minutes",
@@ -53,10 +53,9 @@
       "discord": "Discord",
       "twitter": "Twitter",
       "more": "More",
-      "dartOfficial": "Dart Official",
-      "flutter": "Flutter",
+      "github": "GitHub",
       "copyright": "Too Many Cooks.",
-      "tagline": "Made for React developers. Made for Flutter developers. Made for everyone."
+      "tagline": "Multi-agent coordination for AI-powered development."
     },
     "language": {
       "switchLabel": "Language"
@@ -70,38 +69,38 @@
       "github": "GitHub"
     },
     "hero": {
-      "title": "面向 JavaScript 生态系统的<br>全栈 Dart",
-      "subtitle": "完全使用 Dart 编写 React、React Native 和 Express 应用程序。一种语言。运行时类型安全。健全的空安全。无妥协。",
+      "title": "多智能体协调<br>MCP 服务器",
+      "subtitle": "协调多个 AI 智能体同时编辑同一代码库。文件锁定、消息传递和共享计划——不再有冲突。",
       "getStarted": "快速开始",
-      "whyDart": "为什么选择 Dart？"
+      "whyCoordinate": "为什么需要协调？"
     },
     "audience": {
       "title": "为您打造",
-      "subtitle": "Too Many Cooks 是为您准备的。",
-      "reactTab": "React / React Native 开发者",
-      "flutterTab": "Flutter 开发者",
-      "sameParadigms": "相同的范式",
-      "sameParadigmsDesc": "Hooks、组件、props、状态 — 您在 React 中了解的一切在 Dart 中以相同的方式工作。",
-      "runtimeTypeSafety": "运行时类型安全",
-      "runtimeTypeSafetyDesc": "与 TypeScript 不同，Dart 在运行时保留类型。不再有 any 转义或被擦除的泛型。",
-      "simplerTooling": "更简单的工具链",
-      "simplerToolingDesc": "无需 webpack、babel、tsconfig。只需 dart compile js 即可完成。",
-      "sameLanguage": "相同的语言",
-      "sameLanguageDesc": "使用您现有的 Dart 技能。跨平台共享模型、工具和业务逻辑。",
-      "webEcosystem": "Web 生态系统访问",
-      "webEcosystemDesc": "在编写纯 Dart 代码的同时，利用庞大的 React 和 npm 生态系统。",
-      "fullStackDart": "全栈 Dart",
-      "fullStackDartDesc": "后端（Express）、Web（React）、移动端（React Native）— 全部使用一种语言。"
+      "subtitle": "无论您运行一个还是十个智能体，Too Many Cooks 都能让它们保持同步。",
+      "agentTab": "AI 智能体团队",
+      "soloTab": "独立开发者",
+      "coordination": "协调",
+      "coordinationDesc": "智能体通过 MCP 工具进行注册、锁定文件、共享计划和互相发消息。",
+      "realTime": "实时事件",
+      "realTimeDesc": "服务器发送事件将锁定变更、消息和计划更新即时推送给所有连接的智能体。",
+      "conflictFree": "无冲突编辑",
+      "conflictFreeDesc": "建议性文件锁定防止智能体同时编辑同一文件。",
+      "sameWorkspace": "同一工作区",
+      "sameWorkspaceDesc": "所有智能体连接到每个工作区的一个服务器。通过 SQLite 共享状态。",
+      "vsCodeIntegration": "VSCode 集成",
+      "vsCodeIntegrationDesc": "在编辑器中实时查看智能体、锁定、消息和计划。",
+      "fullVisibility": "完全可见性",
+      "fullVisibilityDesc": "状态工具让每个智能体了解其他智能体正在做什么。"
     },
     "stack": {
       "title": "协调工具",
-      "subtitle": "为您提供全栈超能力的包和工具。",
+      "subtitle": "用于多智能体协调的五个 MCP 工具。",
       "learnMore": "了解更多"
     },
     "types": {
-      "title": "为什么运行时类型很重要",
-      "subtitle": "TypeScript 在编译为 JavaScript 时会擦除类型。Dart 不会。",
-      "learnMore": "了解更多关于 Dart 类型系统"
+      "title": "为什么协调很重要",
+      "subtitle": "没有协调，多个智能体会产生冲突、重复工作并覆盖彼此的更改。",
+      "learnMore": "了解更多关于协调"
     },
     "getStarted": {
       "title": "几分钟内开始使用",
@@ -116,10 +115,9 @@
       "discord": "Discord",
       "twitter": "Twitter",
       "more": "更多",
-      "dartOfficial": "Dart 官网",
-      "flutter": "Flutter",
+      "github": "GitHub",
       "copyright": "Too Many Cooks。",
-      "tagline": "为 React 开发者打造。为 Flutter 开发者打造。为每个人打造。"
+      "tagline": "面向 AI 驱动开发的多智能体协调。"
     },
     "language": {
       "switchLabel": "语言"

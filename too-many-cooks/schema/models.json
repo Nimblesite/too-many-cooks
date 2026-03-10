@@ -1,0 +1,72 @@
+{
+  "models": {
+    "AgentIdentity": {
+      "description": "Agent identity (public info only - no key).",
+      "properties": {
+        "agentName": { "type": "string" },
+        "registeredAt": { "type": "integer" },
+        "lastActive": { "type": "integer" }
+      },
+      "required": ["agentName", "registeredAt", "lastActive"]
+    },
+    "AgentRegistration": {
+      "description": "Agent registration result (includes secret key).",
+      "properties": {
+        "agentName": { "type": "string" },
+        "agentKey": { "type": "string" }
+      },
+      "required": ["agentName", "agentKey"]
+    },
+    "FileLock": {
+      "description": "File lock info.",
+      "properties": {
+        "filePath": { "type": "string" },
+        "agentName": { "type": "string" },
+        "acquiredAt": { "type": "integer" },
+        "expiresAt": { "type": "integer" },
+        "reason": { "type": "string" },
+        "version": { "type": "integer" }
+      },
+      "required": ["filePath", "agentName", "acquiredAt", "expiresAt", "version"]
+    },
+    "LockResult": {
+      "description": "Lock acquisition result.",
+      "properties": {
+        "acquired": { "type": "boolean" },
+        "lock": { "$ref": "FileLock" },
+        "error": { "type": "string" }
+      },
+      "required": ["acquired"]
+    },
+    "Message": {
+      "description": "Inter-agent message.",
+      "properties": {
+        "id": { "type": "string" },
+        "fromAgent": { "type": "string" },
+        "toAgent": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "integer" },
+        "readAt": { "type": "integer" }
+      },
+      "required": ["id", "fromAgent", "toAgent", "content", "createdAt"]
+    },
+    "AgentPlan": {
+      "description": "Agent plan (what they're doing and why).",
+      "properties": {
+        "agentName": { "type": "string" },
+        "goal": { "type": "string" },
+        "currentTask": { "type": "string" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["agentName", "goal", "currentTask", "updatedAt"]
+    },
+    "DbError": {
+      "description": "Database error.",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "required": ["code", "message"]
+    }
+  }
+}

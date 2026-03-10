@@ -82,7 +82,7 @@ async function directToolCall(
     method: 'POST',
   });
   const text = await response.text();
-  // Parse through possible SSE or JSON-RPC envelope
+  // Parse through possible Streamable HTTP or JSON-RPC envelope
   const lines = text.split('\n').filter(l => l.startsWith('data: '));
   if (lines.length > 0) {
     const data = lines.map(l => l.substring(6).trim()).join('');
