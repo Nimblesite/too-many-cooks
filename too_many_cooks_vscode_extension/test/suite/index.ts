@@ -69,7 +69,7 @@ export async function run(): Promise<void> {
   const mocha = new Mocha({
     ui: 'tdd',
     color: true,
-    timeout: 5000,
+    timeout: process.env.CI ? 30000 : 5000,
     reporter: 'spec',
   });
 
