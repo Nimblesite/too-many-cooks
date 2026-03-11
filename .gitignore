@@ -30,3 +30,7 @@ too_many_cooks_vscode_extension/coverage/
 *.tgz
 
 too-many-cooks-0.4.0.tar.gz
+
+too-many-cooks/packages/core/build/
+
+too-many-cooks/packages/local/build/
