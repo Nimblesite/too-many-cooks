@@ -56,6 +56,18 @@ function waitForTestCompletion(timeout = 300000) {
   });
 }
 
+const { execSync } = require('child_process');
+
+/** Try to find the system `code` CLI. Returns the path or null. */
+function findSystemCode() {
+  try {
+    const codePath = execSync('which code', { encoding: 'utf8' }).trim();
+    return codePath || null;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const extensionDevelopmentPath = path.resolve(__dirname, '..');
   const extensionTestsPath = path.resolve(__dirname, '../out/test/suite/index.js');
@@ -65,8 +77,10 @@ async function main() {
   logToFile('INFO', 'Extension tests path:', extensionTestsPath);
 
   try {
-    // Download VSCode Electron binary (NOT the CLI script which delegates to running instances)
-    const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || await downloadAndUnzipVSCode();
+    // Prefer system `code` CLI (resolves extension host correctly on macOS).
+    // Fall back to downloaded Electron binary for CI/headless environments.
+    const systemCode = findSystemCode();
+    const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || systemCode || await downloadAndUnzipVSCode();
 
     logToFile('INFO', 'VSCode executable path:', vscodeExecutablePath);
     logToFile('INFO', 'Platform:', process.platform);
