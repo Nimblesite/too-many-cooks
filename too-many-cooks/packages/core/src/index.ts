@@ -10,7 +10,7 @@ export * from "./config.js";
 export * from "./schema.js";
 export * from "./mcp-types.js";
 export * from "./notifications.js";
-export * from "./db-interface.js";
+export type * from "./db-interface.js";
 export * from "./tools/register_tool.js";
 export * from "./tools/lock_tool.js";
 export * from "./tools/message_tool.js";

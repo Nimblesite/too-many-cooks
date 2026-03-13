@@ -2,8 +2,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import 'module-alias/register';
-import { isRecord, parseStreamableHttpResponse } from 'services/httpClient';
+import { isRecord, parseStreamableHttpResponse } from '../../src/services/httpClient';
 
 describe('isRecord', () => {
   it('returns true for plain objects', () => {

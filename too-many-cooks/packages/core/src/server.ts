@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import type { TooManyCooksDataConfig } from "./config.js";
 import type { TooManyCooksDb } from "./db-interface.js";
-import type { Logger, LogMessage } from "./logger.js";
+import type { LogMessage, Logger } from "./logger.js";
 import {
   LogLevel,
   createLoggerWithContext,
@@ -73,7 +73,7 @@ export const createMcpServerForDb = (
 
   // Per-connection session state
   let session: SessionIdentity | null = null;
-  const getSession = (): SessionIdentity | null => session;
+  const getSession = (): SessionIdentity | null => {return session};
   const setSession = (name: string, key: string): void => {
     session = { agentName: name, agentKey: key };
     onSessionSet?.(name, key);
@@ -180,12 +180,12 @@ const registerTools = (
 
 /** Creates a logger that writes to console.error. */
 export const createConsoleLogger = (): Logger =>
-  createLoggerWithContext(
+  {return createLoggerWithContext(
     createLoggingContext({
       transports: [logTransport(logToConsole)],
       minimumLogLevel: LogLevel.DEBUG,
     }),
-  );
+  )};
 
 /** Log transport that writes to console.error. */
 const logToConsole = (

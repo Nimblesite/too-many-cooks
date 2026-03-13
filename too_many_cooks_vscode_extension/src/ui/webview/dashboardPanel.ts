@@ -1,10 +1,10 @@
 // Dashboard webview panel showing agent coordination status.
 
 import * as vscode from 'vscode';
-import type { StoreManager } from 'services/storeManager';
-import { selectAgents, selectLocks, selectMessages, selectPlans } from 'state/selectors';
-import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from 'state/types';
-import { getDashboardHtml } from 'ui/webview/dashboardHtml';
+import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../../state/types';
+import { selectAgents, selectLocks, selectMessages, selectPlans } from '../../state/selectors';
+import type { StoreManager } from '../../services/storeManager';
+import { getDashboardHtml } from './dashboardHtml';
 
 export class DashboardPanel {
   private static currentPanel: DashboardPanel | null = null;

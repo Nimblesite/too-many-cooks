@@ -32,7 +32,7 @@
   "activationEvents": [
     "onStartupFinished"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/src/extension.js",
   "contributes": {
     "commands": [
       {
@@ -161,15 +161,16 @@
     "lint:strict": "eslint src/**/*.ts --max-warnings=0 --rule 'no-warning-comments: [\"error\", {\"terms\": [\"todo\", \"fixme\", \"xxx\"], \"location\": \"anywhere\"}]'",
     "pretest": "npm run compile && npm run compile:test",
     "test": "node scripts/runTests.js",
-    "test:pure": "npm run compile:test && node --test out/test/pure/*.test.js",
-    "test:coverage": "npm run compile:test && c8 --reporter=text --reporter=lcov --reports-dir=coverage --src=src node --test out/test/pure/*.test.js",
+    "test:pure": "npm run compile:test && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
+    "test:coverage": "npm run compile:test && c8 --reporter=text --reporter=lcov --reports-dir=coverage --src=src node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
+    "test:coverage:integration": "npm run pretest && rm -rf .v8-coverage && NODE_V8_COVERAGE=.v8-coverage node scripts/runTests.js && c8 report --reporter=text --reporter=lcov --reports-dir=coverage-integration --src=src --temp-directory=.v8-coverage",
     "package": "vsce package"
   },
   "_moduleAliases": {
-    "services": "./out/services",
-    "state": "./out/state",
-    "testApi": "./out/testApi",
-    "ui": "./out/ui"
+    "services": "./out/src/services",
+    "state": "./out/src/state",
+    "testApi": "./out/src/testApi",
+    "ui": "./out/src/ui"
   },
   "dependencies": {
     "module-alias": "^2.2.3"

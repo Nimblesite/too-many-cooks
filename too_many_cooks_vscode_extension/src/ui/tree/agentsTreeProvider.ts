@@ -1,10 +1,10 @@
 // TreeDataProvider for agents view.
 
 import * as vscode from 'vscode';
-import type { AgentDetails, FileLock, Message } from 'state/types';
-import { AgentTreeItem } from 'ui/tree/agentTreeItem';
-import type { StoreManager } from 'services/storeManager';
-import { selectAgentDetails } from 'state/selectors';
+import type { AgentDetails, FileLock, Message } from '../../state/types';
+import { AgentTreeItem } from './agentTreeItem';
+import type { StoreManager } from '../../services/storeManager';
+import { selectAgentDetails } from '../../state/selectors';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
 const MS_PER_SECOND: number = 1000;

@@ -2,12 +2,12 @@
 // The extension NEVER spawns or bundles a server binary.
 // It connects to an already-running external server only.
 
-import { checkServerAvailable, isRecord, postJsonRequest } from 'services/httpClient';
-import { extractToolResultText, initMcpSession, mcpJsonRpcRequest } from 'services/mcpProtocol';
-import type { AppState } from 'state/types';
-import { Store } from 'state/store';
-import { parseStatusResponse } from 'services/statusParser';
-import { startAdminEventStream } from 'services/adminEventStream';
+import { checkServerAvailable, isRecord, postJsonRequest } from './httpClient';
+import { extractToolResultText, initMcpSession, mcpJsonRpcRequest } from './mcpProtocol';
+import type { AppState } from '../state/types';
+import { Store } from '../state/store';
+import { parseStatusResponse } from './statusParser';
+import { startAdminEventStream } from './adminEventStream';
 
 const DEFAULT_PORT: number = 4040;
 const SERVER_NOT_RUNNING_MSG: string =

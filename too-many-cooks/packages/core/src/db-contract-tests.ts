@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- Contract test suite necessarily covers full interface */
+/* eslint-disable max-lines-per-function -- test suite functions necessarily exceed 50 lines */
+/* eslint-disable @typescript-eslint/no-floating-promises -- node:test describe/it/beforeEach/afterEach return promises managed by the test runner */
 /// Contract test suite for TooManyCooksDb interface.
 ///
 /// Tests the behavioral contract independent of any specific backend.
@@ -11,7 +14,7 @@
 ///     cleanup: async () => { /* tear down */ },
 ///   }));
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import type { TooManyCooksDb } from "./db-interface.js";
@@ -60,25 +63,17 @@ const unwrap = <T>(result: { readonly ok: boolean; readonly value?: T; readonly 
 /** Assert a Result is an error with the expected code. */
 const assertError = (result: { readonly ok: boolean; readonly error?: { readonly code: string } }, expectedCode: string): void => {
   assert.strictEqual(result.ok, false, `Expected error with code ${expectedCode}, got ok`);
-  if (!result.ok && result.error) {
-    assert.strictEqual(result.error.code, expectedCode);
-  }
+  assert.strictEqual(result.error?.code, expectedCode);
 };
 
-/**
- * Run the full TooManyCooksDb contract test suite.
- *
- * @param createTestDb - Factory that creates a fresh db instance per test
- */
-export const runDbContractTests = (createTestDb: DbFactory): void => {
+/** Run registration contract tests. */
+const runRegistrationTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: registration", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
     });
 
     afterEach(async () => {
@@ -122,20 +117,21 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       unwrap(await db.register("agent1"));
       unwrap(await db.register("agent2"));
       const agents = unwrap(await db.listAgents());
-      const names = new Set(agents.map((a) => a.agentName));
+      const names = new Set(agents.map((agent) => {return agent.agentName}));
       assert.ok(names.has("agent1"));
       assert.ok(names.has("agent2"));
     });
   });
+};
 
+/** Run authentication contract tests. */
+const runAuthenticationTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: authentication", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
     });
 
     afterEach(async () => {
@@ -174,7 +170,10 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assertError(await db.lookupByKey("invalid-key"), "UNAUTHORIZED");
     });
   });
+};
 
+/** Run lock contract tests. */
+const runLockTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: locks", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
@@ -182,12 +181,9 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
     let agentKey: string;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
       const reg = unwrap(await db.register("lock-agent"));
-      agentName = reg.agentName;
-      agentKey = reg.agentKey;
+      ({ agentName, agentKey } = reg);
     });
 
     afterEach(async () => {
@@ -279,7 +275,10 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assertError(await db.forceReleaseLock("file.ts", agentName, agentKey), "NOT_FOUND");
     });
   });
+};
 
+/** Run message contract tests. */
+const runMessageTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: messages", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
@@ -289,15 +288,11 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
     let receiverKey: string;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
       const sender = unwrap(await db.register("sender"));
-      senderName = sender.agentName;
-      senderKey = sender.agentKey;
+      ({ agentName: senderName, agentKey: senderKey } = sender);
       const receiver = unwrap(await db.register("receiver"));
-      receiverName = receiver.agentName;
-      receiverKey = receiver.agentKey;
+      ({ agentName: receiverName, agentKey: receiverKey } = receiver);
     });
 
     afterEach(async () => {
@@ -310,8 +305,9 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
 
       const msgs = unwrap(await db.getMessages(receiverName, receiverKey, { unreadOnly: true }));
       assert.strictEqual(msgs.length, 1);
-      assert.strictEqual(msgs[0]?.content, "hello");
-      assert.strictEqual(msgs[0]?.fromAgent, senderName);
+      const [firstMsg] = msgs;
+      assert.strictEqual(firstMsg?.content, "hello");
+      assert.strictEqual(firstMsg.fromAgent, senderName);
     });
 
     it("send fails with invalid credentials", async () => {
@@ -331,7 +327,7 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
 
     it("getMessages unreadOnly=false returns all messages", async () => {
       unwrap(await db.sendMessage(senderName, senderKey, receiverName, "test"));
-      unwrap(await db.getMessages(receiverName, receiverKey)); // marks read
+      unwrap(await db.getMessages(receiverName, receiverKey)); // Marks read
 
       const all = unwrap(await db.getMessages(receiverName, receiverKey, { unreadOnly: false }));
       assert.strictEqual(all.length, 1);
@@ -343,8 +339,8 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
 
       const msgs2 = unwrap(await db.getMessages(receiverName, receiverKey));
       const msgs3 = unwrap(await db.getMessages(reg3.agentName, reg3.agentKey));
-      assert.ok(msgs2.some((m) => m.content === "announcement"));
-      assert.ok(msgs3.some((m) => m.content === "announcement"));
+      assert.ok(msgs2.some((msg) => {return msg.content === "announcement"}));
+      assert.ok(msgs3.some((msg) => {return msg.content === "announcement"}));
     });
 
     it("mark message as read", async () => {
@@ -370,7 +366,7 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
     it("message contains correct metadata", async () => {
       unwrap(await db.sendMessage(senderName, senderKey, receiverName, "test"));
       const msgs = unwrap(await db.getMessages(receiverName, receiverKey));
-      const msg = msgs[0];
+      const [msg] = msgs;
       if (!msg) { throw new Error("Expected message"); }
       assert.strictEqual(msg.fromAgent, senderName);
       assert.strictEqual(msg.toAgent, receiverName);
@@ -379,7 +375,10 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assert.strictEqual(msg.id.length, EXPECTED_MESSAGE_ID_LENGTH);
     });
   });
+};
 
+/** Run plan contract tests. */
+const runPlanTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: plans", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
@@ -387,12 +386,9 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
     let agentKey: string;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
       const reg = unwrap(await db.register("plan-agent"));
-      agentName = reg.agentName;
-      agentKey = reg.agentKey;
+      ({ agentName, agentKey } = reg);
     });
 
     afterEach(async () => {
@@ -414,7 +410,7 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       unwrap(await db.updatePlan(agentName, agentKey, "goal2", "task2"));
 
       const plans = unwrap(await db.listPlans());
-      const agentPlans = plans.filter((p) => p.agentName === agentName);
+      const agentPlans = plans.filter((plan) => {return plan.agentName === agentName});
       assert.strictEqual(agentPlans.length, 1);
       assert.strictEqual(agentPlans[0]?.goal, "goal2");
     });
@@ -436,7 +432,7 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
 
       const plans = unwrap(await db.listPlans());
       assert.strictEqual(plans.length, 2);
-      const goals = new Set(plans.map((p) => p.goal));
+      const goals = new Set(plans.map((plan) => {return plan.goal}));
       assert.ok(goals.has("goal1"));
       assert.ok(goals.has("goal2"));
     });
@@ -453,15 +449,16 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       }
     });
   });
+};
 
+/** Run activation contract tests. */
+const runActivationTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: activation", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
     });
 
     afterEach(async () => {
@@ -499,15 +496,16 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assert.strictEqual(result.ok, true);
     });
   });
+};
 
+/** Run admin operation contract tests. */
+const runAdminTests = (createTestDb: DbFactory): void => {
   describe("TooManyCooksDb contract: admin operations", () => {
     let db: TooManyCooksDb;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      const result = await createTestDb();
-      db = result.db;
-      cleanup = result.cleanup;
+      ({ db, cleanup } = await createTestDb());
     });
 
     afterEach(async () => {
@@ -540,10 +538,10 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assert.strictEqual(del.ok, true);
 
       const agents = unwrap(await db.listAgents());
-      assert.strictEqual(agents.filter((a) => a.agentName === "doomed").length, 0);
+      assert.strictEqual(agents.filter((agent) => {return agent.agentName === "doomed"}).length, 0);
 
       const locks = unwrap(await db.listLocks());
-      assert.strictEqual(locks.filter((l) => l.agentName === "doomed").length, 0);
+      assert.strictEqual(locks.filter((lock) => {return lock.agentName === "doomed"}).length, 0);
 
       const plan = unwrap(await db.getPlan("doomed"));
       assert.strictEqual(plan, null);
@@ -609,4 +607,19 @@ export const runDbContractTests = (createTestDb: DbFactory): void => {
       assert.strictEqual(msgId.length, EXPECTED_MESSAGE_ID_LENGTH);
     });
   });
+};
+
+/**
+ * Run the full TooManyCooksDb contract test suite.
+ *
+ * @param createTestDb - Factory that creates a fresh db instance per test
+ */
+export const runDbContractTests = (createTestDb: DbFactory): void => {
+  runRegistrationTests(createTestDb);
+  runAuthenticationTests(createTestDb);
+  runLockTests(createTestDb);
+  runMessageTests(createTestDb);
+  runPlanTests(createTestDb);
+  runActivationTests(createTestDb);
+  runAdminTests(createTestDb);
 };

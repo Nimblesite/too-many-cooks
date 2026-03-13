@@ -3,9 +3,9 @@
 import type { TooManyCooksDb } from "../db-interface.js";
 import { type DbError, dbErrorToJson } from "../types.js";
 import {
-  textContent,
-  type SessionGetter,
   type CallToolResult,
+  type SessionGetter,
+  textContent,
 } from "../mcp-types.js";
 
 // ---------------------------------------------------------------------------
@@ -22,17 +22,21 @@ type IdentityErr = {
   readonly result: CallToolResult;
 };
 
-export type IdentityResult = IdentityOk | IdentityErr;
+export type IdentityResult = IdentityErr | IdentityOk;
 
-export const resolveIdentity = async (
+export const resolveIdentity: (
+  db: TooManyCooksDb,
+  args: Record<string, unknown>,
+  getSession: SessionGetter,
+) => Promise<IdentityResult> = async (
   db: TooManyCooksDb,
   args: Record<string, unknown>,
   getSession: SessionGetter,
 ): Promise<IdentityResult> => {
-  const keyOverride =
+  const keyOverride: string | null =
     typeof args.agent_key === "string" ? args.agent_key : null;
   if (keyOverride !== null) {
-    const lookupResult = await db.lookupByKey(keyOverride);
+    const lookupResult: Awaited<ReturnType<TooManyCooksDb["lookupByKey"]>> = await db.lookupByKey(keyOverride);
     if (!lookupResult.ok) {
       return { isError: true, result: makeErrorResult(lookupResult.error) };
     }
@@ -42,7 +46,7 @@ export const resolveIdentity = async (
       agentKey: keyOverride,
     };
   }
-  const session = getSession();
+  const session: ReturnType<SessionGetter> = getSession();
   if (session === null) {
     return {
       isError: true,
@@ -60,12 +64,12 @@ export const resolveIdentity = async (
 // Error helpers
 // ---------------------------------------------------------------------------
 
-export const makeErrorResult = (e: DbError): CallToolResult => ({
+export const makeErrorResult: (e: DbError) => CallToolResult = (e: DbError): CallToolResult => {return {
   content: [textContent(JSON.stringify(dbErrorToJson(e)))],
   isError: true,
-});
+}};
 
-export const errorContent = (msg: string): CallToolResult => ({
+export const errorContent: (msg: string) => CallToolResult = (msg: string): CallToolResult => {return {
   content: [textContent(JSON.stringify({ error: msg }))],
   isError: true,
-});
+}};

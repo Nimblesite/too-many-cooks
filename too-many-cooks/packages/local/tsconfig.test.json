@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "build",
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "references": [
+    { "path": "../core" }
+  ],
+  "include": ["src/**/*.ts", "bin/**/*.ts", "test/**/*.ts"]
+}

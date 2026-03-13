@@ -1,6 +1,6 @@
 // Derived state selectors.
 
-import type { AgentDetails, AgentIdentity, AgentPlan, AppState, ConnectionStatus, FileLock, Message } from 'state/types';
+import type { AgentDetails, AgentIdentity, AgentPlan, AppState, ConnectionStatus, FileLock, Message } from './types';
 
 export function selectConnectionStatus(state: Readonly<AppState>): ConnectionStatus {
   return state.connectionStatus;

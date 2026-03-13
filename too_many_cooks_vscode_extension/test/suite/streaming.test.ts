@@ -27,7 +27,8 @@ restoreDialogMocks();
 
 // Direct MCP server call - bypasses VSIX callTool and its refreshStatus().
 // The ONLY way the tree can update is via the admin event stream.
-const BASE_URL = 'http://localhost:4040';
+const TEST_PORT = process.env.TMC_PORT ?? '4040';
+const BASE_URL = `http://localhost:${TEST_PORT}`;
 
 interface McpSession {
   sessionId: string;

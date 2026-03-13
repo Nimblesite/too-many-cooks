@@ -71,6 +71,7 @@ export async function run(): Promise<void> {
     color: true,
     timeout: process.env.CI ? 30000 : 5000,
     reporter: 'spec',
+    bail: true,
   });
 
   const testsRoot = path.resolve(__dirname, '.');

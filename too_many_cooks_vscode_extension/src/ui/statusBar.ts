@@ -1,9 +1,9 @@
 // Status bar item showing agent/lock/message counts.
 
 import * as vscode from 'vscode';
-import type { AppState, ConnectionStatus } from 'state/types';
-import { selectAgentCount, selectConnectionStatus, selectLockCount, selectUnreadMessageCount } from 'state/selectors';
-import type { StoreManager } from 'services/storeManager';
+import type { AppState, ConnectionStatus } from '../state/types';
+import { selectAgentCount, selectConnectionStatus, selectLockCount, selectUnreadMessageCount } from '../state/selectors';
+import type { StoreManager } from '../services/storeManager';
 
 function pluralSuffix(count: number): string {
   if (count === 1) {

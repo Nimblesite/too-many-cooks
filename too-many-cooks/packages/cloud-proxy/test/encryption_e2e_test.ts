@@ -470,7 +470,7 @@ test("server never sees plaintext content", async () => {
   if (rawLocks.ok) {
     for (const lock of rawLocks.value) {
       assert.notEqual(lock.reason, LOCK_REASON);
-      assert.ok(lock.reason === null || !lock.reason.includes(LOCK_REASON));
+      assert.ok(!lock.reason?.includes(LOCK_REASON));
     }
   }
 });

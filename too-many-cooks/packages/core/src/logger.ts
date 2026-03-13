@@ -29,7 +29,7 @@ const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
 };
 
 /** Get display name for a log level. */
-export const logLevelName = (level: LogLevel): string => LOG_LEVEL_NAMES[level];
+export const logLevelName: (level: LogLevel) => string = (level: LogLevel): string => {return LOG_LEVEL_NAMES[level]};
 
 /** Log transport function. */
 export type LogFunction = (
@@ -73,33 +73,45 @@ export type LoggingContext = {
 };
 
 /** Create a logging context. */
-export const createLoggingContext = (
+export const createLoggingContext: (
+  options?: {
+    transports?: readonly LogFunction[];
+    minimumLogLevel?: LogLevel;
+  },
+) => LoggingContext = (
   options: {
     transports?: readonly LogFunction[];
     minimumLogLevel?: LogLevel;
   } = {},
-): LoggingContext => ({
+): LoggingContext => {return {
   transports: options.transports ?? [],
   minimumLogLevel: options.minimumLogLevel ?? LogLevel.DEBUG,
-});
+}};
 
 /** Wrap a log function as a transport. */
-export const logTransport = (fn: LogFunction): LogFunction => fn;
+export const logTransport: (fn: LogFunction) => LogFunction = (fn: LogFunction): LogFunction => {return fn};
 
 /** Create a logger from a context. */
-export const createLoggerWithContext = (context: LoggingContext): Logger =>
-  createLoggerImpl(context, {});
+export const createLoggerWithContext: (context: LoggingContext) => Logger = (context: LoggingContext): Logger =>
+  {return createLoggerImpl(context, {})};
 
-const createLoggerImpl = (
+const createLoggerImpl: (
+  context: LoggingContext,
+  parentData: Record<string, unknown>,
+) => Logger = (
   context: LoggingContext,
   parentData: Record<string, unknown>,
 ): Logger => {
-  const emit = (
+  const emit: (
+    level: LogLevel,
+    message: string,
+    structuredData?: Record<string, unknown>,
+  ) => void = (
     level: LogLevel,
     message: string,
     structuredData?: Record<string, unknown>,
   ): void => {
-    const merged =
+    const merged: Record<string, unknown> | undefined =
       Object.keys(parentData).length > 0 || structuredData !== undefined
         ? { ...parentData, ...structuredData }
         : undefined;
@@ -121,7 +133,7 @@ const createLoggerImpl = (
     warn: (msg: string, data?: Record<string, unknown>): void => { emit(LogLevel.WARN, msg, data); },
     error: (msg: string, data?: Record<string, unknown>): void => { emit(LogLevel.ERROR, msg, data); },
     fatal: (msg: string, data?: Record<string, unknown>): void => { emit(LogLevel.FATAL, msg, data); },
-    child: (childData) =>
-      createLoggerImpl(context, { ...parentData, ...childData }),
+    child: (childData: Record<string, unknown>): Logger =>
+      {return createLoggerImpl(context, { ...parentData, ...childData })},
   };
 };

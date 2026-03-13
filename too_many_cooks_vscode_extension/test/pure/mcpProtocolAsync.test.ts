@@ -3,8 +3,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
-import 'module-alias/register';
-import { initMcpSession, mcpJsonRpcRequest } from 'services/mcpProtocol';
+import { initMcpSession, mcpJsonRpcRequest } from '../../src/services/mcpProtocol';
 
 const TEST_PORT: number = 19877;
 const BASE_URL: string = `http://localhost:${String(TEST_PORT)}`;

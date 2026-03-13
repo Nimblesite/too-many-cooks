@@ -1,7 +1,7 @@
 // Parse server status JSON into typed state objects.
 
-import type { AgentIdentity, AgentPlan, FileLock, Message } from 'state/types';
-import { parseAgentIdentity, parseAgentPlan, parseFileLock, parseMessage } from 'state/types.gen';
+import type { AgentIdentity, AgentPlan, FileLock, Message } from '../state/types';
+import { parseAgentIdentity, parseAgentPlan, parseFileLock, parseMessage } from '../state/types.gen';
 
 // Parsed status response from the server.
 export interface StatusData {

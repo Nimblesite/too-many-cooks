@@ -1,10 +1,10 @@
 // TreeDataProvider for file locks view.
 
 import * as vscode from 'vscode';
-import { selectActiveLocks, selectExpiredLocks } from 'state/selectors';
-import type { StoreManager } from 'services/storeManager';
-import type { FileLock } from 'state/types';
-import { LockTreeItem } from 'ui/tree/lockTreeItem';
+import { selectActiveLocks, selectExpiredLocks } from '../../state/selectors';
+import type { FileLock } from '../../state/types';
+import { LockTreeItem } from './lockTreeItem';
+import type { StoreManager } from '../../services/storeManager';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
 const MS_PER_SECOND: number = 1000;

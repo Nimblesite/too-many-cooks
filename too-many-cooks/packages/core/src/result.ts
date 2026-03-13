@@ -7,19 +7,19 @@ export type Success<T> = { readonly ok: true; readonly value: T };
 export type Err<E> = { readonly ok: false; readonly error: E };
 
 /** Discriminated union Result type. */
-export type Result<T, E> = Success<T> | Err<E>;
+export type Result<T, E> = Err<E> | Success<T>;
 
 /** Create a Success result. */
-export const success = <T, E = never>(value: T): Result<T, E> => ({
+export const success: <T, E = never>(value: T) => Result<T, E> = <T, E = never>(value: T): Result<T, E> => {return {
   ok: true,
   value,
-});
+}};
 
 /** Create an Error result. */
-export const error = <T = never, E = string>(err: E): Result<T, E> => ({
+export const error: <T = never, E = string>(err: E) => Result<T, E> = <T = never, E = string>(err: E): Result<T, E> => {return {
   ok: false,
   error: err,
-});
+}};
 
 /** Retry policy configuration. */
 export type RetryPolicy = {
@@ -34,19 +34,24 @@ export const defaultRetryPolicy: RetryPolicy = {
 };
 
 /** Execute an operation with retry logic. */
-export const withRetry = <T>(
+export const withRetry: <T>(
+  policy: RetryPolicy,
+  isRetryable: (error: string) => boolean,
+  operation: () => Result<T, string>,
+  onRetry?: (attempt: number, error: string, delayMs: number) => void,
+) => Result<T, string> = <T>(
   policy: RetryPolicy,
   isRetryable: (error: string) => boolean,
   operation: () => Result<T, string>,
   onRetry?: (attempt: number, error: string, delayMs: number) => void,
 ): Result<T, string> => {
-  for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
-    const result = operation();
+  for (let attempt: number = 1; attempt <= policy.maxAttempts; attempt++) {
+    const result: Result<T, string> = operation();
     if (result.ok) {return result;}
     if (attempt >= policy.maxAttempts || !isRetryable(result.error)) {
       return result;
     }
-    const delayMs = policy.baseDelayMs * attempt;
+    const delayMs: number = policy.baseDelayMs * attempt;
     onRetry?.(attempt, result.error, delayMs);
     // Synchronous retry - sleep not needed for SQLite retries
   }

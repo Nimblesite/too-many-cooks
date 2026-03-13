@@ -1,6 +1,6 @@
 // Admin event stream client for real-time server-pushed notifications.
 
-import { streamableHttpPost } from 'services/httpClient';
+import { streamableHttpPost } from './httpClient';
 
 const ADMIN_EVENTS_PATH: string = '/admin/events';
 const INITIALIZED_NOTIFICATION: string = 'notifications/initialized';

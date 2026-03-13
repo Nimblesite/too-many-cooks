@@ -1,10 +1,10 @@
 // TreeDataProvider for messages view.
 
 import * as vscode from 'vscode';
-import type { Message } from 'state/types';
-import { MessageTreeItem } from 'ui/tree/messageTreeItem';
-import type { StoreManager } from 'services/storeManager';
-import { selectMessages } from 'state/selectors';
+import type { Message } from '../../state/types';
+import { MessageTreeItem } from './messageTreeItem';
+import type { StoreManager } from '../../services/storeManager';
+import { selectMessages } from '../../state/selectors';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
 const MS_PER_SECOND: number = 1000;

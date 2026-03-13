@@ -8,29 +8,30 @@
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
-  type Logger,
-  type LogMessage,
+  type AdminEventHub,
+  type AgentEventHub,
   LogLevel,
-  logLevelName,
-  logTransport,
+  type LogMessage,
+  type Logger,
+  type TooManyCooksDb,
+  createAdminEventHub,
+  createAgentEventHub,
   createLoggerWithContext,
   createLoggingContext,
+  createMcpServerForDb,
   defaultConfig,
   getServerPort,
   getWorkspaceFolder,
+  logLevelName,
+  logTransport,
   pathJoin,
-  type TooManyCooksDb,
-  createAgentEventHub,
-  type AgentEventHub,
-  createMcpServerForDb,
-  createAdminEventHub,
   registerAdminRoutes,
-  type AdminEventHub,
 } from "@too-many-cooks/core";
 
 import { createDb } from "../src/db-sqlite.js";
@@ -57,37 +58,42 @@ const main = async (): Promise<void> => {
 /** Maximum time to wait for port to become free after killing a process. */
 const PORT_FREE_TIMEOUT_MS = 5000;
 
-/** Check whether a port has any process listening via lsof. */
-const isPortFree = (port: number): boolean => {
-  try {
-    const out = execSync(`lsof -ti :${String(port)}`, { encoding: "utf8" }).trim();
-    return out.length === 0;
-  } catch {
-    return true;
-  }
-};
+/** Timeout for port check connection attempt (ms). */
+const PORT_CHECK_TIMEOUT_MS = 500;
+
+/** Check whether a port is in use by attempting a TCP connection. */
+const isPortInUse = (port: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = net.createConnection({ port, host: "127.0.0.1" });
+    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, PORT_CHECK_TIMEOUT_MS);
+    socket.once("connect", () => { clearTimeout(timer); socket.destroy(); resolve(true); });
+    socket.once("error", () => { clearTimeout(timer); resolve(false); });
+  });
 
 /** Kill any existing process listening on the given port and wait for it to be freed. */
-const killExistingProcess = (port: number, log: Logger): void => {
+const killExistingProcess = async (port: number, log: Logger): Promise<void> => {
+  const inUse = await isPortInUse(port);
+  if (!inUse) {return;}
+  log.info("Port in use, killing existing process", { port });
   try {
     const output = execSync(`lsof -ti :${String(port)}`, { encoding: "utf8" }).trim();
     if (output.length === 0) {return;}
-    const pids = output.split("\n").map((pid) => pid.trim()).filter((pid) => pid.length > 0);
+    const pids = output.split("\n").map((pid) => {return pid.trim()}).filter((pid) => {return pid.length > 0});
     for (const pid of pids) {
-      log.info("Killing existing process on port", { port, pid });
+      log.info("Killing process", { port, pid });
       execSync(`kill -9 ${pid}`);
     }
     const start = Date.now();
     while (Date.now() - start < PORT_FREE_TIMEOUT_MS) {
-      if (isPortFree(port)) {
+      if (!(await isPortInUse(port))) {
         log.info("Port is now free", { port });
         return;
       }
-      execSync(`sleep 0.1`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     log.warn("Port still in use after timeout — proceeding anyway", { port });
   } catch {
-    // lsof exits non-zero when no process found — that's fine
+    // Lsof exits non-zero when no process found — that's fine
   }
 };
 
@@ -121,15 +127,15 @@ const startServer = async (log: Logger): Promise<void> => {
   app.delete("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
 
   const port = getServerPort();
-  killExistingProcess(port, log);
+  await killExistingProcess(port, log);
   app.listen(port, () => {
     log.info("Server listening", { port });
   });
 
   // Keep event loop alive
   const KEEP_ALIVE_INTERVAL_MS = 60000;
-  setInterval((): void => { /* noop */ }, KEEP_ALIVE_INTERVAL_MS);
-  await new Promise<void>((): void => { /* noop */ });
+  setInterval((): void => { /* Noop */ }, KEEP_ALIVE_INTERVAL_MS);
+  await new Promise<void>((): void => { /* Noop */ });
 };
 
 /** Check if a parsed JSON body is an MCP initialize request. */
@@ -174,7 +180,7 @@ const initializeMcpSession = async (
 ): Promise<void> => {
   const { body } = req as { body: unknown };
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => crypto.randomUUID(),
+    sessionIdGenerator: (): string => {return crypto.randomUUID()},
     onsessioninitialized: (sid: string): void => {
       ctx.log.info("Session init", { sessionId: sid });
       ctx.transports.set(sid, transport);
@@ -209,7 +215,7 @@ const initializeMcpSession = async (
 const mcpPostHandler = (
   ctx: McpSessionContext,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const { body } = req as { body: unknown };
 
@@ -232,14 +238,14 @@ const mcpPostHandler = (
     }
 
     res.status(400).send(BAD_REQUEST_JSON);
-  };
+  }};
 
 /** GET/DELETE /mcp handler. */
 const mcpGetDeleteHandler = (
   transports: Map<string, StreamableHTTPServerTransport>,
   agentHub: AgentEventHub,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId === undefined) {
       res.status(400).send("Missing session ID");
@@ -252,7 +258,7 @@ const mcpGetDeleteHandler = (
     }
     agentHub.activeStreamSessions.add(sessionId);
     await transport.handleRequest(req, res);
-  };
+  }};
 
 /** Initialize an admin session (POST /admin/events with initialize body). */
 const initializeAdminSession = async (
@@ -263,7 +269,7 @@ const initializeAdminSession = async (
 ): Promise<void> => {
   const { body } = req as { body: unknown };
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => crypto.randomUUID(),
+    sessionIdGenerator: (): string => {return crypto.randomUUID()},
     onsessioninitialized: (sid: string): void => {
       log.info("Admin session init", { sessionId: sid });
       hub.transports.set(sid, transport);
@@ -297,7 +303,7 @@ const adminPostHandler = (
   hub: AdminEventHub,
   log: Logger,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const { body } = req as { body: unknown };
 
@@ -320,13 +326,13 @@ const adminPostHandler = (
     }
 
     res.status(400).send(BAD_REQUEST_JSON);
-  };
+  }};
 
 /** GET/DELETE /admin/events handler. */
 const adminGetDeleteHandler = (
   hub: AdminEventHub,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId === undefined) {
       res.status(400).send("Missing session ID");
@@ -338,18 +344,18 @@ const adminGetDeleteHandler = (
       return;
     }
     await transport.handleRequest(req, res);
-  };
+  }};
 
 /** Wrap an async handler for Express. */
 const asyncHandler = (
   fn: (req: Request, res: Response) => Promise<void>,
   log: Logger,
 ): ((req: Request, res: Response) => void) =>
-  (req: Request, res: Response): void => {
+  {return (req: Request, res: Response): void => {
     fn(req, res).catch((e: unknown): void => {
       log.error("Request error", { error: String(e) });
     });
-  };
+  }};
 
 const resolveLogFilePath = (): string => {
   const logsDir = pathJoin([getWorkspaceFolder(), "logs"]);
@@ -388,17 +394,17 @@ const formatLogLine = (message: LogMessage): string => {
 
 const createConsoleTransport =
   () =>
-  (message: LogMessage, minimumLogLevel: LogLevel): void => {
+  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
     if (message.logLevel < minimumLogLevel) {return;}
     console.error(formatLogLine(message).trimEnd());
-  };
+  }};
 
 const createFileTransport =
   (filePath: string) =>
-  (message: LogMessage, minimumLogLevel: LogLevel): void => {
+  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
     if (message.logLevel < minimumLogLevel) {return;}
     fs.appendFileSync(filePath, formatLogLine(message));
-  };
+  }};
 
 main().catch((e: unknown): void => {
   console.error("Fatal:", e);

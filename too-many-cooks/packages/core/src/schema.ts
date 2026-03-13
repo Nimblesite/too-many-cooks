@@ -1,10 +1,10 @@
 /// SQL schema for Too Many Cooks database.
 
 /** Schema version for migrations. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION: number = 1;
 
 /** Create all tables SQL. */
-export const CREATE_TABLES_SQL = `
+export const CREATE_TABLES_SQL: string = `
 CREATE TABLE IF NOT EXISTS identity (
   agent_name TEXT PRIMARY KEY,
   agent_key TEXT NOT NULL UNIQUE,

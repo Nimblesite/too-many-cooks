@@ -1,7 +1,7 @@
 // Simple Redux-style store with EventEmitter pattern.
 
-import type { AppAction, AppState, FileLock } from 'state/types';
-import { initialState } from 'state/types';
+import type { AppAction, AppState, FileLock } from './types';
+import { initialState } from './types';
 
 // Reduce agent-related actions.
 function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction>): AppState {

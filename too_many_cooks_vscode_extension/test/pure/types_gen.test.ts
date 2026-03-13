@@ -2,7 +2,6 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import 'module-alias/register';
 import {
   boolField,
   isRecord,
@@ -19,7 +18,7 @@ import {
   parseLockResult,
   parseMessage,
   stringField,
-} from 'state/types.gen';
+} from '../../src/state/types.gen';
 
 describe('field helpers', () => {
   it('stringField returns string value', () => {

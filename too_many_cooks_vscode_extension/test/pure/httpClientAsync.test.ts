@@ -3,8 +3,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
-import 'module-alias/register';
-import { streamableHttpPost, postJsonRequest, checkServerAvailable } from 'services/httpClient';
+import { streamableHttpPost, postJsonRequest, checkServerAvailable } from '../../src/services/httpClient';
 
 const TEST_PORT: number = 19876;
 const BASE_URL: string = `http://localhost:${String(TEST_PORT)}`;

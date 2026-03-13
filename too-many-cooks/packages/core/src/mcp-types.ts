@@ -7,10 +7,10 @@ export type TextContent = {
 };
 
 /** Create text content for MCP tool responses. */
-export const textContent = (text: string): TextContent => ({
+export const textContent: (text: string) => TextContent = (text: string): TextContent => {return {
   type: "text",
   text,
-});
+}};
 
 /** Session identity stored after registration. */
 export type SessionIdentity = {

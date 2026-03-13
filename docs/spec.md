@@ -8,15 +8,15 @@ MCP server enabling multiple AI agents to safely edit a git repository simultane
 
 **Location**: `examples/too-many-cooks/`
 
-**Tech Stack**: TypeScript on Node.js, better-sqlite3, express, @modelcontextprotocol/sdk
+**Tech Stack**: TypeScript on Node.js, Prisma (SQLite), express, @modelcontextprotocol/sdk
 
-> **Why TypeScript, not Dart?** The server was originally written in Dart compiled to JS via dart2js. We abandoned Dart because `dart:js_interop` made interop with Node.js libraries (better-sqlite3, express, MCP SDK) painful — every call required manual JSObject wrappers, type bridging was brittle, and debugging compiled JS was a nightmare. TypeScript gives us native access to the entire Node.js ecosystem with zero interop friction.
+> **Why TypeScript, not Dart?** The server was originally written in Dart compiled to JS via dart2js. We abandoned Dart because `dart:js_interop` made interop with Node.js libraries (Prisma, express, MCP SDK) painful — every call required manual JSObject wrappers, type bridging was brittle, and debugging compiled JS was a nightmare. TypeScript gives us native access to the entire Node.js ecosystem with zero interop friction.
 
 ---
 
 ## Architecture
 
-Single HTTP server per workspace. **Everything** talks to the server — agents via MCP Streamable HTTP, VSCode extension via admin REST + [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http). Nothing touches the DB directly except the server.
+Single HTTP server per workspace. **Everything** talks to the server — agents via MCP Streamable HTTP, VSCode extension via admin REST + Streamable HTTP. Nothing touches the DB directly except the server.
 
 ```mermaid
 graph TD
@@ -25,40 +25,70 @@ graph TD
     VSIX[VSCode Extension] -->|REST /admin/*| MCP
 
     MCP[Too Many Cooks Server<br>http://localhost:4040] -->|read/write| DB
-    MCP -->|push events via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)| CC
-    MCP -->|push events via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)| CL
-    MCP -->|push events via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)| VSIX
+    MCP -->|push events via SSE| CC
+    MCP -->|push events via SSE| CL
+    MCP -->|push events via SSE| VSIX
 
     DB[(SQLite<br>.too_many_cooks/data.db)]
 ```
 
 ONE HTTP server:
-- **`/mcp`** — MCP Streamable HTTP endpoint for agents. Tool calls via POST, event stream via GET [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http).
-- **`/admin/*`** — REST endpoints + [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) event stream for the VSCode extension. Not exposed to MCP clients. VSIX receives all state changes via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) push — no polling.
+- **`/mcp`** — MCP Streamable HTTP endpoint for agents. Tool calls via POST, event stream via GET Streamable HTTP.
+- **`/admin/*`** — REST endpoints + Streamable HTTP event stream for the VSCode extension. Not exposed to MCP clients. VSIX receives all state changes via Streamable HTTP push — no polling.
 
 **Database path**: `${workspaceFolder}/.too_many_cooks/data.db` 
 
-**Transport**: Streamable HTTP with [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http). Server pushes events (new messages, lock changes, etc.) to all connected clients (agents + VSIX) in real-time. No polling anywhere.
+**Transport**: Streamable HTTP with Streamable HTTP. Server pushes events (new messages, lock changes, etc.) to all connected clients (agents + VSIX) in real-time. No polling anywhere.
 
 **Why HTTP, not stdio**: Stdio spawns an isolated process per agent — agents can't see each other's events. HTTP gives one shared process where the notification emitter actually works across all connected agents.
 
 ---
 
-## Database Schema
+## Database Schema (Prisma — SQLite)
+
+Schema defined in `packages/local/prisma/schema.prisma`. **No raw SQL anywhere.** All table creation, migrations, and queries go through Prisma.
+
+> **TMC Cloud uses a SUPERSET of this schema** (PostgreSQL). The cloud schema contains these same 4 coordination tables with additional `tenantId`/`workspaceId` composite keys for multi-tenant sharding, plus cloud-only tables (tenants, workspaces, api_keys, etc.). See `tmc-cloud/prisma/schema.prisma`.
 
 ```mermaid
 erDiagram
-    identity ||--o{ locks : holds
-    identity ||--o{ messages : sends
-    identity ||--o| plans : has
-```
+    Identity ||--o{ Lock : holds
+    Identity ||--o{ Message : sends
+    Identity ||--o| Plan : has
 
-| Table | Columns |
-|-------|---------|
-| identity | agent_name (PK), agent_key, active (boolean), registered_at, last_active |
-| locks | file_path (PK), agent_name (FK), acquired_at, expires_at, reason, version |
-| messages | id (PK), from_agent (FK), to_agent, content, created_at, read_at |
-| plans | agent_name (PK/FK), goal, current_task, updated_at |
+    Identity {
+        string agent_name PK
+        string agent_key UK
+        int active
+        int registered_at
+        int last_active
+    }
+
+    Lock {
+        string file_path PK
+        string agent_name FK
+        int acquired_at
+        int expires_at
+        string reason
+        int version
+    }
+
+    Message {
+        string id PK
+        string from_agent FK
+        string to_agent
+        string content
+        int created_at
+        int read_at
+    }
+
+    Plan {
+        string agent_name PK "FK to Identity"
+        string goal
+        string current_task
+        int updated_at
+    }
+```
 
 ---
 
@@ -151,18 +181,18 @@ There is **no subscribe tool**. Subscriptions are automatic — managed entirely
 
 ### How it works
 
-1. **First connection** — agent calls `register` with just `name` → server creates identity, returns key, marks agent **active**, opens [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) event stream. **The agent must store this key.**
-2. **While connected** — server pushes all relevant events (lock changes, messages, plan updates, agent status changes) to the agent via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) automatically. **This is not optional — it is the core mechanism.**
+1. **First connection** — agent calls `register` with just `name` → server creates identity, returns key, marks agent **active**, opens Streamable HTTP event stream. **The agent must store this key.**
+2. **While connected** — server pushes all relevant events (lock changes, messages, plan updates, agent status changes) to the agent via Streamable HTTP automatically. **This is not optional — it is the core mechanism.**
 3. **Connection drops** (agent disconnects, crashes, network loss) → server immediately marks agent as **deactivated** in the DB and emits `agent_deactivated` to all remaining connections (agents + VSIX)
 4. **Reconnect** — agent calls `register` with `key` only → server looks up the agent name from the key, marks agent **active** again, emits `agent_activated`. No new key is issued — the original key remains valid. Specifying `name` on reconnect is an error.
 
 ### Active agents in the DB
 
-The `identity` table tracks connection state via an `active` column. The set of active agents **always matches** the set of agents with live [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) connections. This is the single source of truth — the VSIX reads it to show which agents are online.
+The `identity` table tracks connection state via an `active` column. The set of active agents **always matches** the set of agents with live Streamable HTTP connections. This is the single source of truth — the VSIX reads it to show which agents are online.
 
 ### VSIX behavior
 
-The VSIX connects to `/admin/events` ([HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)) on startup and receives the same event stream as agents. When an `agent_deactivated` event arrives, the VSIX immediately reflects this in the tree view (greyed out, offline indicator, etc.). No polling — the VSIX is purely reactive to push events.
+The VSIX connects to `/admin/events` (Streamable HTTP) on startup and receives the same event stream as agents. When an `agent_deactivated` event arrives, the VSIX immediately reflects this in the tree view (greyed out, offline indicator, etc.). No polling — the VSIX is purely reactive to push events.
 
 ---
 
@@ -183,7 +213,7 @@ Admin operations are exposed as REST endpoints on the server, **not** as MCP too
 | `/admin/reset-key` | POST | `{ agentName }` | Generate new key for agent |
 | `/admin/send-message` | POST | `{ fromAgent, toAgent, content }` | Send message on behalf of agent (no auth) |
 | `/admin/status` | GET | — | Full status (agents, locks, messages, plans) |
-| `/admin/events` | GET ([HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http)) | — | [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) stream pushing all state changes to the VSIX in real-time |
+| `/admin/events` | GET (Streamable HTTP) | — | Streamable HTTP stream pushing all state changes to the VSIX in real-time |
 
 ---
 
@@ -193,7 +223,7 @@ Admin operations are exposed as REST endpoints on the server, **not** as MCP too
 |---------|------|
 
 | `too-many-cooks/` | HTTP server. MCP endpoint for agents, admin REST endpoints for VSIX, event notifications. |
-| `too_many_cooks_vscode_extension/` | VSCode extension. Talks to server via `/admin/*` REST endpoints. Receives all state changes via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) push. Tree views for agents, locks, messages, plans. |
+| `too_many_cooks_vscode_extension/` | VSCode extension. Talks to server via `/admin/*` REST endpoints. Receives all state changes via Streamable HTTP push. Tree views for agents, locks, messages, plans. |
 
 ---
 
@@ -202,9 +232,9 @@ Admin operations are exposed as REST endpoints on the server, **not** as MCP too
 1. **Session auth**: Register (name only) or reconnect (key only) per connection, session identity used for all subsequent calls
 2. **Lock expiry**: Any agent can force_release expired locks
 3. **Optimistic concurrency**: Version column on locks prevents races
-4. **Retry policy**: 3 attempts, exponential backoff for transient SQLite errors
+4. **Retry policy**: 3 attempts, exponential backoff for transient database errors
 5. **Broadcast messages**: Use `*` as to_agent
-6. **Real-time events**: Server pushes notifications to all connected agents and the VSIX via [HTTP STREAMABLE TRANSPORT](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) — no polling
+6. **Real-time events**: Server pushes notifications to all connected agents and the VSIX via Streamable HTTP — no polling
 
 ---
 

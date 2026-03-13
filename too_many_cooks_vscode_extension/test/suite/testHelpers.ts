@@ -164,7 +164,8 @@ export async function waitForMessageInTree(
 // Server state reset & database cleanup
 // ============================================================================
 
-const TEST_BASE_URL = 'http://localhost:4040';
+const TEST_PORT = process.env.TMC_PORT ?? '4040';
+const TEST_BASE_URL = `http://localhost:${TEST_PORT}`;
 
 export async function resetServerState(): Promise<void> {
   console.log('[TEST HELPER] Resetting server state via /admin/reset');
@@ -196,7 +197,7 @@ export function cleanDatabase(): void {
 // Dialog mocking via DialogService (not monkey-patching vscode.window)
 // ============================================================================
 
-import { setDialogService, resetDialogService } from 'services/dialogService';
+import { setDialogService, resetDialogService } from '../../src/services/dialogService';
 
 let mocksInstalled = false;
 

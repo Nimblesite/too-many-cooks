@@ -28,11 +28,11 @@ runDbContractTests(async () => {
   if (!result.ok) {
     throw new Error(`Failed to create db: ${result.error}`);
   }
-  return {
+  return await Promise.resolve({
     db: result.value,
     cleanup: async () => {
       await result.value.close();
       deleteIfExists(TEST_DB_PATH);
     },
-  };
+  });
 });

@@ -112,14 +112,14 @@ export const decrypt = (
   keychain: Keychain,
 ): Result<string, string> => {
   const data = Buffer.from(blob, ENVELOPE_ENCODING);
-  const version = data[0];
+  const [version] = data;
   if (version === undefined) {
     return error(ERR_EMPTY_ENVELOPE);
   }
   const iv = data.subarray(IV_OFFSET, AUTH_TAG_OFFSET);
   const authTag = data.subarray(AUTH_TAG_OFFSET, CIPHERTEXT_OFFSET);
   const ciphertext = data.subarray(CIPHERTEXT_OFFSET);
-  const wk = keychain.find((k) => k.version === version);
+  const wk = keychain.find((wkEntry) => {return wkEntry.version === version});
   if (wk === undefined) {
     return error(`${ERR_UNKNOWN_VERSION_PREFIX}${String(version)}`);
   }

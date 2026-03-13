@@ -7,19 +7,23 @@ import * as vscode from 'vscode';
 // VSCode's built-in 'vscode' module resolution in Electron.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('module-alias/register');
-import type { AgentIdentity } from 'state/types';
-import { AgentsTreeProvider } from 'ui/tree/agentsTreeProvider';
-import { DashboardPanel } from 'ui/webview/dashboardPanel';
-import { LocksTreeProvider } from 'ui/tree/locksTreeProvider';
-import { MessagesTreeProvider } from 'ui/tree/messagesTreeProvider';
-import { StatusBarManager } from 'ui/statusBar';
-import { StoreManager } from 'services/storeManager';
-import { getDialogService } from 'services/dialogService';
-import type { TestAPI } from 'testApi';
-import { createTestAPI } from 'testApi';
+import { getAgentNameFromItem, getFilePathFromItem } from './ui/tree/treeItemUtils';
+import type { AgentIdentity } from './state/types';
+import { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
+import { DashboardPanel } from './ui/webview/dashboardPanel';
+import type { DialogService } from './services/dialogService';
+import { LocksTreeProvider } from './ui/tree/locksTreeProvider';
+import { MessagesTreeProvider } from './ui/tree/messagesTreeProvider';
+import { StatusBarManager } from './ui/statusBar';
+import { StoreManager } from './services/storeManager';
+import type { TestAPI } from './testApi';
+import { createTestAPI } from './testApi';
+import { getDialogService } from './services/dialogService';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
 const MESSAGE_PREVIEW_LENGTH: number = 50;
+// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+const DEFAULT_PORT: number = 4040;
 
 const logMessages: string[] = [];
 let outputChannel: vscode.OutputChannel | null = null;
@@ -29,8 +33,7 @@ function log(message: string): void {
   const fullMessage: string = `[${timestamp}] ${message}`;
   outputChannel?.appendLine(fullMessage);
   logMessages.push(fullMessage);
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-  (require as Function)('process').stdout.write(`[EXT] ${fullMessage}\n`);
+  process.stdout.write(`[EXT] ${fullMessage}\n`);
 }
 
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
@@ -41,7 +44,10 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
 
   const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration('tooManyCooks');
   const autoConnect: boolean = config.get<boolean>('autoConnect') ?? true;
-  const port: number = config.get<number>('port') ?? 4040;
+  const envPort: string | undefined = process.env.TMC_PORT;
+  const port: number = typeof envPort === 'string' && envPort.length > 0
+    ? parseInt(envPort, 10)
+    : config.get<number>('port') ?? DEFAULT_PORT;
   const workspaceFolder: string = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
   log(`Using workspace folder: ${workspaceFolder}`);
 
@@ -116,7 +122,7 @@ function registerAllCommands(context: vscode.ExtensionContext, sm: Readonly<Stor
 
 function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
   return vscode.commands.registerCommand('tooManyCooks.connect', async (): Promise<void> => {
-    const dialogs = getDialogService();
+    const dialogs: DialogService = getDialogService();
     try {
       await storeManager.connect();
       log('Connected successfully');
@@ -130,7 +136,7 @@ function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Di
 
 function registerDisconnectCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
   return vscode.commands.registerCommand('tooManyCooks.disconnect', (): void => {
-    const dialogs = getDialogService();
+    const dialogs: DialogService = getDialogService();
     storeManager.disconnect();
     dialogs.showInformationMessage('Disconnected from Too Many Cooks server').then(
       (): void => {
@@ -145,7 +151,7 @@ function registerDisconnectCommand(storeManager: Readonly<StoreManager>): vscode
 
 function registerRefreshCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
   return vscode.commands.registerCommand('tooManyCooks.refresh', async (): Promise<void> => {
-    const dialogs = getDialogService();
+    const dialogs: DialogService = getDialogService();
     try {
       await storeManager.refreshStatus();
     } catch (err: unknown) {
@@ -165,7 +171,7 @@ function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode
     'tooManyCooks.deleteLock',
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     async (item?: vscode.TreeItem): Promise<void> => {
-      const dialogs = getDialogService();
+      const dialogs: DialogService = getDialogService();
       const filePath: string | null = getFilePathFromItem(item);
       if (filePath === null) {
         await dialogs.showErrorMessage('No lock selected');
@@ -194,7 +200,7 @@ function registerDeleteAgentCommand(storeManager: Readonly<StoreManager>): vscod
     'tooManyCooks.deleteAgent',
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     async (item?: vscode.TreeItem): Promise<void> => {
-      const dialogs = getDialogService();
+      const dialogs: DialogService = getDialogService();
       const agentName: string | null = getAgentNameFromItem(item);
       if (agentName === null) {
         await dialogs.showErrorMessage('No agent selected');
@@ -233,7 +239,7 @@ async function handleSendMessage(
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   item?: vscode.TreeItem,
 ): Promise<void> {
-  const dialogs = getDialogService();
+  const dialogs: DialogService = getDialogService();
   const toAgent: string | null = await selectRecipient(storeManager, item);
   if (toAgent === null) { return; }
 
@@ -273,7 +279,7 @@ async function selectRecipient(
   const fromItem: string | null = getAgentNameFromItem(item);
   if (fromItem !== null) { return fromItem; }
 
-  const dialogs = getDialogService();
+  const dialogs: DialogService = getDialogService();
   if (!storeManager.isConnected) {
     await dialogs.showErrorMessage('Not connected to server');
     return null;
@@ -290,29 +296,4 @@ async function selectRecipient(
   if (typeof picked === 'undefined') { return null; }
   if (picked === '* (broadcast to all)') { return '*'; }
   return picked;
-}
-
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-function getFilePathFromItem(item?: vscode.TreeItem): string | null {
-  if (typeof item === 'undefined') { return null; }
-  // Duck-type checks to avoid instanceof failures across module boundaries.
-  if ('filePath' in item && typeof item.filePath === 'string') {
-    return item.filePath;
-  }
-  if ('lock' in item && typeof item.lock === 'object' && item.lock !== null) {
-    const lock: unknown = item.lock;
-    if (typeof lock === 'object' && lock !== null && 'filePath' in lock && typeof lock.filePath === 'string') {
-      return lock.filePath;
-    }
-  }
-  return null;
-}
-
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-function getAgentNameFromItem(item?: vscode.TreeItem): string | null {
-  if (typeof item === 'undefined') { return null; }
-  if ('agentName' in item && typeof item.agentName === 'string') {
-    return item.agentName;
-  }
-  return null;
 }

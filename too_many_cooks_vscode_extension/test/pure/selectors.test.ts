@@ -2,9 +2,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import 'module-alias/register';
-import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from 'state/types';
-import { initialState } from 'state/types';
+import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../../src/state/types';
+import { initialState } from '../../src/state/types';
 import {
   selectAgentCount,
   selectAgentDetails,
@@ -18,7 +17,7 @@ import {
   selectMessages,
   selectPlans,
   selectUnreadMessageCount,
-} from 'state/selectors';
+} from '../../src/state/selectors';
 
 const AGENT_1: AgentIdentity = { agentName: 'agent-1', registeredAt: 1000, lastActive: 2000 };
 const AGENT_2: AgentIdentity = { agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 };

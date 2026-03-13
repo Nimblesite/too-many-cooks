@@ -60,7 +60,7 @@ test("encrypt then decrypt round-trips correctly", () => {
 test("encrypt produces base64 output", () => {
   const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
   const ciphertext = encrypt(SAMPLE_PLAINTEXT, wk);
-  const base64Regex = /^[A-Za-z0-9+/]+=*$/;
+  const base64Regex = /^[A-Za-z0-9+/]+=*$/u;
   assert.match(ciphertext, base64Regex);
 });
 
@@ -87,7 +87,7 @@ test("decrypt with unknown key version returns error", () => {
   const result = decrypt(ciphertext, emptyKeychain);
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.error, /Unknown key version/);
+    assert.match(result.error, /Unknown key version/u);
   }
 });
 
@@ -140,6 +140,7 @@ test("corrupted ciphertext returns decryption error", () => {
   const lastIndex = corrupted.length - 1;
   const lastByte = corrupted[lastIndex];
   if (lastByte !== undefined) {
+    // eslint-disable-next-line no-bitwise -- XOR is legitimately needed for crypto corruption test
     corrupted[lastIndex] = lastByte ^ 0xff;
   }
   const result = decrypt(corrupted.toString("base64"), [wk]);

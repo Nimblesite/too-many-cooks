@@ -70,8 +70,8 @@ const EP_ADMIN_SEND_MESSAGE = "adminSendMessage";
 const EP_ADMIN_RESET = "adminReset";
 
 /** Type guard: value is a plain object (Record). */
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
+const isRecord = (val: unknown): val is Record<string, unknown> =>
+  {return typeof val === "object" && val !== null && !Array.isArray(val)};
 
 /** API response shape matching Result<T, DbError>. */
 type ApiResponse = {
@@ -81,54 +81,56 @@ type ApiResponse = {
 };
 
 /** Type guard: validates an unknown JSON payload is an ApiResponse. */
-const isApiResponse = (v: unknown): v is ApiResponse =>
-  isRecord(v) && typeof v.ok === "boolean";
+const isApiResponse = (val: unknown): val is ApiResponse =>
+  {return isRecord(val) && typeof val.ok === "boolean"};
 
 /** Extract a DbError from an API error response. */
-const extractDbError = (body: ApiResponse): DbError => ({
+const extractDbError = (body: ApiResponse): DbError => {return {
   code: body.error?.code ?? ERR_NETWORK,
   message: body.error?.message ?? ERR_UNKNOWN_API,
-});
+}};
 
 /** Value extractor: ignores payload, returns void. */
-const extractVoid = (_v: unknown): undefined => undefined;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- callback signature requires parameter
+const extractVoid = (_val: unknown): undefined => {return undefined};
 
 /** Value extractor: narrows to string via type guard. */
-const extractString = (v: unknown): string =>
-  typeof v === "string" ? v : "";
+const extractString = (val: unknown): string =>
+  {return typeof val === "string" ? val : ""};
 
 /** Create a value extractor that applies a mapper to a Record. */
 const mapped = <T>(
   mapper: (raw: Record<string, unknown>) => T,
-): (v: unknown) => T =>
-  (v) => mapper(isRecord(v) ? v : {});
+): (val: unknown) => T =>
+  {return (val) => {return mapper(isRecord(val) ? val : {})}};
 
 /** Create a value extractor that maps an array of Records. */
 const mappedArray = <T>(
   mapper: (raw: Record<string, unknown>) => T,
-): (v: unknown) => readonly T[] =>
-  (v) =>
-    Array.isArray(v)
-      ? v.map((item: unknown) => mapper(isRecord(item) ? item : {}))
-      : [];
+): (val: unknown) => readonly T[] =>
+  {return (val) =>
+    {return Array.isArray(val)
+      ? val.map((item: unknown) => {return mapper(isRecord(item) ? item : {})})
+      : []}};
 
 /** Create a value extractor for nullable single-item responses. */
 const mappedNullable = <T>(
   mapper: (raw: Record<string, unknown>) => T,
-): (v: unknown) => T | null =>
-  (v) =>
-    v === null || v === undefined ? null : mapper(isRecord(v) ? v : {});
+): (val: unknown) => T | null =>
+  {return (val) =>
+    {return val === null || val === undefined ? null : mapper(isRecord(val) ? val : {})}};
 
 /** Generic API response parser. Replaces 5 specialized parse functions. */
 const parseApiResponse = <T>(
   body: ApiResponse,
   extract: (value: unknown) => T,
 ): Result<T, DbError> =>
-  body.ok
+  {return body.ok
     ? { ok: true, value: extract(body.value) }
-    : { ok: false, error: extractDbError(body) };
+    : { ok: false, error: extractDbError(body) }};
 
 /** Create a cloud-backed TooManyCooksDb that calls the Edge Function. */
+// eslint-disable-next-line max-lines-per-function -- single object literal implementing full TooManyCooksDb interface
 export const createCloudDb = (
   apiUrl: string,
   apiKey: string,
@@ -155,135 +157,135 @@ export const createCloudDb = (
 
   return {
     register: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_REGISTER, { agentName }),
         mapped(agentRegistrationFromJson),
-      ),
+      )},
     authenticate: async (agentName, agentKey) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_AUTHENTICATE, { agentName, agentKey }),
         mapped(agentIdentityFromJson),
-      ),
+      )},
     lookupByKey: async (agentKey) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_LOOKUP_BY_KEY, { agentKey }),
         extractString,
-      ),
+      )},
     listAgents: async () =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_LIST_AGENTS, {}),
         mappedArray(agentIdentityFromJson),
-      ),
+      )},
     acquireLock: async (filePath, agentName, agentKey, reason, timeoutMs) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ACQUIRE_LOCK, {
           filePath, agentName, agentKey, reason, timeoutMs,
         }),
         mapped(lockResultFromJson),
-      ),
+      )},
     releaseLock: async (filePath, agentName, agentKey) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_RELEASE_LOCK, { filePath, agentName, agentKey }),
         extractVoid,
-      ),
+      )},
     forceReleaseLock: async (filePath, agentName, agentKey) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_FORCE_RELEASE_LOCK, { filePath, agentName, agentKey }),
         extractVoid,
-      ),
+      )},
     queryLock: async (filePath) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_QUERY_LOCK, { filePath }),
         mappedNullable(fileLockFromJson),
-      ),
+      )},
     listLocks: async () =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_LIST_LOCKS, {}),
         mappedArray(fileLockFromJson),
-      ),
+      )},
     renewLock: async (filePath, agentName, agentKey, timeoutMs) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_RENEW_LOCK, {
           filePath, agentName, agentKey, timeoutMs,
         }),
         extractVoid,
-      ),
+      )},
     sendMessage: async (fromAgent, fromKey, toAgent, content) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_SEND_MESSAGE, {
           fromAgent, fromKey, toAgent, content,
         }),
         extractString,
-      ),
+      )},
     getMessages: async (agentName, agentKey, options) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_GET_MESSAGES, {
           agentName, agentKey, unreadOnly: options?.unreadOnly,
         }),
         mappedArray(messageFromJson),
-      ),
+      )},
     markRead: async (messageId, agentName, agentKey) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_MARK_READ, { messageId, agentName, agentKey }),
         extractVoid,
-      ),
+      )},
     updatePlan: async (agentName, agentKey, goal, currentTask) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_UPDATE_PLAN, {
           agentName, agentKey, goal, currentTask,
         }),
         extractVoid,
-      ),
+      )},
     getPlan: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_GET_PLAN, { agentName }),
         mappedNullable(agentPlanFromJson),
-      ),
+      )},
     listPlans: async () =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_LIST_PLANS, {}),
         mappedArray(agentPlanFromJson),
-      ),
+      )},
     listAllMessages: async () =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_LIST_ALL_MESSAGES, {}),
         mappedArray(messageFromJson),
-      ),
+      )},
     activate: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ACTIVATE, { agentName }),
         extractVoid,
-      ),
+      )},
     deactivate: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_DEACTIVATE, { agentName }),
         extractVoid,
-      ),
+      )},
     deactivateAll: async () =>
-      parseApiResponse(await call(EP_DEACTIVATE_ALL, {}), extractVoid),
+      {return parseApiResponse(await call(EP_DEACTIVATE_ALL, {}), extractVoid)},
     close: async () =>
-      parseApiResponse(await call(EP_CLOSE, {}), extractVoid),
+      {return parseApiResponse(await call(EP_CLOSE, {}), extractVoid)},
     adminDeleteLock: async (filePath) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ADMIN_DELETE_LOCK, { filePath }),
         extractVoid,
-      ),
+      )},
     adminDeleteAgent: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ADMIN_DELETE_AGENT, { agentName }),
         extractVoid,
-      ),
+      )},
     adminResetKey: async (agentName) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ADMIN_RESET_KEY, { agentName }),
         mapped(agentRegistrationFromJson),
-      ),
+      )},
     adminSendMessage: async (fromAgent, toAgent, content) =>
-      parseApiResponse(
+      {return parseApiResponse(
         await call(EP_ADMIN_SEND_MESSAGE, { fromAgent, toAgent, content }),
         extractString,
-      ),
+      )},
     adminReset: async () =>
-      parseApiResponse(await call(EP_ADMIN_RESET, {}), extractVoid),
+      {return parseApiResponse(await call(EP_ADMIN_RESET, {}), extractVoid)},
   };
 };

@@ -38,3 +38,11 @@ too-many-cooks/packages/local/build/
 *.tsbuildinfo
 
 too-many-cooks/packages/cloud-proxy/build/
+
+too-many-cooks/packages/local/coverage/
+
+scripts/logs/
+
+too_many_cooks_vscode_extension/.v8-coverage/
+
+too_many_cooks_vscode_extension/coverage-integration/

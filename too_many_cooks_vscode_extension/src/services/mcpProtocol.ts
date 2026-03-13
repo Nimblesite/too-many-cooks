@@ -1,6 +1,6 @@
 // MCP protocol helpers - session initialization, requests, and tool results.
 
-import { isRecord, parseStreamableHttpResponse, streamableHttpPost } from 'services/httpClient';
+import { isRecord, parseStreamableHttpResponse, streamableHttpPost } from './httpClient';
 
 interface McpRequestConfig {
   readonly baseUrl: string;

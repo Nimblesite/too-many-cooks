@@ -1,7 +1,7 @@
 // Lock tree item with typed properties.
 
 import * as vscode from 'vscode';
-import type { FileLock } from 'state/types';
+import type { FileLock } from '../../state/types';
 
 export interface LockTreeItemConfig {
   readonly collapsibleState: vscode.TreeItemCollapsibleState;

@@ -13,18 +13,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
-  type Logger,
-  type LogMessage,
   LogLevel,
-  logLevelName,
-  logTransport,
+  type LogMessage,
+  type Logger,
   createLoggerWithContext,
   createLoggingContext,
+  logLevelName,
+  logTransport,
 } from "../lib/src/logger.js";
 import { defaultConfig, getServerPort, getWorkspaceFolder, pathJoin } from "../lib/src/data/config.js";
-import { createDb, type TooManyCooksDb } from "../lib/src/data/db.js";
-import { createAgentEventHub, type AgentEventHub } from "../lib/src/notifications.js";
-import { createAdminEventHub, registerAdminRoutes, type AdminEventHub } from "../lib/src/admin_routes.js";
+import { type TooManyCooksDb, createDb } from "../lib/src/data/db.js";
+import { type AgentEventHub, createAgentEventHub } from "../lib/src/notifications.js";
+import { type AdminEventHub, createAdminEventHub, registerAdminRoutes } from "../lib/src/admin_routes.js";
 import { createMcpServerForDb } from "../lib/src/server.js";
 
 /** JSON-RPC bad request error response. */
@@ -64,7 +64,7 @@ const killExistingProcess = (port: number, log: Logger): void => {
   try {
     const output = execSync(`lsof -ti :${String(port)}`, { encoding: "utf8" }).trim();
     if (output.length === 0) {return;}
-    const pids = output.split("\n").map((pid) => pid.trim()).filter((pid) => pid.length > 0);
+    const pids = output.split("\n").map((pid) => {return pid.trim()}).filter((pid) => {return pid.length > 0});
     for (const pid of pids) {
       log.info("Killing existing process on port", { port, pid });
       execSync(`kill -9 ${pid}`);
@@ -79,7 +79,7 @@ const killExistingProcess = (port: number, log: Logger): void => {
     }
     log.warn("Port still in use after timeout — proceeding anyway", { port });
   } catch {
-    // lsof exits non-zero when no process found — that's fine
+    // Lsof exits non-zero when no process found — that's fine
   }
 };
 
@@ -120,8 +120,8 @@ const startServer = async (log: Logger): Promise<void> => {
 
   // Keep event loop alive
   const KEEP_ALIVE_INTERVAL_MS = 60000;
-  setInterval((): void => { /* noop */ }, KEEP_ALIVE_INTERVAL_MS);
-  await new Promise<void>((): void => { /* noop */ });
+  setInterval((): void => { /* Noop */ }, KEEP_ALIVE_INTERVAL_MS);
+  await new Promise<void>((): void => { /* Noop */ });
 };
 
 /** Check if a parsed JSON body is an MCP initialize request. */
@@ -166,7 +166,7 @@ const initializeMcpSession = async (
 ): Promise<void> => {
   const { body } = req as { body: unknown };
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => crypto.randomUUID(),
+    sessionIdGenerator: (): string => {return crypto.randomUUID()},
     onsessioninitialized: (sid: string): void => {
       ctx.log.info("Session init", { sessionId: sid });
       ctx.transports.set(sid, transport);
@@ -201,7 +201,7 @@ const initializeMcpSession = async (
 const mcpPostHandler = (
   ctx: McpSessionContext,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const { body } = req as { body: unknown };
 
@@ -224,14 +224,14 @@ const mcpPostHandler = (
     }
 
     res.status(400).send(BAD_REQUEST_JSON);
-  };
+  }};
 
 /** GET/DELETE /mcp handler. */
 const mcpGetDeleteHandler = (
   transports: Map<string, StreamableHTTPServerTransport>,
   agentHub: AgentEventHub,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId === undefined) {
       res.status(400).send("Missing session ID");
@@ -244,7 +244,7 @@ const mcpGetDeleteHandler = (
     }
     agentHub.activeStreamSessions.add(sessionId);
     await transport.handleRequest(req, res);
-  };
+  }};
 
 /** Initialize an admin session (POST /admin/events with initialize body). */
 const initializeAdminSession = async (
@@ -255,7 +255,7 @@ const initializeAdminSession = async (
 ): Promise<void> => {
   const { body } = req as { body: unknown };
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => crypto.randomUUID(),
+    sessionIdGenerator: (): string => {return crypto.randomUUID()},
     onsessioninitialized: (sid: string): void => {
       log.info("Admin session init", { sessionId: sid });
       hub.transports.set(sid, transport);
@@ -289,7 +289,7 @@ const adminPostHandler = (
   hub: AdminEventHub,
   log: Logger,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const { body } = req as { body: unknown };
 
@@ -312,13 +312,13 @@ const adminPostHandler = (
     }
 
     res.status(400).send(BAD_REQUEST_JSON);
-  };
+  }};
 
 /** GET/DELETE /admin/events handler. */
 const adminGetDeleteHandler = (
   hub: AdminEventHub,
 ): ((req: Request, res: Response) => Promise<void>) =>
-  async (req: Request, res: Response): Promise<void> => {
+  {return async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId === undefined) {
       res.status(400).send("Missing session ID");
@@ -330,18 +330,18 @@ const adminGetDeleteHandler = (
       return;
     }
     await transport.handleRequest(req, res);
-  };
+  }};
 
 /** Wrap an async handler for Express. */
 const asyncHandler = (
   fn: (req: Request, res: Response) => Promise<void>,
   log: Logger,
 ): ((req: Request, res: Response) => void) =>
-  (req: Request, res: Response): void => {
+  {return (req: Request, res: Response): void => {
     fn(req, res).catch((e: unknown): void => {
       log.error("Request error", { error: String(e) });
     });
-  };
+  }};
 
 const resolveLogFilePath = (): string => {
   const logsDir = pathJoin([getWorkspaceFolder(), "logs"]);
@@ -380,17 +380,17 @@ const formatLogLine = (message: LogMessage): string => {
 
 const createConsoleTransport =
   () =>
-  (message: LogMessage, minimumLogLevel: LogLevel): void => {
+  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
     if (message.logLevel < minimumLogLevel) {return;}
     console.error(formatLogLine(message).trimEnd());
-  };
+  }};
 
 const createFileTransport =
   (filePath: string) =>
-  (message: LogMessage, minimumLogLevel: LogLevel): void => {
+  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
     if (message.logLevel < minimumLogLevel) {return;}
     fs.appendFileSync(filePath, formatLogLine(message));
-  };
+  }};
 
 main().catch((e: unknown): void => {
   console.error("Fatal:", e);

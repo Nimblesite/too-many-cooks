@@ -2,8 +2,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import 'module-alias/register';
-import { extractToolResultText } from 'services/mcpProtocol';
+import { extractToolResultText } from '../../src/services/mcpProtocol';
 
 describe('extractToolResultText', () => {
   it('extracts text from valid content array', () => {

@@ -36,7 +36,7 @@ test("parseConfig fails when TMC_API_KEY is missing", () => {
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.error, /TMC_API_KEY/);
+    assert.match(result.error, /TMC_API_KEY/u);
   }
 });
 
@@ -47,7 +47,7 @@ test("parseConfig fails when TMC_WORKSPACE_ID is missing", () => {
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.error, /TMC_WORKSPACE_ID/);
+    assert.match(result.error, /TMC_WORKSPACE_ID/u);
   }
 });
 
@@ -58,7 +58,7 @@ test("parseConfig fails when TMC_WORKSPACE_SECRET is missing", () => {
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.error, /TMC_WORKSPACE_SECRET/);
+    assert.match(result.error, /TMC_WORKSPACE_SECRET/u);
   }
 });
 

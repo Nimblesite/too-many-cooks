@@ -1,15 +1,15 @@
 // TestAPI interface and factory for integration tests.
 
 import type * as vscode from 'vscode';
-import type { AgentDetails, AgentIdentity, AgentPlan, FileLock, Message } from 'state/types';
-import type { AgentTreeItem } from 'ui/tree/agentTreeItem';
-import type { AgentsTreeProvider } from 'ui/tree/agentsTreeProvider';
-import type { LockTreeItem } from 'ui/tree/lockTreeItem';
-import type { LocksTreeProvider } from 'ui/tree/locksTreeProvider';
-import type { MessageTreeItem } from 'ui/tree/messageTreeItem';
-import type { MessagesTreeProvider } from 'ui/tree/messagesTreeProvider';
-import type { StoreManager } from 'services/storeManager';
-import { selectAgentDetails } from 'state/selectors';
+import type { AgentDetails, AgentIdentity, AgentPlan, FileLock, Message } from './state/types';
+import type { AgentTreeItem } from './ui/tree/agentTreeItem';
+import type { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
+import type { LockTreeItem } from './ui/tree/lockTreeItem';
+import type { LocksTreeProvider } from './ui/tree/locksTreeProvider';
+import type { MessageTreeItem } from './ui/tree/messageTreeItem';
+import type { MessagesTreeProvider } from './ui/tree/messagesTreeProvider';
+import type { StoreManager } from './services/storeManager';
+import { selectAgentDetails } from './state/selectors';
 
 export interface TreeItemSnapshot {
   readonly children?: readonly TreeItemSnapshot[];
@@ -202,10 +202,10 @@ function createAsyncMethods(
       return result;
     },
     connect: async (): Promise<void> => { await sm.connect(); },
-    invalidateMcpSession: (): void => { sm.invalidateMcpSession(); },
     deleteAgent: async (agentName: string): Promise<void> => { await sm.deleteAgent(agentName); },
     disconnect: async (): Promise<void> => { await Promise.resolve(); sm.disconnect(); },
     forceReleaseLock: async (fp: string): Promise<void> => { await sm.forceReleaseLock(fp); },
+    invalidateMcpSession: (): void => { sm.invalidateMcpSession(); },
     refreshStatus: async (): Promise<void> => { await safeRefresh(sm); },
     sendMessage: async (fromAgent: string, toAgent: string, content: string): Promise<void> => {
       await sm.sendMessage(fromAgent, toAgent, content);

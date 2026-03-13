@@ -4,17 +4,23 @@ import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import { EVENT_PLAN_UPDATED } from "../notifications.js";
 import type { TooManyCooksDb } from "../db-interface.js";
+import type { Result } from "../result.js";
+import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
 import {
-  textContent,
-  type SessionGetter,
   type CallToolResult,
+  type SessionGetter,
   type ToolCallback,
+  textContent,
 } from "../mcp-types.js";
-import { resolveIdentity, makeErrorResult, errorContent } from "./tool_utils.js";
+import { type IdentityResult, errorContent, makeErrorResult, resolveIdentity } from "./tool_utils.js";
 
 /** Input schema for plan tool. */
-export const PLAN_INPUT_SCHEMA = {
+export const PLAN_INPUT_SCHEMA: {
+  readonly type: "object";
+  readonly properties: Record<string, unknown>;
+  readonly required: readonly string[];
+} = {
   type: "object",
   properties: {
     action: {
@@ -38,7 +44,13 @@ export const PLAN_INPUT_SCHEMA = {
 } as const;
 
 /** Tool config for plan. */
-export const PLAN_TOOL_CONFIG = {
+export const PLAN_TOOL_CONFIG: {
+  readonly title: string;
+  readonly description: string;
+  readonly inputSchema: typeof PLAN_INPUT_SCHEMA;
+  readonly outputSchema: null;
+  readonly annotations: null;
+} = {
   title: "Plan",
   description:
     "Manage your plan. You must register first (except list). " +
@@ -52,25 +64,30 @@ export const PLAN_TOOL_CONFIG = {
 } as const;
 
 /** Create plan tool handler. */
-export const createPlanHandler = (
+export const createPlanHandler: (
+  db: TooManyCooksDb,
+  emitter: NotificationEmitter,
+  logger: Logger,
+  getSession: SessionGetter,
+) => ToolCallback = (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   logger: Logger,
   getSession: SessionGetter,
 ): ToolCallback =>
-  async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionArg = args.action;
+  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const actionArg: unknown = args.action;
     if (typeof actionArg !== "string") {
       return errorContent("missing_parameter: action is required");
     }
-    const action = actionArg;
-    const log = logger.child({ tool: "plan", action });
+    const action: string = actionArg;
+    const log: Logger = logger.child({ tool: "plan", action });
 
     if (action === "list") {return await handleList(db);}
 
-    const identity = await resolveIdentity(db, args, getSession);
+    const identity: IdentityResult = await resolveIdentity(db, args, getSession);
     if (identity.isError) {return identity.result;}
-    const { agentName, agentKey } = identity;
+    const { agentName, agentKey }: { agentName: string; agentKey: string } = identity;
 
     switch (action) {
       case "update":
@@ -97,13 +114,21 @@ export const createPlanHandler = (
           isError: true,
         };
     }
-  };
+  }};
 
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
 
-const handleUpdate = async (
+const handleUpdate: (
+  db: TooManyCooksDb,
+  emitter: NotificationEmitter,
+  log: Logger,
+  agentName: string,
+  agentKey: string,
+  goal: string | null,
+  currentTask: string | null,
+) => Promise<CallToolResult> = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
@@ -115,7 +140,7 @@ const handleUpdate = async (
   if (goal === null || currentTask === null) {
     return errorContent("update requires goal, current_task");
   }
-  const result = await db.updatePlan(agentName, agentKey, goal, currentTask);
+  const result: Result<void, DbError> = await db.updatePlan(agentName, agentKey, goal, currentTask);
   if (!result.ok) {return makeErrorResult(result.error);}
   emitter.emit(EVENT_PLAN_UPDATED, {
     agent_name: agentName,
@@ -133,11 +158,14 @@ const handleUpdate = async (
 // Get
 // ---------------------------------------------------------------------------
 
-const handleGet = async (
+const handleGet: (
+  db: TooManyCooksDb,
+  agentName: string,
+) => Promise<CallToolResult> = async (
   db: TooManyCooksDb,
   agentName: string,
 ): Promise<CallToolResult> => {
-  const result = await db.getPlan(agentName);
+  const result: Result<AgentPlan | null, DbError> = await db.getPlan(agentName);
   if (!result.ok) {return makeErrorResult(result.error);}
   if (result.value !== null) {
     return {
@@ -159,8 +187,8 @@ const handleGet = async (
 // List
 // ---------------------------------------------------------------------------
 
-const handleList = async (db: TooManyCooksDb): Promise<CallToolResult> => {
-  const result = await db.listPlans();
+const handleList: (db: TooManyCooksDb) => Promise<CallToolResult> = async (db: TooManyCooksDb): Promise<CallToolResult> => {
+  const result: Result<readonly AgentPlan[], DbError> = await db.listPlans();
   if (!result.ok) {return makeErrorResult(result.error);}
   return {
     content: [

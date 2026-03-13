@@ -7,34 +7,34 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import {
-  createLoggerWithContext,
-  createLoggingContext,
-  type Logger,
-  type Result,
-  error,
-  success,
-  type RetryPolicy,
-  defaultRetryPolicy,
-  withRetry,
-  type TooManyCooksDataConfig,
-  CREATE_TABLES_SQL,
   type AgentIdentity,
   type AgentPlan,
   type AgentRegistration,
+  CREATE_TABLES_SQL,
   type DbError,
-  type FileLock,
-  type LockResult,
-  type Message,
-  type TooManyCooksDb,
-  agentIdentityFromJson,
-  agentPlanFromJson,
-  fileLockFromJson,
-  messageFromJson,
   ERR_DATABASE,
   ERR_LOCK_HELD,
   ERR_NOT_FOUND,
   ERR_UNAUTHORIZED,
   ERR_VALIDATION,
+  type FileLock,
+  type LockResult,
+  type Logger,
+  type Message,
+  type Result,
+  type RetryPolicy,
+  type TooManyCooksDataConfig,
+  type TooManyCooksDb,
+  agentIdentityFromJson,
+  agentPlanFromJson,
+  createLoggerWithContext,
+  createLoggingContext,
+  defaultRetryPolicy,
+  error,
+  fileLockFromJson,
+  messageFromJson,
+  success,
+  withRetry,
 } from "@too-many-cooks/core";
 
 /** Key length in bytes for generating hex keys. */
@@ -57,20 +57,20 @@ const ACTIVE_FALSE = 0;
 
 /** SQLite-specific retryable errors. */
 const isSqliteRetryable = (err: string): boolean =>
-  err.includes("disk I/O error") ||
+  {return err.includes("disk I/O error") ||
   err.includes("database is locked") ||
-  err.includes("SQLITE_BUSY");
+  err.includes("SQLITE_BUSY")};
 
 /** Create a no-op logger. */
 const noOpLogger = (): Logger =>
-  createLoggerWithContext(createLoggingContext());
+  {return createLoggerWithContext(createLoggingContext())};
 
 /** Generate a hex key from random bytes. */
 const generateKey = (): string =>
-  randomBytes(KEY_BYTE_LENGTH).toString("hex");
+  {return randomBytes(KEY_BYTE_LENGTH).toString("hex")};
 
 /** Current time in milliseconds. */
-const now = (): number => Date.now();
+const now = (): number => {return Date.now()};
 
 /** Create database instance with retry policy. */
 export const createDb = (
@@ -84,7 +84,7 @@ export const createDb = (
   return withRetry(
     retryPolicy,
     isSqliteRetryable,
-    () => tryCreateDb(config, log),
+    () => {return tryCreateDb(config, log)},
     (attempt, err, delayMs) =>
       { log.warn(
         `Attempt ${String(attempt)} failed (retryable): ${err}. Retrying in ${String(delayMs)}ms...`,
@@ -489,8 +489,8 @@ const autoMarkRead = (
   messages: readonly Message[],
 ): void => {
   const unreadIds = messages
-    .filter((m) => m.readAt === undefined)
-    .map((m) => m.id);
+    .filter((m) => {return m.readAt === undefined})
+    .map((m) => {return m.id});
   if (unreadIds.length === 0) {return;}
 
   const timestamp = now();
@@ -827,46 +827,46 @@ const createDbOps = (
   db: Database.Database,
   config: TooManyCooksDataConfig,
   log: Logger,
-): TooManyCooksDb => ({
-  register: async (name) => register(db, log, name),
-  authenticate: async (name, key) => authenticate(db, log, name, key),
-  lookupByKey: async (key) => lookupByKey(db, log, key),
-  listAgents: async () => listAgents(db, log),
-  acquireLock: async (path, name, key, reason, timeout) =>
-    acquireLock(db, log, path, name, key, reason, timeout),
-  releaseLock: async (path, name, key) => releaseLock(db, log, path, name, key),
-  forceReleaseLock: async (path, name, key) =>
-    forceReleaseLock(db, log, path, name, key),
-  queryLock: async (path) => queryLock(db, log, path),
-  listLocks: async () => listLocks(db, log),
-  renewLock: async (path, name, key, timeout) =>
-    renewLock(db, log, path, name, key, timeout),
+): TooManyCooksDb => {return {
+  register: async (name) => {return await Promise.resolve(register(db, log, name))},
+  authenticate: async (name, key) => {return await Promise.resolve(authenticate(db, log, name, key))},
+  lookupByKey: async (key) => {return await Promise.resolve(lookupByKey(db, log, key))},
+  listAgents: async () => {return await Promise.resolve(listAgents(db, log))},
+  acquireLock: async (filePath, name, key, reason, timeout) =>
+    {return await Promise.resolve(acquireLock(db, log, filePath, name, key, reason, timeout))},
+  releaseLock: async (filePath, name, key) => {return await Promise.resolve(releaseLock(db, log, filePath, name, key))},
+  forceReleaseLock: async (filePath, name, key) =>
+    {return await Promise.resolve(forceReleaseLock(db, log, filePath, name, key))},
+  queryLock: async (filePath) => {return await Promise.resolve(queryLock(db, log, filePath))},
+  listLocks: async () => {return await Promise.resolve(listLocks(db, log))},
+  renewLock: async (filePath, name, key, timeout) =>
+    {return await Promise.resolve(renewLock(db, log, filePath, name, key, timeout))},
   sendMessage: async (from, key, to, content) =>
-    sendMessage(db, log, from, key, to, content, config.maxMessageLength),
+    {return await Promise.resolve(sendMessage(db, log, from, key, to, content, config.maxMessageLength))},
   getMessages: async (name, key, options) =>
-    getMessages(db, log, name, key, options?.unreadOnly ?? true),
-  markRead: async (id, name, key) => markRead(db, log, id, name, key),
+    {return await Promise.resolve(getMessages(db, log, name, key, options?.unreadOnly ?? true))},
+  markRead: async (id, name, key) => {return await Promise.resolve(markRead(db, log, id, name, key))},
   updatePlan: async (name, key, goal, task) =>
-    updatePlan(db, log, name, key, goal, task, config.maxPlanLength),
-  getPlan: async (name) => getPlan(db, log, name),
-  listPlans: async () => listPlans(db, log),
-  listAllMessages: async () => listAllMessages(db, log),
-  activate: async (name) => setActive(db, log, name, true),
-  deactivate: async (name) => setActive(db, log, name, false),
-  deactivateAll: async () => deactivateAll(db, log),
+    {return await Promise.resolve(updatePlan(db, log, name, key, goal, task, config.maxPlanLength))},
+  getPlan: async (name) => {return await Promise.resolve(getPlan(db, log, name))},
+  listPlans: async () => {return await Promise.resolve(listPlans(db, log))},
+  listAllMessages: async () => {return await Promise.resolve(listAllMessages(db, log))},
+  activate: async (name) => {return await Promise.resolve(setActive(db, log, name, true))},
+  deactivate: async (name) => {return await Promise.resolve(setActive(db, log, name, false))},
+  deactivateAll: async () => {return await Promise.resolve(deactivateAll(db, log))},
   close: async (): Promise<Result<undefined, DbError>> => {
     log.info("Closing database");
     try {
       db.close();
-      return success(undefined);
+      return await Promise.resolve(success(undefined));
     } catch (e: unknown) {
-      return error({ code: ERR_DATABASE, message: String(e) });
+      return await Promise.resolve(error({ code: ERR_DATABASE, message: String(e) }));
     }
   },
-  adminDeleteLock: async (path) => adminDeleteLock(db, log, path),
-  adminDeleteAgent: async (name) => adminDeleteAgent(db, log, name),
-  adminResetKey: async (name) => adminResetKey(db, log, name),
+  adminDeleteLock: async (filePath) => {return await Promise.resolve(adminDeleteLock(db, log, filePath))},
+  adminDeleteAgent: async (name) => {return await Promise.resolve(adminDeleteAgent(db, log, name))},
+  adminResetKey: async (name) => {return await Promise.resolve(adminResetKey(db, log, name))},
   adminSendMessage: async (from, to, content) =>
-    adminSendMessage(db, log, from, to, content, config.maxMessageLength),
-  adminReset: async () => adminReset(db, log),
-});
+    {return await Promise.resolve(adminSendMessage(db, log, from, to, content, config.maxMessageLength))},
+  adminReset: async () => {return await Promise.resolve(adminReset(db, log))},
+}};

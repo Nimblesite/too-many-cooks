@@ -1,7 +1,7 @@
 // Message tree item with typed properties.
 
 import * as vscode from 'vscode';
-import type { Message } from 'state/types';
+import type { Message } from '../../state/types';
 
 export class MessageTreeItem extends vscode.TreeItem {
   public readonly message: Message | null;

@@ -2,8 +2,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import 'module-alias/register';
-import { parseStatusResponse } from 'services/statusParser';
+import { parseStatusResponse } from '../../src/services/statusParser';
 
 describe('parseStatusResponse', () => {
   it('parses full status response', () => {

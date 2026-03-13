@@ -1,7 +1,9 @@
 // Unit tests to ISOLATE why admin event streaming does not work.
 // Each test targets one piece of the pipeline in isolation.
 
-const BASE_URL = 'http://localhost:4040';
+const TEST_PORT = process.env.TMC_PORT ?? '4040';
+const TEST_PORT_NUM = parseInt(TEST_PORT, 10);
+const BASE_URL = `http://localhost:${TEST_PORT}`;
 const ADMIN_EVENTS_PATH = '/admin/events';
 const MCP_HEADERS = {
   'accept': 'application/json, text/event-stream',
@@ -417,7 +419,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const sm = new StoreManager('.', (msg: string) => {
       console.log(`[UNIT-SM] ${msg}`);
       logs.push(msg);
-    });
+    }, TEST_PORT_NUM);
 
     // Connect (starts admin event stream internally)
     await sm.connect();
