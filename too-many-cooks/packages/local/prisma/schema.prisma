@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Identity {
+  agentName    String  @id @map("agent_name")
+  agentKey     String  @unique @map("agent_key")
+  active       Boolean @default(false)
+  registeredAt BigInt  @map("registered_at")
+  lastActive   BigInt  @map("last_active")
+
+  locks    Lock[]
+  messages Message[]
+  plans    Plan[]
+
+  @@map("identity")
+}
+
+model Lock {
+  filePath   String  @id @map("file_path")
+  agentName  String  @map("agent_name")
+  acquiredAt BigInt  @map("acquired_at")
+  expiresAt  BigInt  @map("expires_at")
+  reason     String?
+  version    Int     @default(1)
+
+  identity Identity @relation(fields: [agentName], references: [agentName], onDelete: Cascade)
+
+  @@map("locks")
+}
+
+model Message {
+  id        String  @id
+  fromAgent String  @map("from_agent")
+  toAgent   String  @map("to_agent")
+  content   String
+  createdAt BigInt  @map("created_at")
+  readAt    BigInt? @map("read_at")
+
+  identity Identity @relation(fields: [fromAgent], references: [agentName], onDelete: Cascade)
+
+  @@index([toAgent, readAt, createdAt(sort: Desc)], map: "idx_messages_inbox")
+  @@map("messages")
+}
+
+model Plan {
+  agentName   String @id @map("agent_name")
+  goal        String
+  currentTask String @map("current_task")
+  updatedAt   BigInt @map("updated_at")
+
+  identity Identity @relation(fields: [agentName], references: [agentName], onDelete: Cascade)
+
+  @@map("plans")
+}
