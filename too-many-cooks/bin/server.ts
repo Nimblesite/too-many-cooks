@@ -11,6 +11,7 @@ import fs from "node:fs";
 import express, { type Express, type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   LogLevel,
   type LogMessage,
@@ -200,6 +201,7 @@ const initializeMcpSession: (
   });
   if (!serverResult.ok) {throw new Error(serverResult.error);}
   const server: McpServer = serverResult.value;
+  assertMcpTransport(transport);
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 
@@ -216,8 +218,15 @@ const extractSessionId: (req: Request) => string | undefined = (req: Request): s
 };
 
 /** Extract the request body as unknown (avoids unsafe any). */
- 
 const extractBody: (req: Request) => unknown = (req: Request): unknown => req.body;
+
+/**
+ * Assert that a value satisfies both StreamableHTTPServerTransport and Transport.
+ * Required due to exactOptionalPropertyTypes incompatibility in @modelcontextprotocol/sdk.
+ */
+const assertMcpTransport: (transport: unknown) => asserts transport is StreamableHTTPServerTransport & Transport = (
+  _transport: unknown,
+): asserts _transport is StreamableHTTPServerTransport & Transport => { /* type-only assertion */ };
 
 /** POST /mcp handler. */
 const mcpPostHandler: (
@@ -307,6 +316,7 @@ const initializeAdminSession: (
     { name: "too-many-cooks", version: "0.1.0" },
     { capabilities: { logging: {} } },
   );
+  assertMcpTransport(transport);
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 

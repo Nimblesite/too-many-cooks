@@ -12,6 +12,7 @@ import net from "node:net";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type AdminEventHub,
   type AgentEventHub,
@@ -152,8 +153,16 @@ const extractSessionId: (req: Request) => string | undefined = (req: Request): s
 };
 
 /** Extract the request body as unknown. */
- 
 const extractBody: (req: Request) => unknown = (req: Request): unknown => req.body;
+
+/**
+ * Assert that a value satisfies both StreamableHTTPServerTransport and Transport.
+ * Required due to exactOptionalPropertyTypes incompatibility in @modelcontextprotocol/sdk:
+ * Transport.onclose is `() => void` but StreamableHTTPServerTransport.onclose is `(() => void) | undefined`.
+ */
+const assertMcpTransport: (transport: unknown) => asserts transport is StreamableHTTPServerTransport & Transport = (
+  _transport: unknown,
+): asserts _transport is StreamableHTTPServerTransport & Transport => { /* type-only assertion */ };
 
 /** Check if a parsed JSON body is an MCP initialize request. */
 const isInitializeRequest: (body: unknown) => boolean = (body: unknown): boolean => {
@@ -226,6 +235,7 @@ const initializeMcpSession: (
   });
   if (!serverResult.ok) {throw new Error(serverResult.error);}
   const server: McpServer = serverResult.value;
+  assertMcpTransport(transport);
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 
@@ -323,6 +333,7 @@ const initializeAdminSession: (
     { name: "too-many-cooks", version: "0.1.0" },
     { capabilities: { logging: {} } },
   );
+  assertMcpTransport(transport);
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
 
