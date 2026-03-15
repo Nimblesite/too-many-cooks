@@ -47,6 +47,6 @@ too_many_cooks_vscode_extension/.v8-coverage/
 
 too_many_cooks_vscode_extension/coverage-integration/
 
-too-many-cooks/packages/local/prisma/migrations/
-
 too-many-cooks/packages/cloud-proxy/
+
+too-many-cooks/packages/local/prisma/migrations/

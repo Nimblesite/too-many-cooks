@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { applyMigrations } from "./migrate.js";
+import { applyMigrations, hasMigrationsDir, pushSchemaViaPrisma } from "./migrate.js";
 
 import {
   type AgentIdentity,
@@ -131,6 +131,14 @@ const tryCreateDb: (
       mkdirSync(dbDir, { recursive: true });
     } catch (e: unknown) {
       return error(`Failed to create database directory: ${String(e)}`);
+    }
+  }
+
+  if (!hasMigrationsDir()) {
+    try {
+      pushSchemaViaPrisma(config.dbPath);
+    } catch (e: unknown) {
+      return error(`Failed to push schema via prisma: ${String(e)}`);
     }
   }
 

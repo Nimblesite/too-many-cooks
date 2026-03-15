@@ -1,5 +1,6 @@
 /// Applies Prisma-generated SQLite migrations using better-sqlite3.
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,15 +24,39 @@ CREATE TABLE IF NOT EXISTS _prisma_migrations (
 /** Directory of the compiled file — works from src/ (tsx) and build/src/ (node). */
 const CURRENT_DIR: string = fileURLToPath(new URL(".", import.meta.url));
 
-/** Locate the prisma/migrations directory relative to this file. */
-const migrationsDir: () => string = (): string => {
+/** Locate the prisma/migrations directory relative to this file, or undefined if absent. */
+const migrationsDir: () => string | undefined = (): string | undefined => {
   const candidates: string[] = [
     resolve(CURRENT_DIR, "..", "prisma", "migrations"),      // src/ (tsx dev)
     resolve(CURRENT_DIR, "..", "..", "prisma", "migrations"), // build/src/ (node)
   ];
-  const found: string | undefined = candidates.find(existsSync);
-  if (found === undefined) {throw new Error(`Cannot find migrations dir. Tried: ${candidates.join(", ")}`);}
+  return candidates.find(existsSync);
+};
+
+/** Locate the packages/local directory (contains prisma/schema.prisma). */
+const localPackageDir: () => string = (): string => {
+  const candidates: string[] = [
+    resolve(CURRENT_DIR, ".."),       // src/ (tsx dev)
+    resolve(CURRENT_DIR, "..", ".."), // build/src/ (node)
+  ];
+  const found: string | undefined = candidates.find(
+    (dir: string): boolean => existsSync(join(dir, "prisma", "schema.prisma")),
+  );
+  if (found === undefined) { throw new Error("Cannot find packages/local dir (prisma/schema.prisma not found)"); }
   return found;
+};
+
+/** True when migration files are present (production/committed migrations). */
+export const hasMigrationsDir: () => boolean = (): boolean => migrationsDir() !== undefined;
+
+/** Push the Prisma schema directly to the database — for dev/CI where migration files are not committed. */
+export const pushSchemaViaPrisma: (dbPath: string) => void = (dbPath: string): void => {
+  const pkgDir: string = localPackageDir();
+  execFileSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], {
+    cwd: pkgDir,
+    env: { ...process.env, DATABASE_URL: `file:${resolve(dbPath)}` },
+    stdio: "pipe",
+  });
 };
 
 /** Simple deterministic checksum for migration tracking using SHA-256. */
@@ -86,10 +111,11 @@ const baselineMigrations: (db: Database.Database, dir: string, names: readonly s
   }
 };
 
-/** Apply all pending Prisma migrations to the database. */
+/** Apply all pending Prisma migrations to the database. No-op when no migrations dir exists (schema already pushed via prisma db push). */
 export const applyMigrations: (db: Database.Database) => void = (db: Database.Database): void => {
+  const dir: string | undefined = migrationsDir();
+  if (dir === undefined) { return; }
   db.exec(CREATE_MIGRATIONS_TABLE);
-  const dir: string = migrationsDir();
   const migrations: string[] = readdirSync(dir)
     .filter((entry: string): boolean => existsSync(join(dir, entry, "migration.sql")))
     .sort();
