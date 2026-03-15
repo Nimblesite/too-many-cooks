@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS locks (
   expires_at INTEGER NOT NULL,
   reason TEXT,
   version INTEGER NOT NULL DEFAULT 1,
-  FOREIGN KEY (agent_name) REFERENCES identity(agent_name)
+  FOREIGN KEY (agent_name) REFERENCES identity(agent_name) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   read_at INTEGER,
-  FOREIGN KEY (from_agent) REFERENCES identity(agent_name)
+  FOREIGN KEY (from_agent) REFERENCES identity(agent_name) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_inbox
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS plans (
   goal TEXT NOT NULL,
   current_task TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  FOREIGN KEY (agent_name) REFERENCES identity(agent_name)
+  FOREIGN KEY (agent_name) REFERENCES identity(agent_name) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS schema_version (

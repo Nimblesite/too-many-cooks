@@ -19,13 +19,21 @@ keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Mod
     </div>
 
     <div class="hero-code">
+      <p class="code-label">Install and start</p>
 {% highlight "bash" %}
-# Install and start the server
-npm install -g too-many-cooks
-too-many-cooks
-
-# Add to Claude Code
-claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
+npm install -g too-many-cooks && too-many-cooks
+{% endhighlight %}
+      <p class="code-label">Claude Code</p>
+{% highlight "bash" %}
+claude mcp add --transport http --scope user too-many-cooks http://localhost:4040/mcp
+{% endhighlight %}
+      <p class="code-label">Codex</p>
+{% highlight "bash" %}
+codex --mcp-server http://localhost:4040/mcp
+{% endhighlight %}
+      <p class="code-label">Cursor / Cline — add to mcp.json</p>
+{% highlight "json" %}
+{ "mcpServers": { "too-many-cooks": { "url": "http://localhost:4040/mcp" } } }
 {% endhighlight %}
     </div>
   </div>

@@ -109,6 +109,7 @@ const tryCreateDb = (
 
   try {
     const db = new Database(config.dbPath);
+    db.pragma("foreign_keys = ON");
     return initSchema(db, log, config);
   } catch (e: unknown) {
     return error(`Failed to open database: ${String(e)}`);
@@ -709,14 +710,10 @@ const adminDeleteAgent = (
 ): Result<void, DbError> => {
   log.warn(`Admin deleting agent ${agentName}`);
   try {
-    db.prepare("DELETE FROM locks WHERE agent_name = ?").run(agentName);
-    db.prepare(
-      "DELETE FROM messages WHERE from_agent = ? OR to_agent = ?",
-    ).run(agentName, agentName);
-    db.prepare("DELETE FROM plans WHERE agent_name = ?").run(agentName);
-    const result = db
-      .prepare("DELETE FROM identity WHERE agent_name = ?")
-      .run(agentName);
+    // Remove messages sent TO this agent (no FK cascade covers to_agent)
+    db.prepare("DELETE FROM messages WHERE to_agent = ?").run(agentName);
+    // Deleting identity cascades to locks, plans, and messages where from_agent = agentName
+    const result = db.prepare("DELETE FROM identity WHERE agent_name = ?").run(agentName);
     return result.changes === 0
       ? error({ code: ERR_NOT_FOUND, message: "Agent not found" })
       : success(undefined);
