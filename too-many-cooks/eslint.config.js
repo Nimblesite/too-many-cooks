@@ -11,11 +11,9 @@ export default tseslint.config(
       parserOptions: {
         projectService: false,
         project: [
-          "tsconfig.json",
-          "tsconfig.test.json",
           "packages/core/tsconfig.json",
-          "packages/local/tsconfig.json",
-          "packages/local/tsconfig.test.json",
+          "packages/too-many-cooks/tsconfig.json",
+          "packages/too-many-cooks/tsconfig.test.json",
           "packages/cloud-proxy/tsconfig.json",
           "packages/cloud-proxy/tsconfig.test.json",
         ],
@@ -45,7 +43,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["test/**/*.ts", "packages/**/test/**/*.ts"],
+    files: ["packages/**/test/**/*.ts"],
     rules: testOverrides,
   },
   {
@@ -54,11 +52,10 @@ export default tseslint.config(
       "node_modules/**",
       "coverage/**",
       "eslint.config.js",
-      "lib/**",
       "packages/**/build/**",
       "packages/**/coverage/**",
       "packages/**/node_modules/**",
-      "packages/local/prisma.config.ts",
+      "packages/too-many-cooks/prisma.config.ts",
     ],
   },
 );

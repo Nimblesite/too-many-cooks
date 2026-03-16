@@ -49,7 +49,7 @@ jobs:
       # ── Start MCP server ──────────────────────────────
       - name: Start MCP server
         working-directory: too-many-cooks
-        run: node packages/local/build/bin/server.js &
+        run: node packages/too-many-cooks/build/bin/server.js &
         env:
           TMC_PORT: '4040'
 

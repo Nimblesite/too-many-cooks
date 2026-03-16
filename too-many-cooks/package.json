@@ -8,11 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w packages/core && npm run build -w packages/local",
-    "start": "node packages/local/build/bin/server.js",
+    "build": "npm run build -w packages/core && npm run build -w packages/too-many-cooks",
+    "start": "node packages/too-many-cooks/build/bin/server.js",
     "lint": "eslint .",
-    "test": "npm run build -w packages/core && npm test -w packages/local",
-    "test:local": "npm test -w packages/local"
+    "test": "npm run build -w packages/core && npm test -w packages/too-many-cooks",
+    "test:local": "npm test -w packages/too-many-cooks"
   },
   "keywords": [
     "mcp",

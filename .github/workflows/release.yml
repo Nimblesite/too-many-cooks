@@ -35,7 +35,7 @@ jobs:
       - name: Verify server binary
         run: |
           set -e
-          test -f too-many-cooks/packages/local/build/bin/server.js || (echo "Server build failed!" && exit 1)
+          test -f too-many-cooks/packages/too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
           echo "MCP server built successfully"
 
       - name: Set version from tag
