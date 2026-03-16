@@ -15,8 +15,8 @@ import type {
   Message,
   Result,
   TooManyCooksDb,
-} from "@too-many-cooks/core";
-import { error, success } from "@too-many-cooks/core";
+} from "too-many-cooks-core";
+import { error, success } from "too-many-cooks-core";
 
 import type { Keychain, WorkspaceKey } from "./crypto.js";
 import { decrypt, encrypt } from "./crypto.js";

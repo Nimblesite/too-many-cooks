@@ -12,7 +12,7 @@ import {
   randomBytes,
 } from "node:crypto";
 
-import { type Result, error, success } from "@too-many-cooks/core";
+import { type Result, error, success } from "too-many-cooks-core";
 
 /** Current key version for new encryptions. */
 const CURRENT_KEY_VERSION: number = 1;

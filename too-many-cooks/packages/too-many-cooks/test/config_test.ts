@@ -12,7 +12,7 @@ import {
   DEFAULT_LOCK_TIMEOUT_MS,
   DEFAULT_MAX_MESSAGE_LENGTH,
   DEFAULT_MAX_PLAN_LENGTH,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 describe("config", () => {
   it("resolveDbPath returns correct path", () => {

@@ -32,7 +32,7 @@ import {
   logTransport,
   pathJoin,
   registerAdminRoutes,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 import { createBackend } from "../src/backend.js";
 

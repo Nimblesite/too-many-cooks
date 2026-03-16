@@ -5,7 +5,7 @@ import assert from "node:assert";
 import {
   createLoggerWithContext,
   createLoggingContext,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 import { createTooManyCooksServer } from "../src/server.js";
 
 describe("createTooManyCooksServer", () => {

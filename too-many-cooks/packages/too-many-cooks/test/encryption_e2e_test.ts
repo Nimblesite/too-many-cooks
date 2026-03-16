@@ -12,8 +12,8 @@ import type {
   FileLock,
   Message,
   TooManyCooksDb,
-} from "@too-many-cooks/core";
-import { success } from "@too-many-cooks/core";
+} from "too-many-cooks-core";
+import { success } from "too-many-cooks-core";
 
 import { deriveWorkspaceKey } from "../src/crypto.js";
 import { withEncryption } from "../src/encryption-middleware.js";

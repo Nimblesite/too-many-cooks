@@ -5,7 +5,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 
 import Database from "better-sqlite3";
-import { createDataConfig } from "@too-many-cooks/core";
+import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
 const TEST_FK_DB_PATH = ".test_fk_integrity.db" as const;

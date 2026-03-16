@@ -36,7 +36,7 @@ import {
   messageFromJson,
   success,
   withRetry,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 /** Key length in bytes for generating hex keys. */
 const KEY_BYTE_LENGTH: number = 32;

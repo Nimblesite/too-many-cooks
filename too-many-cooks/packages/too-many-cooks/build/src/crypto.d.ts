@@ -1,4 +1,4 @@
-import { type Result } from "@too-many-cooks/core";
+import { type Result } from "too-many-cooks-core";
 /** Workspace encryption key with version for key rotation. */
 export type WorkspaceKey = {
     readonly version: number;

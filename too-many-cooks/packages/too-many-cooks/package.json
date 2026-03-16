@@ -15,7 +15,7 @@
     "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
   },
   "dependencies": {
-    "@too-many-cooks/core": "*",
+    "too-many-cooks-core": "*",
     "better-sqlite3": "^12.5.0"
   },
   "devDependencies": {

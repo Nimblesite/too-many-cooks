@@ -11,7 +11,7 @@ import {
   EVENT_AGENT_REGISTERED,
   EVENT_LOCK_ACQUIRED,
   EVENT_MESSAGE_SENT,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 const createServer = () =>
   new McpServer(

@@ -8,7 +8,7 @@
 /// guaranteed interchangeable with the SQLite implementation.
 ///
 /// Usage:
-///   import { runDbContractTests } from "@too-many-cooks/core";
+///   import { runDbContractTests } from "too-many-cooks-core";
 ///   runDbContractTests(async () => ({
 ///     db: yourDbInstance,
 ///     cleanup: async () => { /* tear down */ },

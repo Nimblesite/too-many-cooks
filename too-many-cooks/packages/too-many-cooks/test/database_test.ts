@@ -13,7 +13,7 @@ import {
   ERR_LOCK_EXPIRED,
   ERR_VALIDATION,
   ERR_DATABASE,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
 const deleteIfExists = (path: string): void => {

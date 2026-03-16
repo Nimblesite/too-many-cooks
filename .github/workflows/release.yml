@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-mcp:
-    name: Build MCP npm Package
+    name: Build npm Packages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,11 +24,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: too-many-cooks/package-lock.json
 
-      - name: Install MCP server dependencies
+      - name: Install dependencies
         working-directory: too-many-cooks
         run: npm ci
 
-      - name: Build MCP server
+      - name: Build all packages
         working-directory: too-many-cooks
         run: npm run build
 
@@ -38,20 +38,44 @@ jobs:
           test -f too-many-cooks/packages/too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
           echo "MCP server built successfully"
 
+      - name: Verify core build
+        run: |
+          set -e
+          test -f too-many-cooks/packages/core/build/index.js || (echo "Core build failed!" && exit 1)
+          echo "Core package built successfully"
+
       - name: Set version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Pack npm tarball
-        working-directory: too-many-cooks/packages/too-many-cooks
+      - name: Stamp versions for publishing
         run: |
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
-          npm pack
+          VERSION=${{ steps.version.outputs.VERSION }}
+          cd too-many-cooks/packages/core
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          cd ../too-many-cooks
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.dependencies['too-many-cooks-core'] = '^$VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
 
-      - name: Upload npm tarball as release asset
+      - name: Pack core tarball
+        working-directory: too-many-cooks/packages/core
+        run: npm pack
+
+      - name: Pack MCP server tarball
+        working-directory: too-many-cooks/packages/too-many-cooks
+        run: npm pack
+
+      - name: Upload npm tarballs as release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: too-many-cooks/packages/too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
+          files: |
+            too-many-cooks/packages/core/too-many-cooks-core-${{ steps.version.outputs.VERSION }}.tgz
+            too-many-cooks/packages/too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
           name: Too Many Cooks ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

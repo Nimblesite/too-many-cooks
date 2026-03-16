@@ -1,6 +1,6 @@
 /// Cloud proxy configuration from environment variables.
 
-import { type Result, error, success } from "@too-many-cooks/core";
+import { type Result, error, success } from "too-many-cooks-core";
 
 import { type Keychain, type WorkspaceKey, deriveWorkspaceKey } from "./crypto.js";
 

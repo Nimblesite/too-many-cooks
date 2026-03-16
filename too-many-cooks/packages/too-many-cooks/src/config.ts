@@ -12,9 +12,9 @@ export {
   getWorkspaceFolder,
   resolveDbPath,
   pathJoin,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
-import type { TooManyCooksDataConfig } from "@too-many-cooks/core";
+import type { TooManyCooksDataConfig } from "too-many-cooks-core";
 
 /** Server configuration type alias for backwards compatibility. */
 export type TooManyCooksConfig = TooManyCooksDataConfig;

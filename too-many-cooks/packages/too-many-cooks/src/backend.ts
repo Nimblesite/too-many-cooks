@@ -11,7 +11,7 @@ import {
   type TooManyCooksDb,
   error,
   success,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 import { type CloudProxyConfig, parseConfig } from "./cloud-config.js";
 import { createCloudDb } from "./db-cloud.js";

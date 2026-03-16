@@ -13,7 +13,7 @@ import type {
   FileLock,
   Message,
   AgentPlan,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 import {
   agentIdentityFromJson,
   agentPlanFromJson,
@@ -21,7 +21,7 @@ import {
   fileLockFromJson,
   lockResultFromJson,
   messageFromJson,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 /** Content-Type header value for JSON requests. */
 const CONTENT_TYPE_JSON: string = "application/json";

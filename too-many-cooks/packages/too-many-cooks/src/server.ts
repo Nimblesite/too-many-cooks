@@ -1,7 +1,7 @@
 /// Convenience wrapper for creating the Too Many Cooks server.
 ///
 /// Uses the backend abstraction — env vars determine SQLite or cloud.
-/// All shared MCP server logic is in @too-many-cooks/core.
+/// All shared MCP server logic is in too-many-cooks-core.
 
 import {
   type Logger,
@@ -14,12 +14,12 @@ import {
   defaultConfig,
   error,
   success,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 import { createBackend } from "./backend.js";
 
 // Re-export shared server pieces from core for backwards compatibility
-export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "@too-many-cooks/core";
+export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "too-many-cooks-core";
 
 /** Type alias for the return of createMcpServerForDb. */
 type McpServerResult = ReturnType<typeof createMcpServerForDb>;
