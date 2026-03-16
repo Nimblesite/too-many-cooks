@@ -50,3 +50,5 @@ too_many_cooks_vscode_extension/coverage-integration/
 too-many-cooks/packages/cloud-proxy/
 
 too-many-cooks/packages/local/prisma/migrations/
+
+.test-vsix-workspace/

@@ -35,7 +35,7 @@ jobs:
       - name: Verify server binary
         run: |
           set -e
-          test -f too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
+          test -f too-many-cooks/packages/too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
           echo "MCP server built successfully"
 
       - name: Set version from tag
@@ -43,7 +43,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Pack npm tarball
-        working-directory: too-many-cooks
+        working-directory: too-many-cooks/packages/too-many-cooks
         run: |
           npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
           npm pack
@@ -51,7 +51,7 @@ jobs:
       - name: Upload npm tarball as release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
+          files: too-many-cooks/packages/too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
           name: Too Many Cooks ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
