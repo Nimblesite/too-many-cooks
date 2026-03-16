@@ -9,7 +9,7 @@ import {
   PLAN_INPUT_SCHEMA,
   REGISTER_INPUT_SCHEMA,
   REGISTER_TOOL_CONFIG,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 type SchemaObj = Record<string, unknown>;
 

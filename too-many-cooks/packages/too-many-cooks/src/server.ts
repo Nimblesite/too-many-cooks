@@ -1,7 +1,7 @@
-/// Local (SQLite) convenience for creating the Too Many Cooks server.
+/// Convenience wrapper for creating the Too Many Cooks server.
 ///
-/// Only the SQLite-specific `createTooManyCooksServer` lives here.
-/// All shared MCP server logic is in @too-many-cooks/core.
+/// Uses the backend abstraction — env vars determine SQLite or cloud.
+/// All shared MCP server logic is in too-many-cooks-core.
 
 import {
   type Logger,
@@ -14,17 +14,17 @@ import {
   defaultConfig,
   error,
   success,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
-import { createDb } from "./db-sqlite.js";
+import { createBackend } from "./backend.js";
 
 // Re-export shared server pieces from core for backwards compatibility
-export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "@too-many-cooks/core";
+export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "too-many-cooks-core";
 
 /** Type alias for the return of createMcpServerForDb. */
 type McpServerResult = ReturnType<typeof createMcpServerForDb>;
 
-/** Create the Too Many Cooks MCP server with a local SQLite DB. */
+/** Create the Too Many Cooks MCP server (backend chosen by env vars). */
 export const createTooManyCooksServer: (
   config?: TooManyCooksDataConfig,
   logger?: Logger,
@@ -36,7 +36,7 @@ export const createTooManyCooksServer: (
   const log: Logger = logger ?? createConsoleLogger();
   log.info("Creating Too Many Cooks server");
 
-  const dbResult: Result<TooManyCooksDb, string> = createDb(cfg);
+  const dbResult: Result<TooManyCooksDb, string> = createBackend(cfg, log);
   if (!dbResult.ok) {
     log.error("Failed to create database", { error: dbResult.error });
     return error(dbResult.error);

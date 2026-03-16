@@ -1,10 +1,27 @@
 {
-  "name": "@too-many-cooks/core",
-  "version": "0.5.0",
+  "name": "too-many-cooks-core",
+  "version": "0.6.0",
   "description": "Core types, tools, and interfaces for Too Many Cooks multi-agent coordination",
   "type": "module",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MelbourneDeveloper/too-many-cooks",
+    "directory": "too-many-cooks/packages/core"
+  },
+  "keywords": [
+    "mcp",
+    "multi-agent",
+    "coordination",
+    "ai",
+    "too-many-cooks"
+  ],
   "scripts": {
     "build": "tsc"
   },

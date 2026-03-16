@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import {
   type TooManyCooksDb,
   createDataConfig,
-} from '@too-many-cooks/core';
+} from 'too-many-cooks-core';
 import { createDb } from '../src/db-sqlite.js';
 
 const TEST_DB_PATH = '.test_admin_reset_identity.db' as const;

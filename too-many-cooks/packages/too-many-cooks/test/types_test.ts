@@ -8,8 +8,8 @@ import {
   createDataConfigFromWorkspace,
   getWorkspaceFolder,
   resolveDbPath,
-} from "@too-many-cooks/core";
-import * as data from "@too-many-cooks/core";
+} from "too-many-cooks-core";
+import * as data from "too-many-cooks-core";
 import {
   textContent,
   ERR_NOT_FOUND,
@@ -18,7 +18,7 @@ import {
   ERR_LOCK_EXPIRED,
   ERR_VALIDATION,
   ERR_DATABASE,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 describe("TooManyCooksConfig", () => {
   it("defaultConfig has correct values", () => {

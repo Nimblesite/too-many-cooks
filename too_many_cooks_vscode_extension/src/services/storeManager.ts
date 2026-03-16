@@ -23,6 +23,8 @@ export class StoreManager {
   private connectPromise: Promise<void> | null = null;
   private mcpSessionId: string | null = null;
   private eventAbortController: AbortController | null = null;
+  private innerAbort: (() => void) | null = null;
+  private refreshSeq: number = 0;
   private readonly log: LogFn;
 
   public constructor(workspaceFolder: string, log: LogFn, port: number = DEFAULT_PORT) {
@@ -85,6 +87,7 @@ export class StoreManager {
       baseUrl: this.baseUrl,
       log: this.log,
       onEvent: (): void => { this.handleAdminEvent(); },
+      onInnerAbort: (abort: () => void): void => { this.innerAbort = abort; },
     });
   }
 
@@ -102,9 +105,18 @@ export class StoreManager {
     this.mcpSessionId = 'stale-session-00000000';
   }
 
+  // Test-only: Kill the current SSE read WITHOUT disconnecting or stopping the reconnect loop.
+  // Simulates the server closing the SSE connection (server restart, idle timeout, network drop).
+  // After this call, the reconnect loop re-establishes the stream and catches missed events.
+  public invalidateEventStream(): void {
+    this.innerAbort?.();
+    this.innerAbort = null;
+  }
+
   public disconnect(): void {
     this.connectPromise = null;
     this.mcpSessionId = null;
+    this.innerAbort = null;
     this.eventAbortController?.abort();
     this.eventAbortController = null;
     this.connected = false;
@@ -114,12 +126,18 @@ export class StoreManager {
 
   public async refreshStatus(): Promise<void> {
     if (!this.isConnected) { throw new Error('Not connected'); }
+    // Monotonic counter: discard results from requests that started before a newer one.
+    // This prevents a slow SSE-triggered refresh from overwriting a fresher result.
+    this.refreshSeq += 1;
+    const seq: number = this.refreshSeq;
     const response: Response = await fetch(`${this.baseUrl}/admin/status`);
+    if (seq !== this.refreshSeq) { return; }
     if (!response.ok) {
       this.log(`[StoreManager] refreshStatus: response not ok (${String(response.status)})`);
       return;
     }
     const json: unknown = await response.json();
+    if (seq !== this.refreshSeq) { return; }
     if (!isRecord(json)) {
       this.log('[StoreManager] refreshStatus: response is not a record');
       return;

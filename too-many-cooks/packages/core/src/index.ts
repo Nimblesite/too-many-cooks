@@ -1,4 +1,4 @@
-/// @too-many-cooks/core barrel export.
+/// too-many-cooks-core barrel export.
 ///
 /// Everything shared between local (SQLite) and cloud (PostgreSQL) deployments.
 

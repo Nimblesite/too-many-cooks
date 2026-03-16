@@ -13,7 +13,7 @@ import {
   EVENT_LOCK_RENEWED,
   EVENT_MESSAGE_SENT,
   EVENT_PLAN_UPDATED,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 const createEmitter = () => {
   const server = new McpServer(

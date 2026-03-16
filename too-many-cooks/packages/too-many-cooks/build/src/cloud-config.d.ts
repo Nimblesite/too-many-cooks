@@ -1,4 +1,4 @@
-import { type Result } from "@too-many-cooks/core";
+import { type Result } from "too-many-cooks-core";
 import { type Keychain, type WorkspaceKey } from "./crypto.js";
 /** Cloud proxy configuration. */
 export type CloudProxyConfig = {

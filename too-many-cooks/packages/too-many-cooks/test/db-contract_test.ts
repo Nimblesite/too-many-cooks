@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 
-import { createDataConfig, runDbContractTests } from "@too-many-cooks/core";
+import { createDataConfig, runDbContractTests } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
 const TEST_DB_PATH = ".test_contract.db";

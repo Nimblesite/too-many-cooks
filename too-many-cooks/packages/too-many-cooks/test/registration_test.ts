@@ -7,7 +7,7 @@ import {
   type TooManyCooksDb,
   createDataConfig,
   ERR_VALIDATION,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
 const TEST_DB_PATH = ".test_registration.db";

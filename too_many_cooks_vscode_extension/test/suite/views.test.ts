@@ -11,6 +11,7 @@ import {
   callToolString,
   extractKeyFromResult,
   restoreDialogMocks,
+  resetServerState,
   getLabel,
   getDescription,
   getChildren,
@@ -63,6 +64,7 @@ suite('UI Bug Fixes', () => {
     const api = getTestAPI();
     await api.connect();
     await waitForConnection();
+    await resetServerState();
 
     const result = await callToolString(api, 'register', { name: agentName });
     agentKey = extractKeyFromResult(result);

@@ -32,9 +32,9 @@ import {
   logTransport,
   pathJoin,
   registerAdminRoutes,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
-import { createDb } from "../src/db-sqlite.js";
+import { createBackend } from "../src/backend.js";
 
 /** JSON-RPC bad request error response. */
 const BAD_REQUEST_JSON: string =
@@ -110,7 +110,7 @@ const startServer: (log: Logger) => Promise<void> = async (log: Logger): Promise
 
   const cfg: typeof defaultConfig = defaultConfig;
 
-  const dbResult: ReturnType<typeof createDb> = createDb(cfg);
+  const dbResult: ReturnType<typeof createBackend> = createBackend(cfg, log);
   if (!dbResult.ok) {throw new Error(dbResult.error);}
   const db: TooManyCooksDb = dbResult.value;
   log.info("Database created.");

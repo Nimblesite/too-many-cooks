@@ -36,7 +36,7 @@ import {
   messageFromJson,
   success,
   withRetry,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 
 /** Key length in bytes for generating hex keys. */
 const KEY_BYTE_LENGTH: number = 32;
@@ -875,6 +875,12 @@ const adminDeleteAgent: (
 ): Result<void, DbError> => {
   log.warn(`Admin deleting agent ${agentName}`);
   try {
+    // Delete child rows explicitly (in FK-safe order) before deleting the identity row.
+    // Cascade is defined in the schema but must not be relied upon — explicit deletes
+    // are more reliable across SQLite versions and PRAGMA states.
+    db.prepare("DELETE FROM locks WHERE agent_name = ?").run(agentName);
+    db.prepare("DELETE FROM plans WHERE agent_name = ?").run(agentName);
+    db.prepare("DELETE FROM messages WHERE from_agent = ?").run(agentName);
     db.prepare("DELETE FROM messages WHERE to_agent = ?").run(agentName);
     const result: Database.RunResult = db
       .prepare("DELETE FROM identity WHERE agent_name = ?")

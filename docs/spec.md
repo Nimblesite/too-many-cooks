@@ -42,6 +42,8 @@ ONE HTTP server:
 
 **Why HTTP, not stdio**: Stdio spawns an isolated process per agent — agents can't see each other's events. HTTP gives one shared process where the notification emitter actually works across all connected agents.
 
+**Cloud mode**: In cloud mode (TMC Cloud), agents connect via **stdio** instead. Each agent launches its own server process, but since the backend is remote (Supabase), there's no shared local state to worry about. The VSIX manages MCP config for all major agents (Claude Code, Codex, Cline, etc.) and handles switching between local/cloud automatically. See `tmc-cloud/tmc-cloud-technical-spec.md` for details.
+
 ---
 
 ## Database Schema (Prisma — SQLite)

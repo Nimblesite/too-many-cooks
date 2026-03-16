@@ -9,7 +9,7 @@ import {
   ERR_UNAUTHORIZED,
   ERR_NOT_FOUND,
   ERR_LOCK_HELD,
-} from "@too-many-cooks/core";
+} from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
 const TEST_DB_PATH = ".test_locks.db";

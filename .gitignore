@@ -1,54 +1,53 @@
-.commandtree/commandtree.sqlite3
-
-node_modules/
-
-too_many_cooks_vscode_extension/.vscode-test/
-too_many_cooks_vscode_extension/logs/
-too_many_cooks_vscode_extension/out/
-
+# OS
 .DS_Store
 
+# Dependencies
+node_modules/
+
+# Build outputs
 too-many-cooks/build/
-
-.too_many_cooks/
-
-too-many-cooks/logs/
-too-many-cooks/coverage/
-
-website/playwright-report/
-website/_site/
-website/coverage/
-
-*.vsix
-
-test-results/
-
-codegen/.dart_tool/
-
-too_many_cooks_vscode_extension/coverage/
-
-*.tgz
-
-too-many-cooks-0.4.0.tar.gz
-
 too-many-cooks/packages/core/build/
-
 too-many-cooks/packages/local/build/
-
+too-many-cooks/packages/cloud-proxy/build/
+too_many_cooks_vscode_extension/out/
 *.tsbuildinfo
 
-too-many-cooks/packages/cloud-proxy/build/
-
-too-many-cooks/packages/local/coverage/
-
+# Logs
+too-many-cooks/logs/
+too_many_cooks_vscode_extension/logs/
 scripts/logs/
 
-too_many_cooks_vscode_extension/.v8-coverage/
-
+# Coverage
+too-many-cooks/coverage/
+too-many-cooks/packages/local/coverage/
+too_many_cooks_vscode_extension/coverage/
 too_many_cooks_vscode_extension/coverage-integration/
+too_many_cooks_vscode_extension/.v8-coverage/
+website/coverage/
 
-too-many-cooks/packages/cloud-proxy/
+# Test artifacts
+test-results/
+too_many_cooks_vscode_extension/.vscode-test/
+website/playwright-report/
 
+# Distributed files
+*.vsix
+*.tgz
+too-many-cooks-0.4.0.tar.gz
+
+# Website
+website/_site/
+
+# Runtime data
+.too_many_cooks/
+.commandtree/commandtree.sqlite3
+
+# Database migrations (generated)
 too-many-cooks/packages/local/prisma/migrations/
+
+# Other
+codegen/.dart_tool/
+
+too-many-cooks/packages/cloud-proxy/coverage/
 
 .test-vsix-workspace/
