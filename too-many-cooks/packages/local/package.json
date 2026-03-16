@@ -1,7 +1,7 @@
 {
   "name": "@too-many-cooks/local",
   "version": "0.5.0",
-  "description": "SQLite-backed local MCP server for Too Many Cooks multi-agent coordination",
+  "description": "Too Many Cooks MCP server — SQLite (local) or encrypted cloud backend",
   "type": "module",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
@@ -12,7 +12,7 @@
     "build": "tsc",
     "start": "node build/bin/server.js",
     "test": "node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts",
-    "test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
+    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
   },
   "dependencies": {
     "@too-many-cooks/core": "*",

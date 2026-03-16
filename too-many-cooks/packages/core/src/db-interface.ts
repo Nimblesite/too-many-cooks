@@ -1,7 +1,7 @@
 /// Database interface for Too Many Cooks.
 ///
-/// Backend-agnostic contract. Implementations live in separate packages
-/// (e.g. @too-many-cooks/local for SQLite, @too-many-cooks/cloud-proxy for Supabase).
+/// Backend-agnostic contract. Implementations live in @too-many-cooks/local
+/// (SQLite for local mode, encrypted cloud client for cloud mode).
 
 import type { Result } from "./result.js";
 import type {
