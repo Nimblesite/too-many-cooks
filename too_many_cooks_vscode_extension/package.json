@@ -77,6 +77,12 @@
         "title": "Send Message",
         "category": "Too Many Cooks",
         "icon": "$(mail)"
+      },
+      {
+        "command": "tooManyCooks.deleteAllAgents",
+        "title": "Remove All Agents",
+        "category": "Too Many Cooks",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -109,6 +115,11 @@
         {
           "command": "tooManyCooks.refresh",
           "when": "view =~ /tooManyCooks.*/",
+          "group": "navigation"
+        },
+        {
+          "command": "tooManyCooks.deleteAllAgents",
+          "when": "view == tooManyCooksAgents",
           "group": "navigation"
         },
         {

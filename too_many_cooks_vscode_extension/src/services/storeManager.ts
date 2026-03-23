@@ -7,7 +7,7 @@
 // Accepts a ConnectionTarget (local or cloud) to determine base URL and auth headers.
 // In cloud mode, all HTTP requests include Authorization, X-Tenant-Id, X-Workspace-Id headers.
 
-import type { AgentPlan, AppState, FileLock, Message } from '../state/types';
+import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../state/types';
 import type { ConnectionMode, ConnectionTarget } from './connectionTypes';
 import { LOCAL_BASE_URL_PREFIX, buildAuthHeaders, buildBaseUrl, fetchWithAuth, postJsonWithAuth } from './storeManagerHelpers';
 import { checkServerAvailable, isRecord } from './httpClient';
@@ -115,15 +115,7 @@ export class StoreManager {
 
   private async tryReconnect(): Promise<void> {
     this.log('[StoreManager] Attempting auto-reconnect');
-    const available: boolean = await checkServerAvailable(this.baseUrl);
-    if (!available) {
-      this.log('[StoreManager] Server not reachable — cannot auto-reconnect');
-      throw new Error('Not connected');
-    }
-    try {
-      await this.connect();
-    } catch (err: unknown) {
-      this.log(`[StoreManager] Auto-reconnect failed: ${String(err)}`);
+    try { await this.connect(); } catch {
       throw new Error('Not connected');
     }
   }
@@ -161,12 +153,9 @@ export class StoreManager {
   /** Decrypt status data if a decryptor is set (cloud mode). */
   private decryptStatus(data: StatusData): StatusData {
     if (this.decryptor === null) { return data; }
-    const msgs: { readonly ok: boolean; readonly value?: readonly Message[] } =
-      this.decryptor.decryptMessages(data.messages);
-    const plans: { readonly ok: boolean; readonly value?: readonly AgentPlan[] } =
-      this.decryptor.decryptPlans(data.plans);
-    const locks: { readonly ok: boolean; readonly value?: readonly FileLock[] } =
-      this.decryptor.decryptLocks(data.locks);
+    const msgs: ReturnType<StatusDecryptor['decryptMessages']> = this.decryptor.decryptMessages(data.messages);
+    const plans: ReturnType<StatusDecryptor['decryptPlans']> = this.decryptor.decryptPlans(data.plans);
+    const locks: ReturnType<StatusDecryptor['decryptLocks']> = this.decryptor.decryptLocks(data.locks);
     return {
       agents: data.agents,
       locks: locks.ok && locks.value ? locks.value : data.locks,
@@ -252,6 +241,18 @@ export class StoreManager {
       { agentName },
       this.authHeaders,
     );
+    await this.refreshStatus();
+  }
+
+  public async deleteAllAgents(): Promise<void> {
+    const { agents }: { readonly agents: readonly AgentIdentity[] } = this.store.getState();
+    for (const agent of agents) {
+      await postJsonWithAuth(
+        `${this.baseUrl}/admin/delete-agent`,
+        { agentName: agent.agentName },
+        this.authHeaders,
+      );
+    }
     await this.refreshStatus();
   }
 

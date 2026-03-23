@@ -10,7 +10,7 @@ import * as vscode from 'vscode';
 // VSCode's built-in 'vscode' module resolution in Electron.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('module-alias/register');
-import { getAgentNameFromItem, getFilePathFromItem } from './ui/tree/treeItemUtils';
+import { getFilePathFromItem } from './ui/tree/treeItemUtils';
 import { restoreLastConnection, showConnectionPicker } from './ui/connectionPicker';
 import { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
 import type { ConnectionPickerDeps } from './ui/connectionPicker';
@@ -25,6 +25,7 @@ import { createConnectionManager } from './services/connectionManager';
 import { createMcpConfigManager } from './services/mcpConfigManager';
 import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
+import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
@@ -154,7 +155,8 @@ function registerAllCommands(
   context.subscriptions.push(registerRefreshCommand(sm));
   context.subscriptions.push(registerDashboardCommand(sm));
   context.subscriptions.push(registerDeleteLockCommand(sm));
-  context.subscriptions.push(registerDeleteAgentCommand(sm));
+  context.subscriptions.push(registerDeleteAgentCommand(sm, log));
+  context.subscriptions.push(registerDeleteAllAgentsCommand(sm, log));
   context.subscriptions.push(registerSendMessageCommand(sm, log));
 }
 
@@ -232,32 +234,4 @@ function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode
   );
 }
 
-function registerDeleteAgentCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.deleteAgent',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (item?: vscode.TreeItem): Promise<void> => {
-      const dialogs: DialogService = getDialogService();
-      const agentName: string | null = getAgentNameFromItem(item);
-      if (agentName === null) {
-        await dialogs.showErrorMessage('No agent selected');
-        return;
-      }
-      const confirm: string | undefined = await dialogs.showWarningMessage(
-        `Remove agent "${agentName}"? This will release all their locks.`,
-        { modal: true },
-        'Remove',
-      );
-      if (confirm !== 'Remove') { return; }
-      try {
-        await storeManager.deleteAgent(agentName);
-        log(`Removed agent: ${agentName}`);
-        await dialogs.showInformationMessage(`Agent removed: ${agentName}`);
-      } catch (err: unknown) {
-        log(`Failed to remove agent: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to remove agent: ${String(err)}`);
-      }
-    },
-  );
-}
 
