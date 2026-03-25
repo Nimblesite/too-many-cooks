@@ -1,5 +1,8 @@
+# SQLite databases
 *.db
 *.db-shm
 *.db-wal
+
+# Compiled JavaScript (TypeScript project)
 *.js
 !eslint.config.js

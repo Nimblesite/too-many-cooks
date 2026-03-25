@@ -1,5 +1,8 @@
 // Too Many Cooks VSCode Extension - TypeScript.
 // Visualizes the Too Many Cooks multi-agent coordination system.
+//
+// Spec: tmc-cloud/docs/vsix-connection-switcher-spec.md
+// Plan: tmc-cloud/docs/vsix-connection-switcher-plan.md
 
 import * as vscode from 'vscode';
 
@@ -7,9 +10,10 @@ import * as vscode from 'vscode';
 // VSCode's built-in 'vscode' module resolution in Electron.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('module-alias/register');
-import { getAgentNameFromItem, getFilePathFromItem } from './ui/tree/treeItemUtils';
-import type { AgentIdentity } from './state/types';
+import { getFilePathFromItem } from './ui/tree/treeItemUtils';
+import { restoreLastConnection, showConnectionPicker } from './ui/connectionPicker';
 import { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
+import type { ConnectionPickerDeps } from './ui/connectionPicker';
 import { DashboardPanel } from './ui/webview/dashboardPanel';
 import type { DialogService } from './services/dialogService';
 import { LocksTreeProvider } from './ui/tree/locksTreeProvider';
@@ -17,11 +21,13 @@ import { MessagesTreeProvider } from './ui/tree/messagesTreeProvider';
 import { StatusBarManager } from './ui/statusBar';
 import { StoreManager } from './services/storeManager';
 import type { TestAPI } from './testApi';
+import { createConnectionManager } from './services/connectionManager';
+import { createMcpConfigManager } from './services/mcpConfigManager';
 import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
+import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
+import { registerSendMessageCommand } from './ui/sendMessageCommand';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
-const MESSAGE_PREVIEW_LENGTH: number = 50;
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
 const DEFAULT_PORT: number = 4040;
 
@@ -36,6 +42,13 @@ function log(message: string): void {
   process.stdout.write(`[EXT] ${fullMessage}\n`);
 }
 
+function resolvePort(): number {
+  const envPort: string | undefined = process.env.TMC_PORT;
+  if (typeof envPort === 'string' && envPort.length > 0) { return parseInt(envPort, 10); }
+  const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration('tooManyCooks');
+  return config.get<number>('port') ?? DEFAULT_PORT;
+}
+
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 export function activate(context: vscode.ExtensionContext): TestAPI {
   outputChannel = vscode.window.createOutputChannel('Too Many Cooks');
@@ -44,46 +57,45 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
 
   const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration('tooManyCooks');
   const autoConnect: boolean = config.get<boolean>('autoConnect') ?? true;
-  const envPort: string | undefined = process.env.TMC_PORT;
-  const port: number = typeof envPort === 'string' && envPort.length > 0
-    ? parseInt(envPort, 10)
-    : config.get<number>('port') ?? DEFAULT_PORT;
   const workspaceFolder: string = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
   log(`Using workspace folder: ${workspaceFolder}`);
 
-  const storeManager: StoreManager = new StoreManager(workspaceFolder, log, port);
-  const agentsProvider: AgentsTreeProvider = new AgentsTreeProvider(storeManager);
-  const locksProvider: LocksTreeProvider = new LocksTreeProvider(storeManager);
-  const messagesProvider: MessagesTreeProvider = new MessagesTreeProvider(storeManager);
+  const storeManager: StoreManager = new StoreManager(workspaceFolder, log, resolvePort());
+  const connectionManager: ReturnType<typeof createConnectionManager> = createConnectionManager(workspaceFolder, log);
+  const mcpConfigManager: ReturnType<typeof createMcpConfigManager> = createMcpConfigManager(workspaceFolder, log);
 
-  registerTreeViews(agentsProvider, locksProvider, messagesProvider);
+  const pickerDeps: ConnectionPickerDeps = {
+    connectionManager,
+    globalState: context.globalState,
+    log,
+    mcpConfigManager,
+    storeManager,
+  };
+
+  const providers: Providers = createProviders(storeManager);
   const statusBar: StatusBarManager = new StatusBarManager(storeManager);
-  registerAllCommands(context, storeManager);
-
+  registerAllCommands(context, storeManager, pickerDeps);
   log('Extension activated');
 
-  if (autoConnect) {
-    storeManager.connect().then(
-      (): void => { log('Auto-connect: SUCCESS'); },
-      (err: unknown): void => { log(`Auto-connect FAILED: ${String(err)}`); },
-    );
-  }
+  // eslint-disable-next-line no-void
+  if (autoConnect) { void autoConnectOnActivation(pickerDeps, storeManager); }
 
   context.subscriptions.push({
     dispose: (): void => {
+      connectionManager.disconnect();
       storeManager.disconnect();
       statusBar.dispose();
-      agentsProvider.dispose();
-      locksProvider.dispose();
-      messagesProvider.dispose();
+      providers.agentsProvider.dispose();
+      providers.locksProvider.dispose();
+      providers.messagesProvider.dispose();
     },
   });
 
   return createTestAPI({
-    agentsProvider,
-    locksProvider,
+    agentsProvider: providers.agentsProvider,
+    locksProvider: providers.locksProvider,
     logMessages,
-    messagesProvider,
+    messagesProvider: providers.messagesProvider,
     storeManager,
   });
 }
@@ -92,32 +104,66 @@ export function deactivate(): void {
   log('Extension deactivating');
 }
 
-function registerTreeViews(
-  agentsProvider: Readonly<AgentsTreeProvider>,
-  locksProvider: Readonly<LocksTreeProvider>,
-  messagesProvider: Readonly<MessagesTreeProvider>,
-): void {
+interface Providers {
+  readonly agentsProvider: AgentsTreeProvider;
+  readonly locksProvider: LocksTreeProvider;
+  readonly messagesProvider: MessagesTreeProvider;
+}
+
+function createProviders(storeManager: StoreManager): Providers {
+  const agentsProvider: AgentsTreeProvider = new AgentsTreeProvider(storeManager);
+  const locksProvider: LocksTreeProvider = new LocksTreeProvider(storeManager);
+  const messagesProvider: MessagesTreeProvider = new MessagesTreeProvider(storeManager);
   vscode.window.createTreeView('tooManyCooksAgents', {
     showCollapseAll: true,
     treeDataProvider: agentsProvider,
   });
-  vscode.window.createTreeView('tooManyCooksLocks', {
-    treeDataProvider: locksProvider,
-  });
-  vscode.window.createTreeView('tooManyCooksMessages', {
-    treeDataProvider: messagesProvider,
-  });
+  vscode.window.createTreeView('tooManyCooksLocks', { treeDataProvider: locksProvider });
+  vscode.window.createTreeView('tooManyCooksMessages', { treeDataProvider: messagesProvider });
+  return { agentsProvider, locksProvider, messagesProvider };
+}
+
+async function autoConnectOnActivation(
+  pickerDeps: ConnectionPickerDeps,
+  storeManager: Readonly<StoreManager>,
+): Promise<void> {
+  try {
+    await restoreLastConnection(pickerDeps);
+    log('Auto-connect: restore attempted');
+  } catch (err: unknown) {
+    log(`Auto-connect restore FAILED: ${String(err)}`);
+  }
+  if (!storeManager.isConnected) {
+    try {
+      await storeManager.connect();
+      log('Auto-connect: SUCCESS');
+    } catch (err: unknown) {
+      log(`Auto-connect FAILED: ${String(err)}`);
+    }
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-function registerAllCommands(context: vscode.ExtensionContext, sm: Readonly<StoreManager>): void {
+function registerAllCommands(
+  context: vscode.ExtensionContext,
+  sm: Readonly<StoreManager>,
+  pickerDeps: ConnectionPickerDeps,
+): void {
+  context.subscriptions.push(registerChooseConnectionCommand(pickerDeps));
   context.subscriptions.push(registerConnectCommand(sm));
   context.subscriptions.push(registerDisconnectCommand(sm));
   context.subscriptions.push(registerRefreshCommand(sm));
   context.subscriptions.push(registerDashboardCommand(sm));
   context.subscriptions.push(registerDeleteLockCommand(sm));
-  context.subscriptions.push(registerDeleteAgentCommand(sm));
-  context.subscriptions.push(registerSendMessageCommand(sm));
+  context.subscriptions.push(registerDeleteAgentCommand(sm, log));
+  context.subscriptions.push(registerDeleteAllAgentsCommand(sm, log));
+  context.subscriptions.push(registerSendMessageCommand(sm, log));
+}
+
+function registerChooseConnectionCommand(deps: ConnectionPickerDeps): vscode.Disposable {
+  return vscode.commands.registerCommand('tooManyCooks.chooseConnection', async (): Promise<void> => {
+    await showConnectionPicker(deps);
+  });
 }
 
 function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
@@ -135,17 +181,10 @@ function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Di
 }
 
 function registerDisconnectCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
-  return vscode.commands.registerCommand('tooManyCooks.disconnect', (): void => {
+  return vscode.commands.registerCommand('tooManyCooks.disconnect', async (): Promise<void> => {
     const dialogs: DialogService = getDialogService();
     storeManager.disconnect();
-    dialogs.showInformationMessage('Disconnected from Too Many Cooks server').then(
-      (): void => {
-        // Resolved
-      },
-      (): void => {
-        // Rejected
-      },
-    );
+    await dialogs.showInformationMessage('Disconnected from Too Many Cooks server');
   });
 }
 
@@ -195,105 +234,4 @@ function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode
   );
 }
 
-function registerDeleteAgentCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.deleteAgent',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (item?: vscode.TreeItem): Promise<void> => {
-      const dialogs: DialogService = getDialogService();
-      const agentName: string | null = getAgentNameFromItem(item);
-      if (agentName === null) {
-        await dialogs.showErrorMessage('No agent selected');
-        return;
-      }
-      const confirm: string | undefined = await dialogs.showWarningMessage(
-        `Remove agent "${agentName}"? This will release all their locks.`,
-        { modal: true },
-        'Remove',
-      );
-      if (confirm !== 'Remove') { return; }
-      try {
-        await storeManager.deleteAgent(agentName);
-        log(`Removed agent: ${agentName}`);
-        await dialogs.showInformationMessage(`Agent removed: ${agentName}`);
-      } catch (err: unknown) {
-        log(`Failed to remove agent: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to remove agent: ${String(err)}`);
-      }
-    },
-  );
-}
 
-function registerSendMessageCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.sendMessage',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (item?: vscode.TreeItem): Promise<void> => {
-      await handleSendMessage(storeManager, item);
-    },
-  );
-}
-
-async function handleSendMessage(
-  storeManager: Readonly<StoreManager>,
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  item?: vscode.TreeItem,
-): Promise<void> {
-  const dialogs: DialogService = getDialogService();
-  const toAgent: string | null = await selectRecipient(storeManager, item);
-  if (toAgent === null) { return; }
-
-  const fromAgent: string | undefined = await dialogs.showQuickPick(
-    storeManager.state.agents.map(
-      (agent: Readonly<AgentIdentity>): string => { return agent.agentName; },
-    ),
-    { placeHolder: 'Send as which agent?' },
-  );
-  if (typeof fromAgent === 'undefined') { return; }
-
-  const content: string | undefined = await dialogs.showInputBox({
-    placeHolder: 'Enter your message...',
-    prompt: `Message to ${toAgent}`,
-  });
-  if (typeof content === 'undefined') { return; }
-
-  try {
-    await storeManager.sendMessage(fromAgent, toAgent, content);
-    let preview: string = content;
-    if (content.length > MESSAGE_PREVIEW_LENGTH) {
-      preview = `${content.substring(0, MESSAGE_PREVIEW_LENGTH)}...`;
-    }
-    await dialogs.showInformationMessage(`Message sent to ${toAgent}: "${preview}"`);
-    log(`Message sent from ${fromAgent} to ${toAgent}: ${content}`);
-  } catch (err: unknown) {
-    log(`Failed to send message: ${String(err)}`);
-    await dialogs.showErrorMessage(`Failed to send message: ${String(err)}`);
-  }
-}
-
-async function selectRecipient(
-  storeManager: Readonly<StoreManager>,
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  item?: vscode.TreeItem,
-): Promise<string | null> {
-  const fromItem: string | null = getAgentNameFromItem(item);
-  if (fromItem !== null) { return fromItem; }
-
-  const dialogs: DialogService = getDialogService();
-  if (!storeManager.isConnected) {
-    await dialogs.showErrorMessage('Not connected to server');
-    return null;
-  }
-  const agentNames: string[] = [
-    '* (broadcast to all)',
-    ...storeManager.state.agents.map(
-      (agent: Readonly<AgentIdentity>): string => { return agent.agentName; },
-    ),
-  ];
-  const picked: string | undefined = await dialogs.showQuickPick(agentNames, {
-    placeHolder: 'Select recipient agent',
-  });
-  if (typeof picked === 'undefined') { return null; }
-  if (picked === '* (broadcast to all)') { return '*'; }
-  return picked;
-}

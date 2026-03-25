@@ -44,8 +44,24 @@ const BAD_REQUEST_JSON: string =
 const SESSION_NOT_FOUND_JSON: string =
   '{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found"},"id":null}';
 
+const installProcessHandlers: (log: Logger) => void = (log: Logger): void => {
+  const shutdown: (signal: string) => void = (signal: string): void => {
+    log.info("Server shutting down", { signal });
+    process.exit(0);
+  };
+  process.on("SIGTERM", (): void => { shutdown("SIGTERM"); });
+  process.on("SIGINT", (): void => { shutdown("SIGINT"); });
+  process.on("uncaughtException", (err: Error): void => {
+    log.fatal("Uncaught exception", { error: String(err), stack: err.stack ?? "" });
+  });
+  process.on("unhandledRejection", (reason: unknown): void => {
+    log.fatal("Unhandled rejection", { error: String(reason) });
+  });
+};
+
 const main: () => Promise<void> = async (): Promise<void> => {
   const log: Logger = createLogger();
+  installProcessHandlers(log);
   log.info("Server starting...");
   try {
     await startServer(log);

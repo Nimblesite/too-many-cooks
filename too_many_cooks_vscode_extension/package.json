@@ -36,6 +36,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "tooManyCooks.chooseConnection",
+        "title": "Choose Connection Mode",
+        "category": "Too Many Cooks"
+      },
+      {
         "command": "tooManyCooks.connect",
         "title": "Connect to MCP Server",
         "category": "Too Many Cooks"
@@ -72,6 +77,12 @@
         "title": "Send Message",
         "category": "Too Many Cooks",
         "icon": "$(mail)"
+      },
+      {
+        "command": "tooManyCooks.deleteAllAgents",
+        "title": "Remove All Agents",
+        "category": "Too Many Cooks",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -104,6 +115,11 @@
         {
           "command": "tooManyCooks.refresh",
           "when": "view =~ /tooManyCooks.*/",
+          "group": "navigation"
+        },
+        {
+          "command": "tooManyCooks.deleteAllAgents",
+          "when": "view == tooManyCooksAgents",
           "group": "navigation"
         },
         {
@@ -147,6 +163,33 @@
           "type": "number",
           "default": 4040,
           "description": "Port the Too Many Cooks MCP server is listening on (set TMC_PORT on the server to match)"
+        },
+        "tooManyCooks.connectionMode": {
+          "type": "string",
+          "default": "local",
+          "enum": ["local", "cloud"],
+          "description": "Default connection mode: local (SQLite) or cloud (TMC Cloud)"
+        },
+        "tooManyCooks.cloudApiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "TMC Cloud API URL (e.g. https://your-project.supabase.co/functions/v1/tmc-api)"
+        },
+        "tooManyCooks.cloudWorkspaceId": {
+          "type": "string",
+          "default": "",
+          "description": "TMC Cloud workspace ID"
+        },
+        "tooManyCooks.cloudTransport": {
+          "type": "string",
+          "default": "stdio",
+          "enum": ["stdio", "http-streamable"],
+          "description": "MCP transport for cloud mode: stdio (each agent spawns own process) or http-streamable (shared server)"
+        },
+        "tooManyCooks.configureAgents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-configure detected AI agents (Claude Code, Cursor, Cline, Codex) with MCP server settings"
         }
       }
     }

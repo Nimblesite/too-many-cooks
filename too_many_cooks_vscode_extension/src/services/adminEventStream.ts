@@ -9,7 +9,9 @@ const MCP_VERSION: string = '2025-03-26';
 const CLIENT_NAME: string = 'too-many-cooks-vsix-admin';
 const CLIENT_VERSION: string = '1.0.0';
 const LOG_PREVIEW_LENGTH: number = 80;
-const RECONNECT_DELAY_MS: number = 200;
+const RECONNECT_BASE_DELAY_MS: number = 200;
+const RECONNECT_MAX_DELAY_MS: number = 30000;
+const BACKOFF_MULTIPLIER: number = 2;
 const SSE_ACCEPT: string = 'application/json, text/event-stream';
 const DATA_PREFIX: string = 'data: ';
 
@@ -111,7 +113,7 @@ async function connectAndRead(
   sessionId: string,
   outerSignal: AbortSignal,
   config: Readonly<AdminEventStreamConfig>,
-): Promise<void> {
+): Promise<boolean> {
   const innerController: AbortController = new AbortController();
   config.onInnerAbort?.(() => { innerController.abort(); });
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
@@ -122,14 +124,16 @@ async function connectAndRead(
       await fetchStream(sessionId, config.baseUrl, innerController.signal);
     if (body === null) {
       config.log('[AdminEventStream] Stream connect failed');
-      return;
+      return false;
     }
     await readEventStream(body, config.onEvent, config.log);
     config.log('[AdminEventStream] Event stream ended — will reconnect');
+    return true;
   } catch (err: unknown) {
     if (!innerController.signal.aborted) {
       config.log(`[AdminEventStream] Stream error: ${String(err)}`);
     }
+    return false;
   } finally {
     outerSignal.removeEventListener('abort', forwardAbort);
   }
@@ -140,12 +144,15 @@ async function reconnectLoop(
   outerSignal: AbortSignal,
   config: Readonly<AdminEventStreamConfig>,
 ): Promise<void> {
+  let currentDelay: number = RECONNECT_BASE_DELAY_MS;
   while (!outerSignal.aborted) {
-    await connectAndRead(sessionId, outerSignal, config);
-    config.log(`[AdminEventStream] Reconnecting in ${String(RECONNECT_DELAY_MS)}ms`);
-    await delayMs(RECONNECT_DELAY_MS, outerSignal);
-    // Sync state after reconnect to catch events missed while the stream was down.
-    // If disconnected, handleAdminEvent will swallow the resulting error.
+    const connected: boolean = await connectAndRead(sessionId, outerSignal, config);
+    currentDelay = connected
+      ? RECONNECT_BASE_DELAY_MS
+      : Math.min(currentDelay * BACKOFF_MULTIPLIER, RECONNECT_MAX_DELAY_MS);
+    config.log(`[AdminEventStream] Reconnecting in ${String(currentDelay)}ms`);
+    await delayMs(currentDelay, outerSignal);
+    // Sync state after delay to catch events missed while the stream was down.
     config.onEvent();
   }
   config.log('[AdminEventStream] Reconnect loop stopped (disconnected)');

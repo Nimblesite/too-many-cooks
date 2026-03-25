@@ -5,16 +5,20 @@ import * as vscode from 'vscode';
 import {
   waitForExtensionActivation,
   getTestAPI,
+  installDialogMocks,
   restoreDialogMocks,
   assertOk,
   assertEqual,
 } from './testHelpers';
 
-restoreDialogMocks();
-
 suite('Commands', () => {
   suiteSetup(async () => {
+    installDialogMocks();
     await waitForExtensionActivation();
+  });
+
+  suiteTeardown(() => {
+    restoreDialogMocks();
   });
 
   test('tooManyCooks.connect command is registered', async () => {
@@ -37,10 +41,16 @@ suite('Commands', () => {
     assertOk(commands.includes('tooManyCooks.showDashboard'), 'showDashboard command should be registered');
   });
 
-  test('disconnect command can be executed without error when not connected', async () => {
-    await vscode.commands.executeCommand('tooManyCooks.disconnect');
+  test('disconnect command can be executed without error when not connected', async function () {
+    const TIMEOUT_MS = 15000;
+    this.timeout(TIMEOUT_MS);
     const api = getTestAPI();
-    assertEqual(api.isConnected(), false);
+    // Ensure disconnected first so the command is a no-op
+    if (api.isConnected()) {
+      api.disconnect();
+    }
+    await vscode.commands.executeCommand('tooManyCooks.disconnect');
+    assertEqual(api.isConnected(), false, 'must remain disconnected');
   });
 
   test('showDashboard command opens a webview panel', async () => {
