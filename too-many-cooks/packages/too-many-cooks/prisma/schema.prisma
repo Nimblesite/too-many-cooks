@@ -14,9 +14,10 @@ model Identity {
   registeredAt BigInt  @map("registered_at")
   lastActive   BigInt  @map("last_active")
 
-  locks    Lock[]
-  messages Message[]
-  plans    Plan[]
+  locks        Lock[]
+  messages     Message[]
+  messageReads MessageRead[]
+  plans        Plan[]
 
   @@map("identity")
 }
@@ -42,10 +43,23 @@ model Message {
   createdAt BigInt  @map("created_at")
   readAt    BigInt? @map("read_at")
 
-  identity Identity @relation(fields: [fromAgent], references: [agentName], onDelete: Cascade)
+  identity     Identity      @relation(fields: [fromAgent], references: [agentName], onDelete: Cascade)
+  messageReads MessageRead[]
 
   @@index([toAgent, readAt, createdAt(sort: Desc)], map: "idx_messages_inbox")
   @@map("messages")
+}
+
+model MessageRead {
+  messageId String @map("message_id")
+  agentName String @map("agent_name")
+  readAt    BigInt @map("read_at")
+
+  message  Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  identity Identity @relation(fields: [agentName], references: [agentName], onDelete: Cascade)
+
+  @@id([messageId, agentName])
+  @@map("message_reads")
 }
 
 model Plan {

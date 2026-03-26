@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { applyMigrations, hasMigrationsDir, pushSchemaViaPrisma } from "./migrate.js";
+import { applyMigrations, pushSchemaViaPrisma } from "./migrate.js";
 
 import {
   type AgentIdentity,
@@ -55,6 +55,9 @@ const ACTIVE_TRUE: number = 1;
 
 /** Inactive flag value. */
 const ACTIVE_FALSE: number = 0;
+
+/** Broadcast recipient marker. */
+const BROADCAST_RECIPIENT: string = "*";
 
 /** SQLite-specific retryable errors. */
 const isSqliteRetryable: (err: string) => boolean = (err: string): boolean =>
@@ -116,6 +119,10 @@ export const createDb: (
   );
 };
 
+/** Error message when prisma cannot upgrade the DB. */
+const PRISMA_UPGRADE_FAILED_MSG: string =
+  "Prisma failed to upgrade the database. Delete the DB file and restart: ";
+
 /** Try to create and initialize the database. */
 const tryCreateDb: (
   config: TooManyCooksDataConfig,
@@ -134,12 +141,10 @@ const tryCreateDb: (
     }
   }
 
-  if (!hasMigrationsDir()) {
-    try {
-      pushSchemaViaPrisma(config.dbPath);
-    } catch (e: unknown) {
-      return error(`Failed to push schema via prisma: ${String(e)}`);
-    }
+  try {
+    pushSchemaViaPrisma(config.dbPath);
+  } catch (e: unknown) {
+    return error(`${PRISMA_UPGRADE_FAILED_MSG}${config.dbPath}\n${String(e)}`);
   }
 
   try {
@@ -596,7 +601,7 @@ const sendMessage: (
   }
 };
 
-/** Auto-mark fetched messages as read. */
+/** Auto-mark fetched messages as read. Direct messages update read_at; broadcasts insert into message_reads. */
 const autoMarkRead: (
   db: Database.Database,
   log: Logger,
@@ -608,24 +613,31 @@ const autoMarkRead: (
   agentName: string,
   messages: readonly Message[],
 ): void => {
-  const unreadIds: string[] = messages
-    .filter((msg: Message): boolean => msg.readAt === undefined)
-    .map((msg: Message): string => msg.id);
-  if (unreadIds.length === 0) {return;}
+  const unread: readonly Message[] = messages.filter(
+    (msg: Message): boolean => msg.readAt === undefined,
+  );
+  if (unread.length === 0) {return;}
 
   const timestamp: number = now();
   try {
-    const stmt: Database.Statement = db.prepare(
+    const directStmt: Database.Statement = db.prepare(
       "UPDATE messages SET read_at = ? WHERE id = ? AND to_agent = ? AND read_at IS NULL",
     );
-    for (const msgId of unreadIds) {
+    const broadcastStmt: Database.Statement = db.prepare(
+      "INSERT OR IGNORE INTO message_reads (message_id, agent_name, read_at) VALUES (?, ?, ?)",
+    );
+    for (const msg of unread) {
       try {
-        stmt.run(timestamp, msgId, agentName);
+        if (msg.toAgent === BROADCAST_RECIPIENT) {
+          broadcastStmt.run(msg.id, agentName, timestamp);
+        } else {
+          directStmt.run(timestamp, msg.id, agentName);
+        }
       } catch (innerErr: unknown) {
-        log.warn(`Failed to mark message ${msgId} as read: ${String(innerErr)}`);
+        log.warn(`Failed to mark message ${msg.id} as read: ${String(innerErr)}`);
       }
     }
-    log.debug(`Auto-marked ${String(unreadIds.length)} messages as read for ${agentName}`);
+    log.debug(`Auto-marked ${String(unread.length)} messages as read for ${agentName}`);
   } catch (e: unknown) {
     log.warn(`Failed to auto-mark messages read: ${String(e)}`);
   }
@@ -650,11 +662,18 @@ const getMessages: (
   if (!authResult.ok) {return authResult;}
 
   const sql: string = unreadOnly
-    ? "SELECT * FROM messages WHERE (to_agent = ? OR to_agent = '*') AND read_at IS NULL ORDER BY created_at DESC"
+    ? `SELECT m.* FROM messages m
+       WHERE (m.to_agent = ? AND m.read_at IS NULL)
+          OR (m.to_agent = '*'
+              AND NOT EXISTS (SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.agent_name = ?))
+       ORDER BY m.created_at DESC`
     : "SELECT * FROM messages WHERE (to_agent = ? OR to_agent = '*') ORDER BY created_at DESC";
   try {
     const stmt: Database.Statement = db.prepare(sql);
-    const rows: ReadonlyArray<Record<string, unknown>> = toRows(stmt.all(agentName));
+    const params: string[] = unreadOnly
+      ? [agentName, agentName]
+      : [agentName];
+    const rows: ReadonlyArray<Record<string, unknown>> = toRows(stmt.all(...params));
     const messageList: Message[] = rows.map(messageFromJson);
     autoMarkRead(db, log, agentName, messageList);
     return success(messageList);
@@ -682,13 +701,30 @@ const markRead: (
   if (!authResult.ok) {return authResult;}
 
   try {
-    const stmt: Database.Statement = db.prepare(
-      "UPDATE messages SET read_at = ? WHERE id = ? AND to_agent = ?",
+    const msg: Record<string, unknown> | undefined = toRow(
+      db.prepare("SELECT to_agent FROM messages WHERE id = ?").get(messageId),
     );
-    const result: Database.RunResult = stmt.run(now(), messageId, agentName);
-    return result.changes === 0
-      ? error({ code: ERR_NOT_FOUND, message: "Message not found" })
-      : success(undefined);
+    if (msg === undefined) {
+      return error({ code: ERR_NOT_FOUND, message: "Message not found" });
+    }
+    const toAgent: unknown = msg.to_agent;
+    if (typeof toAgent !== "string") {
+      return error({ code: ERR_DATABASE, message: "Invalid to_agent in message" });
+    }
+    const timestamp: number = now();
+    if (toAgent === BROADCAST_RECIPIENT) {
+      db.prepare(
+        "INSERT OR IGNORE INTO message_reads (message_id, agent_name, read_at) VALUES (?, ?, ?)",
+      ).run(messageId, agentName, timestamp);
+    } else {
+      const result: Database.RunResult = db.prepare(
+        "UPDATE messages SET read_at = ? WHERE id = ? AND to_agent = ?",
+      ).run(timestamp, messageId, agentName);
+      if (result.changes === 0) {
+        return error({ code: ERR_NOT_FOUND, message: "Message not found" });
+      }
+    }
+    return success(undefined);
   } catch (e: unknown) {
     return error({ code: ERR_DATABASE, message: String(e) });
   }
