@@ -51,3 +51,5 @@ codegen/.dart_tool/
 too-many-cooks/packages/cloud-proxy/coverage/
 
 .test-vsix-workspace/
+
+too-many-cooks/packages/too-many-cooks/logs/

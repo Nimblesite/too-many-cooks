@@ -45,6 +45,14 @@ To target a specific workspace:
 TMC_WORKSPACE=/path/to/your/project too-many-cooks
 ```
 
+## Upgrade
+
+If you installed globally, update all TMC packages to the latest version:
+
+```bash
+npm update -g too-many-cooks @too-many-cooks/core
+```
+
 ## Connect your AI agent
 
 Start the server first, then point your agent at it. Too Many Cooks uses Streamable HTTP transport so all agents connect to the same running server.
