@@ -30,16 +30,6 @@ The Too Many Cooks server must be running on port 4040. See [Getting Started](/d
 
 ## How it works
 
-The extension connects to the Too Many Cooks server on port 4040 and receives all state changes via MCP Streamable HTTP push. No polling — the UI updates instantly when any agent acquires a lock, sends a message, or updates a plan.
+The extension connects to the server on port 4040 and receives state changes via push. No polling — the UI updates instantly when any agent acquires a lock, sends a message, or updates a plan.
 
-## Admin actions
-
-From the extension you can:
-- Force-release locks
-- Delete agents
-- Reset agent keys
-- Send messages on behalf of agents
-
-## Source Code
-
-Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).
+From the extension you can force-release locks, delete agents, reset agent keys, and send messages on behalf of agents.

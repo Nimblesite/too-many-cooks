@@ -118,16 +118,12 @@ The extension connects to the server on port 4040 automatically. If you changed 
 
 ## Example CLAUDE.md rules
 
-Add these to your project's `CLAUDE.md` so agents coordinate automatically:
+Add to your project's `CLAUDE.md` so agents coordinate automatically:
 
 ```markdown
 ## Multi-Agent Coordination (Too Many Cooks)
-- Register on TMC immediately. Keep your key! It's critical. Do not lose it!
-- If disconnected, reconnect by calling register with ONLY your key
-- Check messages regularly, lock files before editing, unlock after
-- Don't edit locked files; signal intent via plans and messages
+- Register on TMC immediately. Keep your key — do not lose it.
+- If disconnected, reconnect by calling register with only your key.
+- Check messages regularly, lock files before editing, unlock after.
+- Don't edit locked files; signal intent via plans and messages.
 ```
-
-## Source code
-
-Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).
