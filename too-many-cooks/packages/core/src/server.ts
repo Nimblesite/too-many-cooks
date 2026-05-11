@@ -30,8 +30,10 @@ import type { CallToolResult, SessionIdentity, ToolCallback } from "./mcp-types.
 /** Server name constant. */
 const SERVER_NAME: string = "too-many-cooks";
 
-/** Server version constant. */
-const SERVER_VERSION: string = "0.1.0";
+/** Server version constant. Must match the package.json `version` of
+ * `packages/too-many-cooks` so the deploy-toolkit version check and the
+ * MCP `serverInfo.version` response agree on a single truth. */
+const SERVER_VERSION: string = "0.5.0";
 
 /** Log prefix for console output. */
 const LOG_PREFIX: string = "[TMC]";

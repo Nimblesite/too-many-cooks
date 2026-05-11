@@ -4,6 +4,34 @@
 /// Starts a single Express HTTP server on port 4040 with:
 /// - `/mcp` — MCP Streamable HTTP for agent connections
 /// - `/admin/*` — REST + Streamable HTTP for the VSCode extension
+///
+/// Implements the deploy-toolkit `--version` contract before anything else.
+
+{
+  const argv = process.argv.slice(2);
+  const wantsVersion = argv.includes("--version") || argv.includes("-V");
+  if (wantsVersion) {
+    const name = "too-many-cooks";
+    // Kept in sync with packages/too-many-cooks/package.json `version` and
+    // packages/core/src/server.ts SERVER_VERSION by the release pipeline.
+    const version = "0.5.0";
+    if (argv.includes("--json")) {
+      process.stdout.write(
+        `${JSON.stringify({
+          manifestVersion: 1,
+          name,
+          version,
+          kind: "mcp",
+          language: "typescript",
+          product: "too-many-cooks",
+        })}\n`,
+      );
+    } else {
+      process.stdout.write(`${name} ${version}\n`);
+    }
+    process.exit(0);
+  }
+}
 
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
