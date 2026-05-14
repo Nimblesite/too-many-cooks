@@ -13,6 +13,7 @@ jobs:
   build-mcp:
     name: Build npm Packages
     runs-on: ubuntu-latest
+    environment: NPM Deployment
     steps:
       - uses: actions/checkout@v4
 
@@ -65,14 +66,10 @@ jobs:
       - name: Publish too-many-cooks-core to npm
         working-directory: too-many-cooks/packages/core
         run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish too-many-cooks to npm
         working-directory: too-many-cooks/packages/too-many-cooks
         run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Pack core tarball
         working-directory: too-many-cooks/packages/core
