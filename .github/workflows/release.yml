@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
           cache-dependency-path: too-many-cooks/package-lock.json
@@ -85,7 +85,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
 
@@ -136,7 +136,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: website/package-lock.json
 

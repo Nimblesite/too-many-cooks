@@ -4,10 +4,37 @@
 /// Starts a single Express HTTP server on port 4040 with:
 /// - `/mcp` — MCP Streamable HTTP for agent connections
 /// - `/admin/*` — REST + Streamable HTTP for the VSCode extension
+///
+/// Implements the deploy-toolkit `--version` contract before anything else.
+
+{
+  const argv: string[] = process.argv.slice(2);
+  const wantsVersion: boolean = argv.includes("--version") || argv.includes("-V");
+  if (wantsVersion) {
+    const name: string = "too-many-cooks";
+    // Kept in sync with packages/too-many-cooks/package.json `version` and
+    // packages/core/src/server.ts SERVER_VERSION by the release pipeline.
+    const version: string = "0.5.0";
+    if (argv.includes("--json")) {
+      process.stdout.write(
+        `${JSON.stringify({
+          manifestVersion: 1,
+          name,
+          version,
+          kind: "mcp",
+          language: "typescript",
+          product: "too-many-cooks",
+        })}\n`,
+      );
+    } else {
+      process.stdout.write(`${name} ${version}\n`);
+    }
+    process.exit(0);
+  }
+}
 
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
-import fs from "node:fs";
 import net from "node:net";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -16,25 +43,18 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type AdminEventHub,
   type AgentEventHub,
-  LogLevel,
-  type LogMessage,
   type Logger,
   type TooManyCooksDb,
   createAdminEventHub,
   createAgentEventHub,
-  createLoggerWithContext,
-  createLoggingContext,
   createMcpServerForDb,
   defaultConfig,
   getServerPort,
-  getWorkspaceFolder,
-  logLevelName,
-  logTransport,
-  pathJoin,
   registerAdminRoutes,
 } from "too-many-cooks-core";
 
 import { createBackend } from "../src/backend.js";
+import { createLogger } from "./logger.js";
 
 /** JSON-RPC bad request error response. */
 const BAD_REQUEST_JSON: string =
@@ -424,55 +444,6 @@ const asyncHandler: (
     fn(req, res).catch((e: unknown): void => {
       log.error("Request error", { error: String(e) });
     });
-  }};
-
-const resolveLogFilePath: () => string = (): string => {
-  const logsDir: string = pathJoin([getWorkspaceFolder(), "logs"]);
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-  }
-  const timestamp: string = new Date()
-    .toISOString()
-    .replaceAll(":", "-")
-    .replaceAll(".", "-");
-  return pathJoin([logsDir, `mcp-server-${timestamp}.log`]);
-};
-
-const createLogger: () => Logger = (): Logger => {
-  const logFilePath: string = resolveLogFilePath();
-  return createLoggerWithContext(
-    createLoggingContext({
-      transports: [
-        logTransport(createConsoleTransport()),
-        logTransport(createFileTransport(logFilePath)),
-      ],
-      minimumLogLevel: LogLevel.DEBUG,
-    }),
-  );
-};
-
-const formatLogLine: (message: LogMessage) => string = (message: LogMessage): string => {
-  const level: string = logLevelName(message.logLevel);
-  const data: typeof message.structuredData = message.structuredData;
-  const dataStr: string =
-    data !== undefined && Object.keys(data).length > 0
-      ? ` ${JSON.stringify(data)}`
-      : "";
-  return `[TMC] [${message.timestamp.toISOString()}] [${level}] ${message.message}${dataStr}\n`;
-};
-
-const createConsoleTransport: () => (message: LogMessage, minimumLogLevel: LogLevel) => void =
-  (): ((message: LogMessage, minimumLogLevel: LogLevel) => void) =>
-  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
-    if (message.logLevel < minimumLogLevel) {return;}
-    console.error(formatLogLine(message).trimEnd());
-  }};
-
-const createFileTransport: (filePath: string) => (message: LogMessage, minimumLogLevel: LogLevel) => void =
-  (filePath: string): ((message: LogMessage, minimumLogLevel: LogLevel) => void) =>
-  {return (message: LogMessage, minimumLogLevel: LogLevel): void => {
-    if (message.logLevel < minimumLogLevel) {return;}
-    fs.appendFileSync(filePath, formatLogLine(message));
   }};
 
 main().catch((e: unknown): void => {

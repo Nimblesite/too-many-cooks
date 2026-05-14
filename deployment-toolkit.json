@@ -1,0 +1,39 @@
+{
+  "manifestVersion": 1,
+  "product": {
+    "id": "too-many-cooks",
+    "displayName": "Too Many Cooks",
+    "version": "0.5.0",
+    "repository": "https://github.com/Nimblesite/too-many-cooks"
+  },
+  "components": [
+    {
+      "id": "too-many-cooks-server",
+      "kind": "mcp",
+      "language": "typescript",
+      "binaryName": "too-many-cooks",
+      "expectedVersion": "${PRODUCT_VERSION}",
+      "platforms": ["all"],
+      "sources": ["env", "npm-global", "path"],
+      "env": { "pathVar": "TMC_SERVER_PATH" },
+      "npm": { "package": "too-many-cooks", "bin": "too-many-cooks" },
+      "verifyStartup": true,
+      "versionCheckStrategy": "version-flag",
+      "required": true
+    },
+    {
+      "id": "too-many-cooks-vscode",
+      "kind": "extension-vscode",
+      "language": "typescript",
+      "platforms": ["all"]
+    }
+  ],
+  "hosts": {
+    "vscode": {
+      "artifact": "vsix-fat",
+      "activationVerifies": ["too-many-cooks-server"],
+      "onMismatch": "error"
+    },
+    "cli": { "artifact": "archive" }
+  }
+}

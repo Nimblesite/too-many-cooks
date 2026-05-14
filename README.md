@@ -26,16 +26,6 @@ Set `TMC_WORKSPACE` to target a specific workspace folder (defaults to `process.
 - **Admin dashboard** - VSCode extension with tree views for agents, locks, messages, and plans
 - **Real-time push** - state changes delivered via MCP Streamable HTTP transport
 
-## Project Structure
-
-```
-too-many-cooks/                     # MCP server (TypeScript/Node.js)
-too_many_cooks_vscode_extension/    # VSCode extension (TypeScript)
-docs/                               # Specification
-website/                            # Documentation website (Eleventy)
-scripts/                            # Build/test scripts
-```
-
 ## Documentation
 
 See the [spec](docs/spec.md) for the full protocol specification.

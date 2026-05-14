@@ -15,7 +15,8 @@ Multi-agent coordination MCP server for AI agents editing the same codebase. Inc
 
 - Literals are illegal. Move all literals to named constants
 - NO DUPLICATION. search before adding, move don't copy
-- Databases MUST enforce referential integrity, but delete cascase is ok
+- Databases MUST enforce referential integrity, but delete cascade is ok
+- There is NO legacy DB support. If the DB schema is stale or corrupted, DELETE it and let the server recreate it from scratch. Do NOT write migration code for old schemas.
 - Functions < 20 lines, files < 500 LOC
 - No manual serialization or deserialization of JSON
 - Switch expressions/ternaries over if/else (except in declarative contexts)

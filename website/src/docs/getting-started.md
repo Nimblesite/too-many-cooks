@@ -45,6 +45,14 @@ To target a specific workspace:
 TMC_WORKSPACE=/path/to/your/project too-many-cooks
 ```
 
+## Upgrade
+
+If you installed globally, update all TMC packages to the latest version:
+
+```bash
+npm update -g too-many-cooks @too-many-cooks/core
+```
+
 ## Connect your AI agent
 
 Start the server first, then point your agent at it. Too Many Cooks uses Streamable HTTP transport so all agents connect to the same running server.
@@ -110,16 +118,12 @@ The extension connects to the server on port 4040 automatically. If you changed 
 
 ## Example CLAUDE.md rules
 
-Add these to your project's `CLAUDE.md` so agents coordinate automatically:
+Add to your project's `CLAUDE.md` so agents coordinate automatically:
 
 ```markdown
 ## Multi-Agent Coordination (Too Many Cooks)
-- Register on TMC immediately. Keep your key! It's critical. Do not lose it!
-- If disconnected, reconnect by calling register with ONLY your key
-- Check messages regularly, lock files before editing, unlock after
-- Don't edit locked files; signal intent via plans and messages
+- Register on TMC immediately. Keep your key — do not lose it.
+- If disconnected, reconnect by calling register with only your key.
+- Check messages regularly, lock files before editing, unlock after.
+- Don't edit locked files; signal intent via plans and messages.
 ```
-
-## Source code
-
-Available on [GitHub](https://github.com/MelbourneDeveloper/too-many-cooks).
