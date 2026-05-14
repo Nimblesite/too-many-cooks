@@ -44,9 +44,14 @@ jobs:
           test -f too-many-cooks/packages/core/build/index.js || (echo "Core build failed!" && exit 1)
           echo "Core package built successfully"
 
-      - name: Set version from tag
+      - name: Set version and npm tag from git tag
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NPM_TAG=latest
+          if [[ "$VERSION" == *-* ]]; then NPM_TAG=beta; fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "NPM_TAG=$NPM_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Stamp versions for publishing
         run: |
@@ -56,6 +61,18 @@ jobs:
           cd ../too-many-cooks
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           sed -i "s/\"too-many-cooks-core\": \"\\*\"/\"too-many-cooks-core\": \"^$VERSION\"/" package.json
+
+      - name: Publish too-many-cooks-core to npm
+        working-directory: too-many-cooks/packages/core
+        run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish too-many-cooks to npm
+        working-directory: too-many-cooks/packages/too-many-cooks
+        run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Pack core tarball
         working-directory: too-many-cooks/packages/core
