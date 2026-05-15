@@ -25,12 +25,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MelbourneDeveloper/dart_node.git"
+    "url": "git+https://github.com/Nimblesite/too-many-cooks.git"
   },
   "bugs": {
-    "url": "https://github.com/MelbourneDeveloper/dart_node/issues"
+    "url": "https://github.com/Nimblesite/too-many-cooks/issues"
   },
-  "homepage": "https://github.com/MelbourneDeveloper/dart_node/tree/main/examples/too-many-cooks#readme",
+  "homepage": "https://github.com/Nimblesite/too-many-cooks#readme",
   "engines": {
     "node": ">=18.0.0"
   },

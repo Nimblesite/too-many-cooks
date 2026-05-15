@@ -1,6 +1,6 @@
 # too-many-cooks-core
 
-Core types, tools, and interfaces for [Too Many Cooks](https://github.com/MelbourneDeveloper/too-many-cooks) multi-agent coordination.
+Core types, tools, and interfaces for [Too Many Cooks](https://github.com/Nimblesite/too-many-cooks) multi-agent coordination.
 
 ## Install
 
@@ -26,11 +26,10 @@ import { success, error } from "too-many-cooks-core";
 
 This package is used by:
 - [`too-many-cooks`](https://www.npmjs.com/package/too-many-cooks) - the MCP server
-- [`tmc-cloud`](https://github.com/MelbourneDeveloper/tmc-cloud) - the SaaS backend
 
 ## Documentation
 
-See the [spec](https://github.com/MelbourneDeveloper/too-many-cooks/blob/main/docs/spec.md) for the full protocol specification.
+See the [spec](https://github.com/Nimblesite/too-many-cooks/blob/main/docs/spec.md) for the full protocol specification.
 
 [tmc-mcp.dev](https://tmc-mcp.dev)
 

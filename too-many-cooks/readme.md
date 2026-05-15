@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/MelbourneDeveloper/too-many-cooks/main/website/src/assets/images/tmclogo.png" alt="Too Many Cooks" width="120">
+<img src="https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/tmclogo.png" alt="Too Many Cooks" width="120">
 
 <h1 style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;letter-spacing:-0.02em;color:#1a1a1a;">Too Many Cooks</h1>
 
@@ -260,7 +260,7 @@ No polling. The server pushes to every connected client in real-time.
 
 <h2 style="font-weight:700;letter-spacing:-0.02em;padding-bottom:0.5rem;border-bottom:2px solid #c46d3b;">VSCode Extension</h2>
 
-The companion [**Too Many Cooks VSCode extension**](https://github.com/MelbourneDeveloper/too-many-cooks) provides a live dashboard showing agents, file locks, messages, and plans. It connects to the same server on port 4040 automatically.
+The companion [**Too Many Cooks VSCode extension**](https://github.com/Nimblesite/too-many-cooks) provides a live dashboard showing agents, file locks, messages, and plans. It connects to the same server on port 4040 automatically.
 
 <br>
 

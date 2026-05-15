@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/MelbourneDeveloper/too-many-cooks/main/website/src/assets/images/tmclogo.png" alt="Too Many Cooks" width="120">
+<img src="https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/tmclogo.png" alt="Too Many Cooks" width="120">
 
 <h1 style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;letter-spacing:-0.02em;color:#1a1a1a;">Too Many Cooks — VSCode Extension</h1>
 
@@ -8,7 +8,7 @@
 Real-time dashboard for monitoring and managing multi-agent coordination.
 </p>
 
-[![Version](https://img.shields.io/badge/version-0.4.0-c46d3b)](https://github.com/MelbourneDeveloper/too-many-cooks)
+[![Version](https://img.shields.io/badge/version-0.4.0-c46d3b)](https://github.com/Nimblesite/too-many-cooks)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3b9b8f)](LICENSE)
 [![VSCode](https://img.shields.io/badge/vscode-%3E%3D1.85-1a1a1a)](https://code.visualstudio.com)
 

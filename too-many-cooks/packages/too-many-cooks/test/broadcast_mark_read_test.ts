@@ -1,5 +1,5 @@
 /// E2E test: broadcast messages can be marked read and stop reappearing.
-/// Regression test for https://github.com/MelbourneDeveloper/too-many-cooks/issues/7
+/// Regression test for https://github.com/Nimblesite/too-many-cooks/issues/7
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";

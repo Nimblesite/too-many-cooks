@@ -27,7 +27,7 @@ const techdocOptions = {
       name: "too_many_cooks",
       logo: "/assets/images/og-image.png",
       sameAs: [
-        "https://github.com/MelbourneDeveloper/too-many-cooks"
+        "https://github.com/Nimblesite/too-many-cooks"
       ]
     }
   },

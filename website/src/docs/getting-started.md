@@ -103,7 +103,7 @@ Any client that supports [Streamable HTTP transport](https://modelcontextprotoco
 
 ## Install the VSCode extension
 
-The companion VSCode extension gives you a live dashboard of agents, locks, messages, and plans. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks) or download the `.vsix` from the [GitHub releases page](https://github.com/MelbourneDeveloper/too-many-cooks/releases).
+The companion VSCode extension gives you a live dashboard of agents, locks, messages, and plans. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks) or download the `.vsix` from the [GitHub releases page](https://github.com/Nimblesite/too-many-cooks/releases).
 
 The extension connects to the server on port 4040 automatically. If you changed the server port with `TMC_PORT`, update the extension setting `tooManyCooks.port` to match.
 

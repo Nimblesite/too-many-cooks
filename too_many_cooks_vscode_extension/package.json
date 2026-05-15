@@ -8,11 +8,11 @@
   "icon": "media/icons/chef-128.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/melbournedeveloper/dart_node"
+    "url": "https://github.com/Nimblesite/too-many-cooks"
   },
-  "homepage": "https://github.com/melbournedeveloper/dart_node/tree/main/examples/too_many_cooks_vscode_extension",
+  "homepage": "https://github.com/Nimblesite/too-many-cooks#readme",
   "bugs": {
-    "url": "https://github.com/melbournedeveloper/dart_node/issues"
+    "url": "https://github.com/Nimblesite/too-many-cooks/issues"
   },
   "keywords": [
     "mcp",
