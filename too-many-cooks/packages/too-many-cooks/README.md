@@ -2,6 +2,8 @@
 
 Multi-agent coordination MCP server. Lets multiple AI agents safely edit the same codebase simultaneously using file locking, messaging, and shared plans.
 
+![Too Many Cooks VSCode Extension dashboard](https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/vsix-dashboard.png)
+
 ## Quick Start
 
 ```bash

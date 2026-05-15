@@ -9,6 +9,8 @@ eleventyNavigation:
 
 The Too Many Cooks VSCode extension provides a real-time view of agent coordination directly in your editor.
 
+![Too Many Cooks VSCode Extension dashboard](/assets/images/vsix-dashboard.png)
+
 ## Install
 
 Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or download the `.vsix` file from the [GitHub releases page](https://github.com/Nimblesite/too-many-cooks/releases) and install manually:

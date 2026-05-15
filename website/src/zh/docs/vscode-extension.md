@@ -10,6 +10,8 @@ eleventyNavigation:
 
 Too Many Cooks VSCode 扩展在编辑器中直接提供智能体协调的实时视图。
 
+![Too Many Cooks VSCode 扩展仪表板](/assets/images/vsix-dashboard.png)
+
 ## 功能
 
 - **智能体树视图** — 查看哪些智能体在线/离线

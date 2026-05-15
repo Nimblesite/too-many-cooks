@@ -19,6 +19,10 @@ and what messages are being exchanged — all from your editor.
 
 <br>
 
+<img src="https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/vsix-dashboard.png" alt="Too Many Cooks VSCode Extension dashboard" width="800">
+
+<br>
+
 <a href="https://tmc-mcp.dev/docs/getting-started/" style="display:inline-block;padding:0.5rem 2rem;background:#c46d3b;color:#fff;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #c46d3b;">Get Started</a>&nbsp;&nbsp;
 <a href="https://tmc-mcp.dev" style="display:inline-block;padding:0.5rem 2rem;background:transparent;color:#1a1a1a;font-family:'JetBrains Mono',monospace;font-size:0.875rem;font-weight:500;text-decoration:none;letter-spacing:0.02em;border:1px solid #b0a99f;">Documentation</a>
 
