@@ -53,3 +53,12 @@ too-many-cooks/packages/cloud-proxy/coverage/
 .test-vsix-workspace/
 
 too-many-cooks/packages/too-many-cooks/logs/
+
+
+
+too-many-cooks/packages/too-many-cooks/build
+too-many-cooks/packages/too-many-cooks/coverage
+.ghissues/
+
+
+logs/

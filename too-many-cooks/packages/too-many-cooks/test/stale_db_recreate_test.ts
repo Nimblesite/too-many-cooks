@@ -1,7 +1,8 @@
-/// E2E test: createDb with a stale DB tells the user to delete it.
+/// E2E test: createDb with a stale DB rebuilds it from scratch.
 ///
-/// If prisma cannot upgrade the DB, createDb must return an error
-/// that tells the user to delete the DB file and restart.
+/// When the embedded migrations cannot apply over an existing schema,
+/// db-sqlite.tryCreateDb deletes the DB file and re-runs migrations on
+/// a fresh DB. Existing data is lost — by design (CLAUDE.md: no legacy DB support).
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
@@ -44,17 +45,16 @@ describe("stale DB produces a clear error from createDb", () => {
     deleteIfExists(TEST_DB_PATH);
   });
 
-  it("createDb succeeds with stale DB because prisma upgrades it", async () => {
+  it("createDb rebuilds a stale DB from scratch", async () => {
     createStaleDb(TEST_DB_PATH);
 
     const config = createDataConfig({ dbPath: TEST_DB_PATH });
     const result = createDb(config);
 
-    // Prisma db push should upgrade the schema in dev
     assert.strictEqual(
       result.ok,
       true,
-      `createDb must succeed when prisma can upgrade, got: ${result.ok ? "" : result.error}`,
+      `createDb must succeed by nuking the stale DB, got: ${result.ok ? "" : result.error}`,
     );
 
     if (!result.ok) { return; }

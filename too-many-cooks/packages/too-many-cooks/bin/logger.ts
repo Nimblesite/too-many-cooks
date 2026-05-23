@@ -11,10 +11,11 @@ import {
   logLevelName,
   logTransport,
   pathJoin,
+  resolveLogsDir,
 } from "too-many-cooks-core";
 
 const resolveLogFilePath: () => string = (): string => {
-  const logsDir: string = pathJoin([getWorkspaceFolder(), "logs"]);
+  const logsDir: string = resolveLogsDir(getWorkspaceFolder());
   if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
   }

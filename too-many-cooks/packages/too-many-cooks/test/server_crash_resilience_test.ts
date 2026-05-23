@@ -111,7 +111,7 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
     await new Promise<void>((resolve) => setTimeout(resolve, EXIT_SETTLE_MS));
 
     // Read the log file
-    const logsDir = `${workspace}/logs`;
+    const logsDir = `${workspace}/.too_many_cooks/logs`;
     const logFiles = readdirSync(logsDir).filter(
       (f: string): boolean => f.startsWith("mcp-server-"),
     );

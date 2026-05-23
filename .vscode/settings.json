@@ -1,4 +1,5 @@
 {
+  "_agent_pmo": "74cf183",
   "nodejs-testing.enabled": true,
   "nodejs-testing.include": [
     "too-many-cooks/test/**/*_test.ts"
@@ -7,5 +8,11 @@
     "--import",
     "tsx"
   ],
-  "nodejs-testing.cwd": "${workspaceFolder}/too-many-cooks"
+  "nodejs-testing.cwd": "${workspaceFolder}/too-many-cooks",
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#c46d3b",
+    "titleBar.activeForeground": "#ffffff",
+    "titleBar.inactiveBackground": "#a35a2e",
+    "titleBar.inactiveForeground": "#ffffffcc"
+  }
 }

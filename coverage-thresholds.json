@@ -1,0 +1,16 @@
+{
+  "_agent_pmo": "74cf183",
+  "_doc": "Single source of truth for code coverage thresholds. See REPO-STANDARDS-SPEC [COVERAGE-THRESHOLDS-JSON]. NO GitHub repo variables. NO env vars. NO public `make coverage-check` target. Read by the internal `_coverage_check` recipe inside `make test`. `make test` exits non-zero if measured coverage < threshold. Ratchet UP only.",
+  "default_threshold": 80,
+  "projects": {
+    "too-many-cooks": {
+      "threshold": 80
+    },
+    "too_many_cooks_vscode_extension": {
+      "threshold": 80
+    },
+    "website": {
+      "threshold": 80
+    }
+  }
+}

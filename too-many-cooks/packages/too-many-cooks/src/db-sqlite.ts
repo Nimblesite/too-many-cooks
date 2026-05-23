@@ -3,10 +3,10 @@
 
 import Database from "better-sqlite3";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { applyMigrations, pushSchemaViaPrisma } from "./migrate.js";
+import { applyMigrations } from "./migrate.js";
 
 import {
   type AgentIdentity,
@@ -119,11 +119,31 @@ export const createDb: (
   );
 };
 
-/** Error message when prisma cannot upgrade the DB. */
-const PRISMA_UPGRADE_FAILED_MSG: string =
-  "Prisma failed to upgrade the database. Delete the DB file and restart: ";
+/** Apply Prisma migrations and open the DB. Closes the handle on failure so the file can be unlinked. */
+const openAndInit: (
+  config: TooManyCooksDataConfig,
+  log: Logger,
+) => Result<TooManyCooksDb, string> = (
+  config: TooManyCooksDataConfig,
+  log: Logger,
+): Result<TooManyCooksDb, string> => {
+  try {
+    applyMigrations(config.dbPath);
+  } catch (e: unknown) {
+    return error(`Prisma migrate deploy failed: ${String(e)}`);
+  }
+  let db: Database.Database;
+  try {
+    db = new Database(config.dbPath);
+    db.pragma("foreign_keys = ON");
+  } catch (e: unknown) {
+    return error(`Failed to open database: ${String(e)}`);
+  }
+  log.debug("Schema applied via prisma migrate deploy");
+  return success(createDbOps(db, config, log));
+};
 
-/** Try to create and initialize the database. */
+/** Try to create and initialize the database. If migration fails on an existing DB, blow it away and retry once. */
 const tryCreateDb: (
   config: TooManyCooksDataConfig,
   log: Logger,
@@ -141,41 +161,16 @@ const tryCreateDb: (
     }
   }
 
-  try {
-    pushSchemaViaPrisma(config.dbPath);
-  } catch (e: unknown) {
-    return error(`${PRISMA_UPGRADE_FAILED_MSG}${config.dbPath}\n${String(e)}`);
-  }
+  const first: Result<TooManyCooksDb, string> = openAndInit(config, log);
+  if (first.ok) { return first; }
 
+  log.warn(`Schema init failed: ${first.error}. Deleting DB file and starting fresh.`);
   try {
-    const db: Database.Database = new Database(config.dbPath);
-    db.pragma("foreign_keys = ON");
-    return initSchema(db, log, config);
+    if (existsSync(config.dbPath)) { unlinkSync(config.dbPath); }
   } catch (e: unknown) {
-    return error(`Failed to open database: ${String(e)}`);
+    return error(`Failed to delete corrupt DB at ${config.dbPath}: ${String(e)}`);
   }
-};
-
-/** Initialize database schema. */
-const initSchema: (
-  db: Database.Database,
-  log: Logger,
-  config: TooManyCooksDataConfig,
-) => Result<TooManyCooksDb, string> = (
-  db: Database.Database,
-  log: Logger,
-  config: TooManyCooksDataConfig,
-): Result<TooManyCooksDb, string> => {
-  log.debug("Initializing database schema");
-  try {
-    applyMigrations(db);
-    log.debug("Schema initialized successfully");
-    return success(createDbOps(db, config, log));
-  } catch (e: unknown) {
-    const msg: string = String(e);
-    log.error(`Schema initialization failed: ${msg}`);
-    return error(msg);
-  }
+  return openAndInit(config, log);
 };
 
 /** Authenticate agent and update last_active timestamp. */
