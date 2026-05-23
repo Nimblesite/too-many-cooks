@@ -8,6 +8,12 @@
   "bin": {
     "too-many-cooks": "build/bin/server.js"
   },
+  "files": [
+    "build",
+    "prisma",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node build/bin/server.js",
