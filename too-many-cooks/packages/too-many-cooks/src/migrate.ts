@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type Database from "better-sqlite3";
 
+import type { Migration } from "./migrations.gen.js";
 import { MIGRATIONS } from "./migrations.gen.js";
 
 /** SQL to create Prisma's migration tracking table. */
@@ -46,8 +47,10 @@ const recordMigration: (db: Database.Database, name: string, sql: string) => voi
  *  Callers (db-sqlite.tryCreateDb) recover by deleting the DB file and retrying. */
 export const applyMigrations: (db: Database.Database) => void = (db: Database.Database): void => {
   db.exec(CREATE_MIGRATIONS_TABLE);
-  for (const { name, sql } of MIGRATIONS) {
-    if (isApplied(db, name)) { continue; }
+  const pending: readonly Migration[] = MIGRATIONS.filter(
+    ({ name }: Migration): boolean => !isApplied(db, name),
+  );
+  for (const { name, sql } of pending) {
     db.exec(sql);
     recordMigration(db, name, sql);
   }
