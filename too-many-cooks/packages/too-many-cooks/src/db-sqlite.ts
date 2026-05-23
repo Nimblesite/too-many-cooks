@@ -3,10 +3,10 @@
 
 import Database from "better-sqlite3";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { applyMigrations, pushSchemaViaPrisma } from "./migrate.js";
+import { applyMigrations } from "./migrate.js";
 
 import {
   type AgentIdentity,
@@ -119,11 +119,29 @@ export const createDb: (
   );
 };
 
-/** Error message when prisma cannot upgrade the DB. */
-const PRISMA_UPGRADE_FAILED_MSG: string =
-  "Prisma failed to upgrade the database. Delete the DB file and restart: ";
+/** Open the DB and apply embedded migrations. Closes the handle on failure so the file can be unlinked. */
+const openAndInit: (
+  config: TooManyCooksDataConfig,
+  log: Logger,
+) => Result<TooManyCooksDb, string> = (
+  config: TooManyCooksDataConfig,
+  log: Logger,
+): Result<TooManyCooksDb, string> => {
+  let db: Database.Database;
+  try {
+    db = new Database(config.dbPath);
+    db.pragma("foreign_keys = ON");
+  } catch (e: unknown) {
+    return error(`Failed to open database: ${String(e)}`);
+  }
+  const result: Result<TooManyCooksDb, string> = initSchema(db, log, config);
+  if (!result.ok) {
+    try { db.close(); } catch { /* best effort */ }
+  }
+  return result;
+};
 
-/** Try to create and initialize the database. */
+/** Try to create and initialize the database. If migration fails on an existing DB, blow it away and retry once. */
 const tryCreateDb: (
   config: TooManyCooksDataConfig,
   log: Logger,
@@ -141,19 +159,16 @@ const tryCreateDb: (
     }
   }
 
-  try {
-    pushSchemaViaPrisma(config.dbPath);
-  } catch (e: unknown) {
-    return error(`${PRISMA_UPGRADE_FAILED_MSG}${config.dbPath}\n${String(e)}`);
-  }
+  const first: Result<TooManyCooksDb, string> = openAndInit(config, log);
+  if (first.ok) { return first; }
 
+  log.warn(`Schema init failed: ${first.error}. Deleting DB file and starting fresh.`);
   try {
-    const db: Database.Database = new Database(config.dbPath);
-    db.pragma("foreign_keys = ON");
-    return initSchema(db, log, config);
+    if (existsSync(config.dbPath)) { unlinkSync(config.dbPath); }
   } catch (e: unknown) {
-    return error(`Failed to open database: ${String(e)}`);
+    return error(`Failed to delete corrupt DB at ${config.dbPath}: ${String(e)}`);
   }
+  return openAndInit(config, log);
 };
 
 /** Initialize database schema. */
