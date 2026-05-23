@@ -119,7 +119,7 @@ export const createDb: (
   );
 };
 
-/** Open the DB and apply embedded migrations. Closes the handle on failure so the file can be unlinked. */
+/** Apply Prisma migrations and open the DB. Closes the handle on failure so the file can be unlinked. */
 const openAndInit: (
   config: TooManyCooksDataConfig,
   log: Logger,
@@ -127,6 +127,11 @@ const openAndInit: (
   config: TooManyCooksDataConfig,
   log: Logger,
 ): Result<TooManyCooksDb, string> => {
+  try {
+    applyMigrations(config.dbPath);
+  } catch (e: unknown) {
+    return error(`Prisma migrate deploy failed: ${String(e)}`);
+  }
   let db: Database.Database;
   try {
     db = new Database(config.dbPath);
@@ -134,11 +139,8 @@ const openAndInit: (
   } catch (e: unknown) {
     return error(`Failed to open database: ${String(e)}`);
   }
-  const result: Result<TooManyCooksDb, string> = initSchema(db, log, config);
-  if (!result.ok) {
-    try { db.close(); } catch { /* best effort */ }
-  }
-  return result;
+  log.debug("Schema applied via prisma migrate deploy");
+  return success(createDbOps(db, config, log));
 };
 
 /** Try to create and initialize the database. If migration fails on an existing DB, blow it away and retry once. */
@@ -169,28 +171,6 @@ const tryCreateDb: (
     return error(`Failed to delete corrupt DB at ${config.dbPath}: ${String(e)}`);
   }
   return openAndInit(config, log);
-};
-
-/** Initialize database schema. */
-const initSchema: (
-  db: Database.Database,
-  log: Logger,
-  config: TooManyCooksDataConfig,
-) => Result<TooManyCooksDb, string> = (
-  db: Database.Database,
-  log: Logger,
-  config: TooManyCooksDataConfig,
-): Result<TooManyCooksDb, string> => {
-  log.debug("Initializing database schema");
-  try {
-    applyMigrations(db);
-    log.debug("Schema initialized successfully");
-    return success(createDbOps(db, config, log));
-  } catch (e: unknown) {
-    const msg: string = String(e);
-    log.error(`Schema initialization failed: ${msg}`);
-    return error(msg);
-  }
 };
 
 /** Authenticate agent and update last_active timestamp. */
