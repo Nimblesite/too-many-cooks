@@ -1,7 +1,8 @@
-/// Applies Prisma migrations to a SQLite database via `prisma migrate deploy`.
-/// Migrations live in prisma/migrations/ and ship with the published package
-/// (see package.json "files"). No raw SQL execution from this module — Prisma's
-/// migration engine owns schema application end-to-end (CLAUDE.md: PRISMA ONLY).
+/// Applies the Prisma schema to a SQLite database via `prisma db push`.
+/// `db push` diffs schema.prisma against the live DB and patches drift —
+/// missing tables/columns/indexes get added without needing migration history.
+/// That's why we use Prisma: schema repair from a single source of truth.
+/// No raw SQL execution from this module (CLAUDE.md: PRISMA ONLY).
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -26,17 +27,20 @@ const findPackageDir: () => string = (): string => {
   return found;
 };
 
-/** Apply all pending Prisma migrations to the SQLite database at `dbPath`.
- *  Delegates to `prisma migrate deploy`, which uses Prisma's migration engine
- *  to apply migrations from prisma/migrations/ transactionally.
- *  Throws on any failure. Callers (db-sqlite.tryCreateDb) recover by deleting
- *  the DB file and retrying. */
+/** Sync the SQLite database at `dbPath` to match `prisma/schema.prisma`.
+ *  Delegates to `prisma db push --accept-data-loss`, which patches schema
+ *  drift (missing tables, missing columns, etc.) without needing migration
+ *  history. `--accept-data-loss` is required because dropping/retyping a
+ *  column is a destructive op; this codebase treats stale schemas as
+ *  disposable (CLAUDE.md: no legacy DB support).
+ *  Throws on any failure. Callers (db-sqlite.tryCreateDb) recover by
+ *  deleting the DB file and retrying. */
 export const applyMigrations: (dbPath: string) => void = (dbPath: string): void => {
   const pkgDir: string = findPackageDir();
   const schemaPath: string = `${pkgDir}/${SCHEMA_REL}`;
   execFileSync(
     "npx",
-    ["prisma", "migrate", "deploy", `--schema=${schemaPath}`],
+    ["prisma", "db", "push", "--accept-data-loss", `--schema=${schemaPath}`],
     {
       cwd: pkgDir,
       env: { ...process.env, DATABASE_URL: resolve(dbPath) },
