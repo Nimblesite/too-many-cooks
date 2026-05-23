@@ -89,12 +89,12 @@ describe("Log directory creation", () => {
     );
   });
 
-  it("logs/ directory is created in workspace on startup", () => {
-    const logsDir = join(tmpWorkspace, "logs");
+  it(".too_many_cooks/logs/ directory is created alongside the DB on startup", () => {
+    const logsDir = join(tmpWorkspace, ".too_many_cooks", "logs");
     assert.strictEqual(
       existsSync(logsDir),
       true,
-      "logs/ directory must be created in TMC_WORKSPACE on startup",
+      ".too_many_cooks/logs/ directory must be created in TMC_WORKSPACE on startup",
     );
   });
 });
