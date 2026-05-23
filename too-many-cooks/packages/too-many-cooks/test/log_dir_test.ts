@@ -1,8 +1,8 @@
 /// Regression test: server must not crash when writing to the log file
-/// in a workspace whose logs/ directory does not yet exist.
+/// in a workspace whose .too_many_cooks/logs/ directory does not yet exist.
 ///
 /// Reproduces: ENOENT crash on appendFileSync when TMC_WORKSPACE points
-/// to a directory that has never had a logs/ subdirectory created.
+/// to a directory that has never had the logs subdirectory created.
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert";

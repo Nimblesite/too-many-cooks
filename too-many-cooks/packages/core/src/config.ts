@@ -19,6 +19,10 @@ export type TooManyCooksDataConfig = {
 export const resolveDbPath: (workspaceFolder: string) => string = (workspaceFolder: string): string =>
   {return `${workspaceFolder}/.too_many_cooks/data.db`};
 
+/** Resolve logs directory for a workspace folder (co-located with the DB). */
+export const resolveLogsDir: (workspaceFolder: string) => string = (workspaceFolder: string): string =>
+  {return `${workspaceFolder}/.too_many_cooks/logs`};
+
 /** Default lock timeout in milliseconds (10 minutes). */
 export const DEFAULT_LOCK_TIMEOUT_MS: number = 600000;
 
