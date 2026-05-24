@@ -9,7 +9,6 @@ import {
   type ServerBundle,
   type TooManyCooksDataConfig,
   type TooManyCooksDb,
-  createConsoleLogger,
   createLoggerWithContext,
   createLoggingContext,
   createMcpServerForDb,
