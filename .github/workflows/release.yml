@@ -25,6 +25,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: too-many-cooks/package-lock.json
 
+      - name: Upgrade npm to >= 11.5 (Trusted Publisher OIDC auth)
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         working-directory: too-many-cooks
         run: npm ci
