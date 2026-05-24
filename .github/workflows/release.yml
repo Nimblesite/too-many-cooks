@@ -129,13 +129,13 @@ jobs:
       - name: Publish VSIX to VS Code Marketplace
         working-directory: too_many_cooks_vscode_extension
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSCE_PAT: ${{ secrets.VSCODE_MARKETPLACE_PAT }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
-            echo "::warning::VSCE_PAT secret not set — skipping VS Code Marketplace publish. Add it under repo Settings → Secrets and variables → Actions to enable."
-            exit 0
+            echo "::error::VSCODE_MARKETPLACE_PAT not accessible. If it exists at the Nimblesite org level, add too-many-cooks to its allowed repositories under Org Settings → Secrets and variables → Actions."
+            exit 1
           fi
-          npx vsce publish --packagePath too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix --pat "$VSCE_PAT"
+          npx --yes @vscode/vsce publish --packagePath too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
 
       - name: Upload VSIX as release asset
         uses: softprops/action-gh-release@v2
