@@ -9,7 +9,8 @@ import {
   type ServerBundle,
   type TooManyCooksDataConfig,
   type TooManyCooksDb,
-  createConsoleLogger,
+  createLoggerWithContext,
+  createLoggingContext,
   createMcpServerForDb,
   defaultConfig,
   error,
@@ -24,6 +25,14 @@ export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "to
 /** Type alias for the return of createMcpServerForDb. */
 type McpServerResult = ReturnType<typeof createMcpServerForDb>;
 
+/** Silent default logger.
+ *  `createTooManyCooksServer` is a library function — its failures travel
+ *  back to the caller through the `Result<ServerBundle, string>` return type.
+ *  Spraying diagnostics at stdio behind the caller's back hides errors in
+ *  CI test output and pollutes structured log pipelines. Callers that want
+ *  output pass their own logger (the bin does). */
+const silentLogger: Logger = createLoggerWithContext(createLoggingContext());
+
 /** Create the Too Many Cooks MCP server (backend chosen by env vars). */
 export const createTooManyCooksServer: (
   config?: TooManyCooksDataConfig,
@@ -33,7 +42,7 @@ export const createTooManyCooksServer: (
   logger?: Logger,
 ): Result<ServerBundle, string> => {
   const cfg: TooManyCooksDataConfig = config ?? defaultConfig;
-  const log: Logger = logger ?? createConsoleLogger();
+  const log: Logger = logger ?? silentLogger;
   log.info("Creating Too Many Cooks server");
 
   const dbResult: Result<TooManyCooksDb, string> = createBackend(cfg, log);
