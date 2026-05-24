@@ -126,6 +126,17 @@ jobs:
           npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
           npx vsce package --no-git-tag-version ${{ steps.version.outputs.VERSION }}
 
+      - name: Publish VSIX to VS Code Marketplace
+        working-directory: too_many_cooks_vscode_extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::warning::VSCE_PAT secret not set — skipping VS Code Marketplace publish. Add it under repo Settings → Secrets and variables → Actions to enable."
+            exit 0
+          fi
+          npx vsce publish --packagePath too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix --pat "$VSCE_PAT"
+
       - name: Upload VSIX as release asset
         uses: softprops/action-gh-release@v2
         with:
