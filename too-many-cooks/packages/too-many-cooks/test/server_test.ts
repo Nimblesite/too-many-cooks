@@ -52,7 +52,7 @@ describe("createTooManyCooksServer", () => {
       const leaked: readonly string[] = captured
         .split("\n")
         .map((s: string): string => s.trim())
-        .filter((s: string): boolean => /\[(ERROR|FATAL)\]/.test(s));
+        .filter((s: string): boolean => /\[(?:ERROR|FATAL)\]/u.test(s));
       assert.deepStrictEqual(
         leaked,
         [],
