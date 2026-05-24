@@ -33,6 +33,10 @@ const findPackageDir: () => string = (): string => {
  *  history. `--accept-data-loss` is required because dropping/retyping a
  *  column is a destructive op; this codebase treats stale schemas as
  *  disposable (CLAUDE.md: no legacy DB support).
+ *  The DB URL is passed via `--url` because schema.prisma intentionally has
+ *  no `url = env(...)` line — Prisma 7 demands the URL come from either a
+ *  prisma.config.ts file or the CLI flag, and we ship neither in the
+ *  published package.
  *  Throws on any failure. Callers (db-sqlite.tryCreateDb) recover by
  *  deleting the DB file and retrying. */
 export const applyMigrations: (dbPath: string) => void = (dbPath: string): void => {
@@ -40,10 +44,16 @@ export const applyMigrations: (dbPath: string) => void = (dbPath: string): void 
   const schemaPath: string = `${pkgDir}/${SCHEMA_REL}`;
   execFileSync(
     "npx",
-    ["prisma", "db", "push", "--accept-data-loss", `--schema=${schemaPath}`],
+    [
+      "prisma",
+      "db",
+      "push",
+      "--accept-data-loss",
+      `--schema=${schemaPath}`,
+      `--url=file:${resolve(dbPath)}`,
+    ],
     {
       cwd: pkgDir,
-      env: { ...process.env, DATABASE_URL: resolve(dbPath) },
       stdio: "pipe",
     },
   );
