@@ -14,6 +14,11 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nimblesite/too-many-cooks",
+    "directory": "too-many-cooks/packages/too-many-cooks"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node build/bin/server.js",
