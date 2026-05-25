@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "too-many-cooks-core": "*",
-    "better-sqlite3": "^12.5.0",
+    "better-sqlite3": "^12.10.0",
     "prisma": "^7.5.0"
   },
   "devDependencies": {

@@ -121,10 +121,24 @@ const packTarball = (): string => {
 
 const installTarball = (tarball: string): string => {
   const dir: string = mkdtempSync(join(tmpdir(), INSTALL_PREFIX));
+  // Isolated npm cache so the resolver MUST go to the registry. With the
+  // shared system cache, `--prefer-offline` (or even default behaviour after
+  // a stale cache) can resurrect old transitive versions whose native
+  // prebuilds don't match the current Node ABI — that's the failure mode
+  // that bit `npx too-many-cooks` in the wild. A fresh cache reproduces a
+  // first-time user's resolve.
+  const cacheDir: string = mkdtempSync(join(tmpdir(), "tmc-pubpkg-cache-"));
   execFileSync("npm", ["init", "-y"], { cwd: dir, stdio: "pipe" });
   execFileSync(
     "npm",
-    ["install", "--no-audit", "--no-fund", "--prefer-offline", tarball],
+    [
+      "install",
+      "--no-audit",
+      "--no-fund",
+      "--prefer-online",
+      `--cache=${cacheDir}`,
+      tarball,
+    ],
     { cwd: dir, stdio: "pipe" },
   );
   return dir;
