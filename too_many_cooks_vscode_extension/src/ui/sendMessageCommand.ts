@@ -17,21 +17,50 @@ export function registerSendMessageCommand(
   return vscode.commands.registerCommand(
     'tooManyCooks.sendMessage',
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (item?: vscode.TreeItem): Promise<void> => {
-      await handleSendMessage(storeManager, logFn, item);
+    async (item?: vscode.TreeItem, selection?: readonly vscode.TreeItem[]): Promise<void> => {
+      await handleSendMessage(storeManager, logFn, { item, selection });
     },
   );
+}
+
+interface SendInvocation {
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  readonly item: vscode.TreeItem | undefined;
+  readonly selection: readonly vscode.TreeItem[] | undefined;
+}
+
+interface DeliverArgs {
+  readonly content: string;
+  readonly fromAgent: string;
+  readonly recipients: readonly string[];
+  readonly storeManager: Readonly<StoreManager>;
+}
+
+function pickItems(invocation: Readonly<SendInvocation>): readonly vscode.TreeItem[] {
+  const { item, selection }: Readonly<SendInvocation> = invocation;
+  if (typeof selection !== 'undefined' && selection.length > 0) { return selection; }
+  if (typeof item === 'undefined') { return []; }
+  return [item];
+}
+
+function collectRecipients(invocation: Readonly<SendInvocation>): readonly string[] {
+  const source: readonly vscode.TreeItem[] = pickItems(invocation);
+  const names: string[] = [];
+  for (const candidate of source) {
+    const name: string | null = getAgentNameFromItem(candidate);
+    if (name !== null && !names.includes(name)) { names.push(name); }
+  }
+  return names;
 }
 
 async function handleSendMessage(
   storeManager: Readonly<StoreManager>,
   logFn: (message: string) => void,
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  item?: vscode.TreeItem,
+  invocation: Readonly<SendInvocation>,
 ): Promise<void> {
   const dialogs: DialogService = getDialogService();
-  const toAgent: string | null = await selectRecipient(storeManager, item);
-  if (toAgent === null) { return; }
+  const recipients: readonly string[] = await selectRecipients(storeManager, invocation);
+  if (recipients.length === 0) { return; }
 
   const fromAgent: string | undefined = await dialogs.showQuickPick(
     storeManager.state.agents.map(
@@ -41,23 +70,49 @@ async function handleSendMessage(
   );
   if (typeof fromAgent === 'undefined') { return; }
 
+  const targetsLabel: string = recipients.join(', ');
   const content: string | undefined = await dialogs.showInputBox({
     placeHolder: 'Enter your message...',
-    prompt: `Message to ${toAgent}`,
+    prompt: `Message to ${targetsLabel}`,
   });
   if (typeof content === 'undefined') { return; }
 
-  try {
-    await storeManager.sendMessage(fromAgent, toAgent, content);
-    const preview: string = content.length > MESSAGE_PREVIEW_LENGTH
-      ? `${content.substring(0, MESSAGE_PREVIEW_LENGTH)}...`
-      : content;
-    await dialogs.showInformationMessage(`Message sent to ${toAgent}: "${preview}"`);
-    logFn(`Message sent from ${fromAgent} to ${toAgent}: ${content}`);
-  } catch (err: unknown) {
-    logFn(`Failed to send message: ${String(err)}`);
-    await dialogs.showErrorMessage(`Failed to send message: ${String(err)}`);
+  await deliverMessages(logFn, { content, fromAgent, recipients, storeManager });
+}
+
+async function deliverMessages(
+  logFn: (message: string) => void,
+  args: Readonly<DeliverArgs>,
+): Promise<void> {
+  const dialogs: DialogService = getDialogService();
+  const { content, fromAgent, recipients, storeManager }: Readonly<DeliverArgs> = args;
+  const preview: string = content.length > MESSAGE_PREVIEW_LENGTH
+    ? `${content.substring(0, MESSAGE_PREVIEW_LENGTH)}...`
+    : content;
+  for (const toAgent of recipients) {
+    try {
+      await storeManager.sendMessage(fromAgent, toAgent, content);
+      logFn(`Message sent from ${fromAgent} to ${toAgent}: ${content}`);
+    } catch (err: unknown) {
+      logFn(`Failed to send message to ${toAgent}: ${String(err)}`);
+      await dialogs.showErrorMessage(`Failed to send message to ${toAgent}: ${String(err)}`);
+      return;
+    }
   }
+  await dialogs.showInformationMessage(
+    `Message sent to ${String(recipients.length)} recipient(s): "${preview}"`,
+  );
+}
+
+async function selectRecipients(
+  storeManager: Readonly<StoreManager>,
+  invocation: Readonly<SendInvocation>,
+): Promise<readonly string[]> {
+  const fromSelection: readonly string[] = collectRecipients(invocation);
+  if (fromSelection.length > 0) { return fromSelection; }
+
+  const fallback: string | null = await selectRecipient(storeManager, invocation.item);
+  return fallback === null ? [] : [fallback];
 }
 
 async function selectRecipient(

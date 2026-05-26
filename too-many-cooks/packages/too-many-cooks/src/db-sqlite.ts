@@ -56,8 +56,23 @@ const ACTIVE_TRUE: number = 1;
 /** Inactive flag value. */
 const ACTIVE_FALSE: number = 0;
 
-/** Broadcast recipient marker. */
+/** Broadcast recipient marker. Also the reserved agent_name of the sentinel
+ *  identity row that lets the messages.to_agent foreign key target broadcasts
+ *  without orphaning them. The sentinel is created with active=0 so
+ *  listAgents (which filters by active=1) never surfaces it in the UI. */
 const BROADCAST_RECIPIENT: string = "*";
+
+/** Insert the reserved '*' identity row required by the messages.to_agent FK
+ *  for broadcasts. Idempotent — re-runs on every DB open are safe. The row
+ *  is kept active=0 so it never appears in agent listings. */
+const seedBroadcastSentinel: (db: Database.Database) => void = (
+  db: Database.Database,
+): void => {
+  const timestamp: number = now();
+  db.prepare(
+    "INSERT OR IGNORE INTO identity (agent_name, agent_key, active, registered_at, last_active) VALUES (?, ?, 0, ?, ?)",
+  ).run(BROADCAST_RECIPIENT, `__broadcast_sentinel_${generateKey()}`, timestamp, timestamp);
+};
 
 /** SQLite-specific retryable errors. */
 const isSqliteRetryable: (err: string) => boolean = (err: string): boolean =>
@@ -136,6 +151,7 @@ const openAndInit: (
   try {
     db = new Database(config.dbPath);
     db.pragma("foreign_keys = ON");
+    seedBroadcastSentinel(db);
   } catch (e: unknown) {
     return error(`Failed to open database: ${String(e)}`);
   }
@@ -210,6 +226,10 @@ const register: (
   if (name.length < MIN_AGENT_NAME_LENGTH || name.length > MAX_AGENT_NAME_LENGTH) {
     log.warn("Registration failed: invalid name length");
     return error({ code: ERR_VALIDATION, message: "Name must be 1-50 chars" });
+  }
+  if (name === BROADCAST_RECIPIENT) {
+    log.warn("Registration failed: reserved broadcast name");
+    return error({ code: ERR_VALIDATION, message: "Name '*' is reserved for broadcasts" });
   }
   const key: string = generateKey();
   const timestamp: number = now();
@@ -905,14 +925,14 @@ const adminDeleteAgent: (
   agentName: string,
 ): Result<void, DbError> => {
   log.warn(`Admin deleting agent ${agentName}`);
+  if (agentName === BROADCAST_RECIPIENT) {
+    return error({ code: ERR_VALIDATION, message: "Cannot delete broadcast sentinel" });
+  }
   try {
-    // Delete child rows explicitly (in FK-safe order) before deleting the identity row.
-    // Cascade is defined in the schema but must not be relied upon — explicit deletes
-    // are more reliable across SQLite versions and PRAGMA states.
-    db.prepare("DELETE FROM locks WHERE agent_name = ?").run(agentName);
-    db.prepare("DELETE FROM plans WHERE agent_name = ?").run(agentName);
-    db.prepare("DELETE FROM messages WHERE from_agent = ?").run(agentName);
-    db.prepare("DELETE FROM messages WHERE to_agent = ?").run(agentName);
+    // Cascade is enforced by the schema (locks, plans, messages.from_agent,
+    // messages.to_agent all ON DELETE CASCADE), so the single DELETE on
+    // identity removes every dependent row atomically. No manual fan-out —
+    // doing so would mask FK regressions.
     const result: Database.RunResult = db
       .prepare("DELETE FROM identity WHERE agent_name = ?")
       .run(agentName);
@@ -1014,9 +1034,17 @@ const adminSendMessage: (
   const timestamp: number = now();
   try {
     const ensureStmt: Database.Statement = db.prepare(
-      "INSERT OR IGNORE INTO identity (agent_name, agent_key, registered_at, last_active) VALUES (?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO identity (agent_name, agent_key, active, registered_at, last_active) VALUES (?, ?, 0, ?, ?)",
     );
+    // Auto-create sender (existing behaviour) AND recipient so the to_agent
+    // FK is satisfied. '*' is skipped because the broadcast sentinel is
+    // seeded at DB open. Auto-created peers are inactive so they don't
+    // pollute agent listings; if they later register for real, the upsert
+    // in register() reactivates them.
     ensureStmt.run(fromAgent, generateKey(), timestamp, timestamp);
+    if (toAgent !== BROADCAST_RECIPIENT) {
+      ensureStmt.run(toAgent, generateKey(), timestamp, timestamp);
+    }
   } catch (e: unknown) {
     return error({ code: ERR_DATABASE, message: String(e) });
   }

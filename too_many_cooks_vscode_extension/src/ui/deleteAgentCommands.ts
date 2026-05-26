@@ -8,6 +8,49 @@ import { getDialogService } from '../services/dialogService';
 
 type LogFn = (msg: string) => void;
 
+function pickItems(
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  item: vscode.TreeItem | undefined,
+  selection: readonly vscode.TreeItem[] | undefined,
+): readonly vscode.TreeItem[] {
+  if (typeof selection !== 'undefined' && selection.length > 0) { return selection; }
+  if (typeof item === 'undefined') { return []; }
+  return [item];
+}
+
+function collectAgentNames(
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  item: vscode.TreeItem | undefined,
+  selection: readonly vscode.TreeItem[] | undefined,
+): readonly string[] {
+  const source: readonly vscode.TreeItem[] = pickItems(item, selection);
+  const names: string[] = [];
+  for (const candidate of source) {
+    const name: string | null = getAgentNameFromItem(candidate);
+    if (name !== null && !names.includes(name)) { names.push(name); }
+  }
+  return names;
+}
+
+async function deleteAgents(
+  storeManager: Readonly<StoreManager>,
+  logFn: LogFn,
+  names: readonly string[],
+): Promise<void> {
+  const dialogs: DialogService = getDialogService();
+  for (const name of names) {
+    try {
+      await storeManager.deleteAgent(name);
+      logFn(`Removed agent: ${name}`);
+    } catch (err: unknown) {
+      logFn(`Failed to remove agent ${name}: ${String(err)}`);
+      await dialogs.showErrorMessage(`Failed to remove agent ${name}: ${String(err)}`);
+      return;
+    }
+  }
+  await dialogs.showInformationMessage(`Removed ${String(names.length)} agent(s)`);
+}
+
 export function registerDeleteAgentCommand(
   storeManager: Readonly<StoreManager>,
   logFn: LogFn,
@@ -15,27 +58,23 @@ export function registerDeleteAgentCommand(
   return vscode.commands.registerCommand(
     'tooManyCooks.deleteAgent',
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    async (item?: vscode.TreeItem): Promise<void> => {
+    async (item?: vscode.TreeItem, selection?: readonly vscode.TreeItem[]): Promise<void> => {
       const dialogs: DialogService = getDialogService();
-      const agentName: string | null = getAgentNameFromItem(item);
-      if (agentName === null) {
+      const names: readonly string[] = collectAgentNames(item, selection);
+      if (names.length === 0) {
         await dialogs.showErrorMessage('No agent selected');
         return;
       }
+      const promptMsg: string = names.length === 1
+        ? `Remove agent "${names[0] ?? ''}"? This will release all their locks.`
+        : `Remove ${String(names.length)} agents? This will release all their locks.`;
       const confirm: string | undefined = await dialogs.showWarningMessage(
-        `Remove agent "${agentName}"? This will release all their locks.`,
+        promptMsg,
         { modal: true },
         'Remove',
       );
       if (confirm !== 'Remove') { return; }
-      try {
-        await storeManager.deleteAgent(agentName);
-        logFn(`Removed agent: ${agentName}`);
-        await dialogs.showInformationMessage(`Agent removed: ${agentName}`);
-      } catch (err: unknown) {
-        logFn(`Failed to remove agent: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to remove agent: ${String(err)}`);
-      }
+      await deleteAgents(storeManager, logFn, names);
     },
   );
 }
