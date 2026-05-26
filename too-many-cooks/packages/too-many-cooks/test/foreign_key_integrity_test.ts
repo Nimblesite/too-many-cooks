@@ -158,7 +158,7 @@ describe("foreign_key_integrity", () => {
     db.prepare("DELETE FROM identity WHERE agent_name = ?").run("fk-doomed-recipient");
 
     const after = db.prepare("SELECT COUNT(*) as c FROM messages WHERE to_agent = ?").get("fk-doomed-recipient") as { c: number };
-    const senderStillThere = db.prepare("SELECT agent_name FROM identity WHERE agent_name = ?").get("fk-survives-sender") as { agent_name: string } | undefined;
+    const senderStillThere: unknown = db.prepare("SELECT agent_name FROM identity WHERE agent_name = ?").get("fk-survives-sender");
     db.close();
 
     assert.strictEqual(after.c, 0, "Inbound messages to deleted recipient MUST be cascade-deleted — no orphans");
@@ -208,8 +208,8 @@ describe("foreign_key_integrity", () => {
     await result.value.close();
 
     const db = openRawDb();
-    const sentinel = db.prepare("SELECT agent_name, active FROM identity WHERE agent_name = ?").get(BROADCAST) as { agent_name: string; active: number } | undefined;
-    const broadcastRow = db.prepare("SELECT to_agent, content FROM messages WHERE to_agent = ?").get(BROADCAST) as { to_agent: string; content: string } | undefined;
+    const sentinel = db.prepare("SELECT agent_name AS agentName, active FROM identity WHERE agent_name = ?").get(BROADCAST) as { agentName: string; active: number } | undefined;
+    const broadcastRow = db.prepare("SELECT to_agent AS toAgent, content FROM messages WHERE to_agent = ?").get(BROADCAST) as { toAgent: string; content: string } | undefined;
     db.close();
 
     assert.notStrictEqual(sentinel, undefined, "Broadcast sentinel identity row must exist");
@@ -230,7 +230,7 @@ describe("foreign_key_integrity", () => {
 
     assert.strictEqual(rejected.ok, false, "Registering '*' must be rejected");
     if (rejected.ok) { return; }
-    assert.match(rejected.error.message, /reserved/i, "Error message must explain the reservation");
+    assert.match(rejected.error.message, /reserved/iu, "Error message must explain the reservation");
   });
 
   it("adminDeleteAgent refuses to delete the broadcast sentinel", async () => {
