@@ -82,15 +82,32 @@ interface ManagerState {
   target: ConnectionTarget | null;
 }
 
+/** Everything needed to spawn and reach the local server. */
+interface LocalServerSpec {
+  readonly bin: string;
+  readonly port: number;
+  readonly workspaceFolder: string;
+}
+
 /** Build the local base URL for a given port. */
 function buildLocalBaseUrl(port: number): string {
   return `${LOCAL_BASE_URL_PREFIX}${String(port)}`;
 }
 
-/** Poll until the local server responds on /admin/status. */
-async function pollUntilReady(baseUrl: string, log: LogFn): Promise<void> {
+/** Platform-aware spawn configuration for the local server (Issue #17).
+ *  On Windows the global npm bin is a `.cmd` shim that Node's spawn() can only
+ *  resolve via the shell; on posix the shell is unnecessary (and lets a missing
+ *  binary surface as an ENOENT 'error' event instead of a shell exit code). */
+export function buildLocalSpawnConfig(platform: NodeJS.Platform): { readonly shell: boolean } {
+  return { shell: platform === 'win32' };
+}
+
+/** Poll until the local server responds on /admin/status. Stops early if the
+ *  signal aborts (e.g. spawn failed first), so the loser of the startup race
+ *  does not keep polling a dead port. */
+async function pollUntilReady(baseUrl: string, log: LogFn, signal: AbortSignal): Promise<void> {
   const deadline: number = Date.now() + STARTUP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !signal.aborted) {
     const available: boolean = await checkServerAvailable(baseUrl);
     if (available) {
       log(`[ConnectionManager] Server ready at ${baseUrl}`);
@@ -100,16 +117,18 @@ async function pollUntilReady(baseUrl: string, log: LogFn): Promise<void> {
       setTimeout(resolve, POLL_INTERVAL_MS);
     });
   }
+  if (signal.aborted) { return; }
   throw new Error(`Local server did not start within ${String(STARTUP_TIMEOUT_MS)}ms`);
 }
 
 /** Spawn the too-many-cooks CLI as a child process. */
-function spawnLocalServer(port: number, workspaceFolder: string, log: LogFn): ChildProcess {
-  log(`[ConnectionManager] Spawning local server on port ${String(port)} (workspace: ${workspaceFolder})`);
-  const child: ChildProcess = spawn(LOCAL_SERVER_BIN, [], {
-    cwd: workspaceFolder,
+function spawnLocalServer(spec: LocalServerSpec, log: LogFn): ChildProcess {
+  log(`[ConnectionManager] Spawning local server '${spec.bin}' on port ${String(spec.port)} (workspace: ${spec.workspaceFolder})`);
+  const child: ChildProcess = spawn(spec.bin, [], {
+    cwd: spec.workspaceFolder,
     detached: false,
-    env: { ...process.env, [TMC_PORT_ENV]: String(port), [TMC_WORKSPACE_ENV]: workspaceFolder },
+    env: { ...process.env, [TMC_PORT_ENV]: String(spec.port), [TMC_WORKSPACE_ENV]: spec.workspaceFolder },
+    shell: buildLocalSpawnConfig(process.platform).shell,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stderr?.on('data', (data: Buffer): void => {
@@ -119,6 +138,26 @@ function spawnLocalServer(port: number, workspaceFolder: string, log: LogFn): Ch
     log(`[ConnectionManager] Local server exited (code: ${String(code)})`);
   });
   return child;
+}
+
+/** Resolve once the server is ready, or reject promptly if the child fails to
+ *  spawn (ENOENT 'error'). Without this the failure is swallowed and the user
+ *  only sees the misleading generic startup timeout. Issue #17. */
+async function awaitServerReady(child: ChildProcess, spec: LocalServerSpec, log: LogFn): Promise<void> {
+  const controller: AbortController = new AbortController();
+  const failure: Promise<never> = new Promise<never>(
+    (_resolve: (value: never) => void, reject: (reason: Error) => void): void => {
+      child.once('error', (err: Error): void => {
+        reject(new Error(`Local server '${spec.bin}' could not be started: ${err.message}`));
+      });
+    },
+  );
+  try {
+    await Promise.race([pollUntilReady(buildLocalBaseUrl(spec.port), log, controller.signal), failure]);
+  } finally {
+    controller.abort();
+    child.removeAllListeners('error');
+  }
 }
 
 /** Kill a child process with SIGTERM, escalating to SIGKILL after grace period. */
@@ -154,7 +193,7 @@ async function validateCloudCredentials(target: CloudTarget, log: LogFn): Promis
 }
 
 /** Create a connection manager instance. */
-export function createConnectionManager(workspaceFolder: string, log: LogFn): ConnectionManager {
+export function createConnectionManager(workspaceFolder: string, log: LogFn, serverBin: string = LOCAL_SERVER_BIN): ConnectionManager {
   const state: ManagerState = {
     localProcess: null,
     mode: 'disconnected',
@@ -173,9 +212,10 @@ export function createConnectionManager(workspaceFolder: string, log: LogFn): Co
 
   async function startLocal(port: number = DEFAULT_LOCAL_PORT): Promise<void> {
     if (state.mode !== 'disconnected') { disconnect(); }
-    const child: ChildProcess = spawnLocalServer(port, workspaceFolder, log);
+    const spec: LocalServerSpec = { bin: serverBin, port, workspaceFolder };
+    const child: ChildProcess = spawnLocalServer(spec, log);
     state.localProcess = child;
-    await pollUntilReady(buildLocalBaseUrl(port), log);
+    await awaitServerReady(child, spec, log);
     Object.assign(state, { mode: 'local' satisfies ConnectionMode, target: { mode: 'local', port, transport: LOCAL_TRANSPORT } satisfies LocalTarget });
   }
 

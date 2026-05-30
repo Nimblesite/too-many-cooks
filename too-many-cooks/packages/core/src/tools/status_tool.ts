@@ -12,18 +12,25 @@ import {
 } from "../types.js";
 import {
   type CallToolResult,
+  type SessionGetter,
   type ToolCallback,
   textContent,
 } from "../mcp-types.js";
-import { makeErrorResult } from "./tool_utils.js";
+import { BROADCAST_RECIPIENT } from "../notifications.js";
+import { type IdentityResult, makeErrorResult, resolveIdentity } from "./tool_utils.js";
 
-/** Input schema for status tool (no inputs required). */
+/** Input schema for status tool. */
 export const STATUS_INPUT_SCHEMA: {
   readonly type: "object";
-  readonly properties: Record<string, never>;
+  readonly properties: Record<string, unknown>;
 } = {
   type: "object",
-  properties: {},
+  properties: {
+    agent_key: {
+      type: "string",
+      description: "Agent key for authentication (optional, uses session if omitted)",
+    },
+  },
 } as const;
 
 /** Tool config for status. */
@@ -41,15 +48,28 @@ export const STATUS_TOOL_CONFIG: {
   annotations: null,
 } as const;
 
+/// [MSG-PRIVACY] Issue #11: an agent may only see broadcasts plus its own
+/// (sent or received) messages. Direct messages addressed to other agents
+/// must never be returned by the status overview. A caller with no resolved
+/// identity (agentName === null) sees broadcasts only.
+const isVisibleTo: (message: Message, agentName: string | null) => boolean = (
+  message: Message,
+  agentName: string | null,
+): boolean =>
+  message.toAgent === BROADCAST_RECIPIENT ||
+  (agentName !== null && (message.toAgent === agentName || message.fromAgent === agentName));
+
 /** Create status tool handler. */
 export const createStatusHandler: (
   db: TooManyCooksDb,
   logger: Logger,
+  getSession?: SessionGetter,
 ) => ToolCallback = (
   db: TooManyCooksDb,
   logger: Logger,
+  getSession: SessionGetter = (): null => null,
 ): ToolCallback =>
-  {return async (): Promise<CallToolResult> => {
+  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const log: Logger = logger.child({ tool: "status" });
 
     const agentsResult: Result<readonly AgentIdentity[], DbError> = await db.listAgents();
@@ -66,7 +86,13 @@ export const createStatusHandler: (
 
     const messagesResult: Result<readonly Message[], DbError> = await db.listAllMessages();
     if (!messagesResult.ok) {return makeErrorResult(messagesResult.error);}
-    const messages: Array<Record<string, unknown>> = messagesResult.value.map(messageToJson);
+
+    // [MSG-PRIVACY] Issue #11: filter direct messages by resolved caller identity.
+    const identity: IdentityResult = await resolveIdentity(db, args, getSession);
+    const agentName: string | null = identity.isError ? null : identity.agentName;
+    const messages: Array<Record<string, unknown>> = messagesResult.value
+      .filter((message: Message): boolean => isVisibleTo(message, agentName))
+      .map(messageToJson);
 
     log.debug("Status queried");
 

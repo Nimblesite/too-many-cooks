@@ -6,31 +6,17 @@
 
 import * as vscode from 'vscode';
 import type { AppState, ConnectionStatus } from '../state/types';
-import { selectAgentCount, selectConnectionStatus, selectLockCount, selectUnreadMessageCount } from '../state/selectors';
+import { selectAgentCount, selectConnectionStatus, selectLockCount, selectModeLabel, selectUnreadMessageCount } from '../state/selectors';
 import type { StoreManager } from '../services/storeManager';
 
 /** Status bar command — opens connection picker. */
 const STATUS_BAR_COMMAND: string = 'tooManyCooks.chooseConnection';
-
-/** Mode labels for status bar display. */
-const MODE_LOCAL: string = 'Local/HTTP';
-const MODE_CLOUD_STDIO: string = 'Cloud/stdio';
-const MODE_CLOUD_HTTP: string = 'Cloud/HTTP';
-const MODE_DISCONNECTED: string = 'Disconnected';
 
 function pluralSuffix(count: number): string {
   if (count === 1) {
     return '';
   }
   return 's';
-}
-
-/** Get display label for the current connection mode + transport. */
-function getModeLabel(storeManager: Readonly<StoreManager>): string {
-  const target: ReturnType<typeof storeManager.getTarget> = storeManager.getTarget();
-  if (target === null) { return MODE_DISCONNECTED; }
-  if (target.mode === 'local') { return MODE_LOCAL; }
-  return target.transport === 'stdio' ? MODE_CLOUD_STDIO : MODE_CLOUD_HTTP;
 }
 
 export class StatusBarManager {
@@ -81,7 +67,7 @@ export class StatusBarManager {
     const agents: number = selectAgentCount(state);
     const locks: number = selectLockCount(state);
     const unread: number = selectUnreadMessageCount(state);
-    const modeLabel: string = getModeLabel(storeManager);
+    const modeLabel: string = selectModeLabel(selectConnectionStatus(state), storeManager.getTarget());
     this.statusBarItem.text =
       `$(check) TMC: ${modeLabel}  $(person) ${String(agents)}  $(lock) ${String(locks)}  $(mail) ${String(unread)}`;
     this.statusBarItem.tooltip = [
