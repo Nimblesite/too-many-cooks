@@ -83,6 +83,41 @@
         "title": "Remove All Agents",
         "category": "Too Many Cooks",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "tooManyCooks.copyMessageContent",
+        "title": "Copy Message Content",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyMessageAsQuote",
+        "title": "Copy as Quoted Line",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyMessageId",
+        "title": "Copy Message ID",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyMessageSender",
+        "title": "Copy Sender",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyMessageRecipient",
+        "title": "Copy Recipient",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyMessages",
+        "title": "Copy Selected Messages (Full)",
+        "category": "Too Many Cooks"
+      },
+      {
+        "command": "tooManyCooks.copyAgentName",
+        "title": "Copy Agent Name",
+        "category": "Too Many Cooks"
       }
     ],
     "viewsContainers": {
@@ -148,6 +183,51 @@
           "command": "tooManyCooks.sendMessage",
           "when": "view == tooManyCooksAgents && viewItem == deletableAgent",
           "group": "inline"
+        },
+        {
+          "command": "tooManyCooks.copyAgentName",
+          "when": "view == tooManyCooksAgents && viewItem == deletableAgent",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "tooManyCooks.sendMessage",
+          "when": "view == tooManyCooksAgents && viewItem == deletableAgent",
+          "group": "2_actions@1"
+        },
+        {
+          "command": "tooManyCooks.deleteAgent",
+          "when": "view == tooManyCooksAgents && viewItem == deletableAgent",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "tooManyCooks.copyMessageContent",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "tooManyCooks.copyMessageAsQuote",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "1_copy@2"
+        },
+        {
+          "command": "tooManyCooks.copyMessages",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "1_copy@3"
+        },
+        {
+          "command": "tooManyCooks.copyMessageSender",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "2_metadata@1"
+        },
+        {
+          "command": "tooManyCooks.copyMessageRecipient",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "2_metadata@2"
+        },
+        {
+          "command": "tooManyCooks.copyMessageId",
+          "when": "view == tooManyCooksMessages && viewItem == message",
+          "group": "2_metadata@3"
         }
       ]
     },

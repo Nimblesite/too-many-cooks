@@ -26,6 +26,15 @@ import { createMcpConfigManager } from './services/mcpConfigManager';
 import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
 import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
+import {
+  registerCopyAgentNameCommand,
+  registerCopyMessageAsQuoteCommand,
+  registerCopyMessageContentCommand,
+  registerCopyMessageIdCommand,
+  registerCopyMessageRecipientCommand,
+  registerCopyMessageSenderCommand,
+  registerCopyMessagesCommand,
+} from './ui/messageCommands';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
 
 // eslint-disable-next-line @typescript-eslint/no-inferrable-types
@@ -106,21 +115,33 @@ export function deactivate(): void {
 
 interface Providers {
   readonly agentsProvider: AgentsTreeProvider;
+  readonly agentsTreeView: vscode.TreeView<unknown>;
   readonly locksProvider: LocksTreeProvider;
   readonly messagesProvider: MessagesTreeProvider;
+  readonly messagesTreeView: vscode.TreeView<unknown>;
 }
 
 function createProviders(storeManager: StoreManager): Providers {
   const agentsProvider: AgentsTreeProvider = new AgentsTreeProvider(storeManager);
   const locksProvider: LocksTreeProvider = new LocksTreeProvider(storeManager);
   const messagesProvider: MessagesTreeProvider = new MessagesTreeProvider(storeManager);
-  vscode.window.createTreeView('tooManyCooksAgents', {
-    showCollapseAll: true,
-    treeDataProvider: agentsProvider,
-  });
+  const agentsTreeView: vscode.TreeView<unknown> = vscode.window.createTreeView(
+    'tooManyCooksAgents',
+    {
+      canSelectMany: true,
+      showCollapseAll: true,
+      treeDataProvider: agentsProvider,
+    },
+  );
   vscode.window.createTreeView('tooManyCooksLocks', { treeDataProvider: locksProvider });
-  vscode.window.createTreeView('tooManyCooksMessages', { treeDataProvider: messagesProvider });
-  return { agentsProvider, locksProvider, messagesProvider };
+  const messagesTreeView: vscode.TreeView<unknown> = vscode.window.createTreeView(
+    'tooManyCooksMessages',
+    {
+      canSelectMany: true,
+      treeDataProvider: messagesProvider,
+    },
+  );
+  return { agentsProvider, agentsTreeView, locksProvider, messagesProvider, messagesTreeView };
 }
 
 async function autoConnectOnActivation(
@@ -158,6 +179,13 @@ function registerAllCommands(
   context.subscriptions.push(registerDeleteAgentCommand(sm, log));
   context.subscriptions.push(registerDeleteAllAgentsCommand(sm, log));
   context.subscriptions.push(registerSendMessageCommand(sm, log));
+  context.subscriptions.push(registerCopyMessageContentCommand());
+  context.subscriptions.push(registerCopyMessageAsQuoteCommand());
+  context.subscriptions.push(registerCopyMessageIdCommand());
+  context.subscriptions.push(registerCopyMessageSenderCommand());
+  context.subscriptions.push(registerCopyMessageRecipientCommand());
+  context.subscriptions.push(registerCopyMessagesCommand());
+  context.subscriptions.push(registerCopyAgentNameCommand());
 }
 
 function registerChooseConnectionCommand(deps: ConnectionPickerDeps): vscode.Disposable {
