@@ -108,14 +108,16 @@ describe('ConnectionManager', () => {
       const { log, logs } = createLogCollector();
       const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
 
-      // Port 1 is privileged and won't work, server won't start in time
+      // Port 1 is privileged and won't work; either the spawn fails fast
+      // (binary not resolvable -> ENOENT, Issue #17) or the server never binds
+      // and the startup poll times out. Both are valid startup failures.
       try {
         await cm.startLocal(1);
         assert.fail('Must throw when server cannot start');
       } catch (err: unknown) {
         assert.ok(err instanceof Error, 'Must throw an Error');
         assert.ok(
-          err.message.includes('did not start'),
+          err.message.includes('did not start') || err.message.includes('could not be started'),
           `Error must mention startup failure: ${err.message}`,
         );
       }

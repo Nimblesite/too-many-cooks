@@ -406,27 +406,39 @@ describe("Too Many Cooks MCP Server Integration", () => {
       });
     }
 
-    // Check status - MUST include messages!
+    // Check status as a known agent. [MSG-PRIVACY] Issue #11: status only
+    // returns messages visible to the caller (broadcasts + its own sent or
+    // received), so the ring of direct sends yields exactly the two that touch
+    // the viewer (one it sent, one it received).
+    const viewer = agents[0]!;
     const statusJson = JSON.parse(
-      await client.callTool("status", {}),
+      await client.callTool("status", { agent_key: viewer.key }),
     ) as Record<string, unknown>;
     assert.strictEqual((statusJson.agents as unknown[]).length, 5);
     assert.strictEqual((statusJson.locks as unknown[]).length, 5);
     assert.strictEqual((statusJson.plans as unknown[]).length, 5);
-    // CRITICAL: Status MUST return messages!
+    // CRITICAL: Status MUST include the messages field.
     assert.strictEqual(
       "messages" in statusJson,
       true,
       "Status response MUST include messages field",
     );
+    const msgs = statusJson.messages as Array<Record<string, unknown>>;
     assert.strictEqual(
-      (statusJson.messages as unknown[]).length,
-      5,
-      "Status MUST return all 5 messages sent",
+      msgs.length,
+      2,
+      "Status returns only the caller's own sent/received messages",
     );
+    // [MSG-PRIVACY] Issue #11: every returned message must involve the caller.
+    for (const m of msgs) {
+      assert.strictEqual(
+        m.to_agent === viewer.name || m.from_agent === viewer.name,
+        true,
+        "status must not leak messages unrelated to the caller",
+      );
+    }
 
     // Verify message structure
-    const msgs = statusJson.messages as Array<Record<string, unknown>>;
     const firstMsg = msgs[0]!;
     assert.ok("id" in firstMsg);
     assert.ok("from_agent" in firstMsg);

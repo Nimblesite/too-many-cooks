@@ -148,8 +148,11 @@ const planZodSchema: z.ZodRawShape = {
     .describe("Agent key for authentication (optional, uses session if omitted)"),
 };
 
-/** Zod schema for status tool input (empty). */
-const statusZodSchema: z.ZodRawShape = {};
+/** Zod schema for status tool input. */
+const statusZodSchema: z.ZodRawShape = {
+  agent_key: z.string().optional()
+    .describe("Agent key for authentication (optional, uses session if omitted)"),
+};
 
 /**
  * Wrap a local ToolCallback so it satisfies the MCP SDK's typed callback
@@ -203,7 +206,7 @@ const registerTools: (
   server.registerTool(
     "status",
     { description: statusToolConfig.description, inputSchema: statusZodSchema },
-    wrapHandler(createStatusHandler(db, log)),
+    wrapHandler(createStatusHandler(db, log, getSession)),
   );
 };
 

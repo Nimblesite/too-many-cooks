@@ -76,7 +76,9 @@ describe("status handler", () => {
     await db.sendMessage(reg1.value.agentName, reg1.value.agentKey, reg2.value.agentName, "hello");
 
     const handler = createStatusHandler(db, createTestLogger());
-    const result = await handler({}, {});
+    // [MSG-PRIVACY] Issue #11: the direct message (reg1 -> reg2) is only visible
+    // to its recipient, so query status as reg2 to see it.
+    const result = await handler({ agent_key: reg2.value.agentKey }, {});
     assert.strictEqual(result.isError, false);
     const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
     assert.strictEqual((parsed.agents as unknown[]).length, 2);

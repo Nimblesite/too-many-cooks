@@ -1,9 +1,26 @@
 // Derived state selectors.
 
 import type { AgentDetails, AgentIdentity, AgentPlan, AppState, ConnectionStatus, FileLock, Message } from './types';
+import type { ConnectionTarget } from '../services/connectionTypes';
+
+/** Connection mode labels shown in the status bar. */
+export const MODE_LOCAL: string = 'Local/HTTP';
+export const MODE_CLOUD_STDIO: string = 'Cloud/stdio';
+export const MODE_CLOUD_HTTP: string = 'Cloud/HTTP';
+export const MODE_DISCONNECTED: string = 'Disconnected';
 
 export function selectConnectionStatus(state: Readonly<AppState>): ConnectionStatus {
   return state.connectionStatus;
+}
+
+/** Status-bar mode label for the current connection status and target.
+ *  Issue #12: a live connection with no explicit target is, by construction,
+ *  the default local server (cloud always sets a target via the picker), so it
+ *  must read as the local mode — never "Disconnected" while connected. */
+export function selectModeLabel(status: ConnectionStatus, target: ConnectionTarget | null): string {
+  if (status !== 'connected') { return MODE_DISCONNECTED; }
+  if (target === null || target.mode === 'local') { return MODE_LOCAL; }
+  return target.transport === 'stdio' ? MODE_CLOUD_STDIO : MODE_CLOUD_HTTP;
 }
 
 export function selectAgents(state: Readonly<AppState>): readonly AgentIdentity[] {
