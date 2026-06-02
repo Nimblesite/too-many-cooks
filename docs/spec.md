@@ -1,6 +1,6 @@
 # Too Many Cooks - Multi-Agent Coordination MCP Server
 
-CRITICAL: THERE IS ONLY ONE SERVER. IT SERVES BOTH MCP and ADMIN ROUTES.
+CRITICAL: THERE IS ONLY ONE SERVER **PER WORKSPACE FOLDER**. IT SERVES BOTH MCP and ADMIN ROUTES. One folder → exactly one server. Two folders → two independent servers that **never** touch each other's port, process, database, or logs. See [Server Lifecycle & Process Isolation](#server-lifecycle--process-isolation).
 
 ## Overview
 
@@ -43,6 +43,66 @@ ONE HTTP server:
 **Why HTTP, not stdio**: Stdio spawns an isolated process per agent — agents can't see each other's events. HTTP gives one shared process where the notification emitter actually works across all connected agents.
 
 **Cloud mode**: In cloud mode (TMC Cloud), agents connect via **stdio** instead. Each agent launches its own server process, but since the backend is remote (Supabase), there's no shared local state to worry about. The VSIX manages MCP config for all major agents (Claude Code, Codex, Cline, etc.) and handles switching between local/cloud automatically. See `tmc-cloud/tmc-cloud-technical-spec.md` for details.
+
+---
+
+## Server Lifecycle & Process Isolation
+
+> **The cardinal rule: a Too Many Cooks process NEVER interferes with another process.** It does not kill it, signal it, or take its port. Isolation is by **workspace folder**. This section is non-negotiable and is enforced by tests. Spec IDs below are referenced from the code and tests (`grep [SERVER-`).
+
+The server's workspace folder is `TMC_WORKSPACE` (falling back to `process.cwd()`), and its port is `TMC_PORT` (falling back to `4040`). Everything that follows is keyed off that one folder.
+
+### `[SERVER-NO-KILL]` — Never kill another process
+
+The server **MUST NOT** run `lsof`, `kill`, `kill -9`, `taskkill`, `process.kill(pid, <signal>)`, or any other mechanism that terminates or signals a process it did not itself spawn. There is no "port takeover". If a port is occupied, the owner is left **completely untouched** — it may belong to a different project, a different tool, or nothing to do with Too Many Cooks at all. Killing it is data loss for someone else.
+
+> The only permitted use of `process.kill` is the **signal-0 liveness probe** (`process.kill(pid, 0)`), which sends no signal and only asks "does this PID exist?". It is used by `[SERVER-LOCKFILE]` to detect stale locks and never to terminate anything.
+
+### `[SERVER-SINGLE-INSTANCE]` — One server per folder; refuse a second
+
+Before binding its port, the server checks the per-folder lock file (`[SERVER-LOCKFILE]`). If a **live** Too Many Cooks process already holds the lock for this workspace folder, the new process **immediately exits with a non-zero code** and logs a clear error:
+
+> `Too Many Cooks is already running in this folder — refusing to start a second instance.` (including the existing PID and port).
+
+This is the single source of truth for "is TMC already running here". It does not depend on the port, so it catches the case where a second instance is told to use a *different* port in the *same* folder — that is still forbidden, because both would write to the same `.too_many_cooks/data.db` and the same logs.
+
+### `[SERVER-PORT-CONFLICT]` — Step aside cleanly on `EADDRINUSE`
+
+`app.listen(port)` MUST have an `'error'` handler. If binding fails with `EADDRINUSE`, the server logs a clear error and **exits cleanly with a non-zero code** — it never tries to free the port by force (`[SERVER-NO-KILL]`):
+
+> `Port <port> is already in use by another process — stepping aside. Too Many Cooks never kills the process holding a port. Set TMC_PORT to run on a different port.`
+
+To run Too Many Cooks for two folders at once, give each folder its own port via `TMC_PORT` (or the `tooManyCooks.port` VS Code setting). The default `4040` is shared, so the second folder on the default port will step aside until it is given a distinct port.
+
+### `[SERVER-STATE-ISOLATION]` — All state lives in `.too_many_cooks/`
+
+**Every** byte of per-workspace state lives under `${workspaceFolder}/.too_many_cooks/` and nowhere else:
+
+| State | Path |
+|-------|------|
+| Database | `${workspaceFolder}/.too_many_cooks/data.db` |
+| Logs | `${workspaceFolder}/.too_many_cooks/logs/mcp-server-<timestamp>.log` |
+| Single-instance lock | `${workspaceFolder}/.too_many_cooks/server.lock` |
+
+Because the folder *is* the isolation boundary, no other instance can read or corrupt this state — a second instance is refused before it ever opens the database (`[SERVER-SINGLE-INSTANCE]`). State is **never** written to `~/`, `/tmp`, the package directory, or a bare `logs/` folder.
+
+### `[SERVER-LOCKFILE]` — The single-instance lock file
+
+`server.lock` is JSON: `{ "pid": <number>, "port": <number>, "startedAt": <epoch-ms> }`.
+
+- **On startup**: read `server.lock`. If it exists and its `pid` is alive (signal-0 probe), the folder is busy → refuse (`[SERVER-SINGLE-INSTANCE]`). If it is missing, unparseable, or its `pid` is dead (a **stale** lock left by a crash / `kill -9`), overwrite it with our own `{pid, port, startedAt}` and continue.
+- **On shutdown** (`SIGTERM`, `SIGINT`, or normal `exit`): delete `server.lock`, but **only if it still records our own PID** — never remove a lock another instance has since taken.
+
+Stale-lock recovery is mandatory: a server that was `SIGKILL`ed leaves a lock behind, and the next start in that folder must reclaim it.
+
+### `[SERVER-EPIPE]` — A broken pipe must never loop into the logger
+
+A dead `stdout`/`stderr` pipe (e.g. the parent editor went away) is **unrecoverable, not fatal-loopable**. The server MUST:
+
+- attach an `'error'` listener to `process.stdout` and `process.stderr` that swallows `EPIPE` (without a listener, an `EPIPE` becomes an `uncaughtException`);
+- in the `uncaughtException`/`unhandledRejection` handlers, **not** re-enter the logger for an `EPIPE` error (writing the "fatal" line to the same broken stream is what produced the multi-gigabyte log in issue #33).
+
+Defense in depth: even one un-guarded write to a dead pipe must not be able to start an unbounded `EPIPE → log.fatal → EPIPE` loop.
 
 ---
 
@@ -244,6 +304,9 @@ Admin operations are exposed as REST endpoints on the server, **not** as MCP too
 
 | Setting | Value |
 |---------|-------|
+| Server port (`TMC_PORT`) | 4040 (one port per folder; never taken by force — see `[SERVER-PORT-CONFLICT]`) |
+| Workspace folder (`TMC_WORKSPACE`) | `process.cwd()` |
+| State directory | `${workspaceFolder}/.too_many_cooks/` (db, logs, lock — see `[SERVER-STATE-ISOLATION]`) |
 | Lock timeout | 600000ms (10 min) |
 | Max message length | 200 chars |
 | Max plan field length | 100 chars |
@@ -262,3 +325,5 @@ Black-box, end-to-end tests. Interact via MCP protocol (HTTP) or VSCode UI, veri
 | MCP server (integration) | `too-many-cooks/test/` |
 | Tool schemas | `too-many-cooks/test/tool_schemas_test.ts` |
 | VSCode extension | `too_many_cooks_vscode_extension/test/suite/` |
+| Process isolation `[SERVER-NO-KILL]` / `[SERVER-PORT-CONFLICT]` | `too-many-cooks/test/server_no_cross_kill_test.ts` |
+| Single instance per folder `[SERVER-SINGLE-INSTANCE]` | `too-many-cooks/test/server_single_instance_test.ts` |

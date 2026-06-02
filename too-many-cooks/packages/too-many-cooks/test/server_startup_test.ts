@@ -1,5 +1,6 @@
 /// Server startup integration tests - spawn real server processes,
-/// verify startup behavior, custom port, port takeover, and
+/// verify startup behavior, custom port, no-cross-kill step-aside on
+/// port conflict ([SERVER-NO-KILL]/[SERVER-PORT-CONFLICT]), and
 /// initial /admin/status response shape.
 
 import { describe, it, after } from "node:test";
@@ -15,13 +16,19 @@ import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
 
 const PORT_STATUS_RESPONDS = 4050;
 const PORT_CUSTOM = 4051;
-const PORT_TAKEOVER = 4052;
+const PORT_CONFLICT = 4052;
 const PORT_INITIAL_STATE = 4053;
 const MAX_POLL_ATTEMPTS = 30;
 const POLL_INTERVAL_MS = 200;
 const ADMIN_STATUS_PATH = "/admin/status";
 const TMP_PREFIX = "/tmp/tmc-startup-";
 const STATUS_OK = 200;
+
+/** How long to wait for the losing server to step aside and exit. */
+const STEP_ASIDE_TIMEOUT_MS = 10000;
+
+/** Sentinel returned by waitForExit when the process never exits. */
+const STILL_RUNNING = "still-running";
 const EMPTY_ARRAY_LENGTH = 0;
 const AGENTS_FIELD = "agents";
 const LOCKS_FIELD = "locks";
@@ -93,6 +100,20 @@ const cleanup = (proc: ChildProcess, workspace: string): void => {
   rmSync(workspace, { recursive: true, force: true });
 };
 
+/** Wait for a process to exit, returning its exit code, or STILL_RUNNING on timeout. */
+const waitForExit = async (
+  proc: ChildProcess,
+  timeoutMs: number,
+): Promise<number | null | typeof STILL_RUNNING> =>
+  new Promise((resolve) => {
+    if (proc.exitCode !== null) { resolve(proc.exitCode); return; }
+    const timer = setTimeout((): void => { resolve(STILL_RUNNING); }, timeoutMs);
+    proc.once("exit", (code: number | null): void => {
+      clearTimeout(timer);
+      resolve(code);
+    });
+  });
+
 // ============================================================
 // Tests
 // ============================================================
@@ -141,59 +162,60 @@ describe("server starts on custom port via TMC_PORT", () => {
   });
 });
 
-describe("server kills existing process on same port", () => {
+// [SERVER-NO-KILL] / [SERVER-PORT-CONFLICT]: a second server (a DIFFERENT
+// project) that finds the port occupied MUST step aside cleanly — it must
+// NEVER kill the process that owns the port. Issue #33.
+describe("server does NOT kill an existing server on the same port — it steps aside", () => {
   let firstProc: ChildProcess;
   let secondProc: ChildProcess;
   let firstWorkspace: string;
   let secondWorkspace: string;
 
   after(() => {
-    // Second server should be the live one; kill both to be safe
     secondProc.kill();
     firstProc.kill();
     rmSync(firstWorkspace, { recursive: true, force: true });
     rmSync(secondWorkspace, { recursive: true, force: true });
   });
 
-  it("second server takes over port from first", async () => {
-    // Start first server
-    const first = spawnOnPort(PORT_TAKEOVER);
+  it("loser of the port race exits non-zero while the owner stays alive", async () => {
+    // Start the first server (project A) — it owns the port.
+    const first = spawnOnPort(PORT_CONFLICT);
     firstProc = first.proc;
     firstWorkspace = first.workspace;
-    await pollUntilReady(PORT_TAKEOVER);
+    await pollUntilReady(PORT_CONFLICT);
 
-    // Verify first is alive
-    const beforeStatus = await fetchStatus(PORT_TAKEOVER);
+    const beforeStatus = await fetchStatus(PORT_CONFLICT);
     assert.strictEqual(
       beforeStatus.status,
       STATUS_OK,
-      "First server MUST be alive before takeover",
+      "First server MUST be alive before the second starts",
     );
 
-    // Start second server on same port — it should kill the first
-    const second = spawnOnPort(PORT_TAKEOVER);
+    // Start the second server (project B, different folder) on the SAME port.
+    const second = spawnOnPort(PORT_CONFLICT);
     secondProc = second.proc;
     secondWorkspace = second.workspace;
-    await pollUntilReady(PORT_TAKEOVER);
 
-    // Verify second server is responding
-    const afterStatus = await fetchStatus(PORT_TAKEOVER);
+    // The second server MUST give up rather than kill the first.
+    const exitResult = await waitForExit(secondProc, STEP_ASIDE_TIMEOUT_MS);
+    assert.notStrictEqual(
+      exitResult,
+      STILL_RUNNING,
+      "Second server MUST step aside and exit on EADDRINUSE, not keep running by killing the owner",
+    );
+    assert.notStrictEqual(
+      exitResult,
+      0,
+      "Second server MUST exit with a non-zero code when the port is already in use",
+    );
+
+    // The first server (project A) MUST be completely untouched.
+    const afterStatus = await fetchStatus(PORT_CONFLICT);
     assert.strictEqual(
       afterStatus.status,
       STATUS_OK,
-      "Second server MUST respond after taking over port",
-    );
-
-    // Verify the second server has a fresh state (empty arrays)
-    assert.strictEqual(
-      afterStatus.body.agents.length,
-      EMPTY_ARRAY_LENGTH,
-      "Second server MUST have empty agents (fresh DB)",
-    );
-    assert.strictEqual(
-      afterStatus.body.locks.length,
-      EMPTY_ARRAY_LENGTH,
-      "Second server MUST have empty locks (fresh DB)",
+      "First server MUST still be alive — the second MUST NOT have killed it",
     );
   });
 });
