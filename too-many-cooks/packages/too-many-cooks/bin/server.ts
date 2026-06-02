@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /// Entry point for Too Many Cooks MCP server.
 ///
-/// Starts a single Express HTTP server on port 4040 with:
+/// Starts ONE Express HTTP server per workspace folder (default port 4040) with:
 /// - `/mcp` — MCP Streamable HTTP for agent connections
 /// - `/admin/*` — REST + Streamable HTTP for the VSCode extension
+///
+/// Process isolation is by folder and the server NEVER kills another process:
+/// - [SERVER-SINGLE-INSTANCE] refuse to start if TMC already runs in this folder
+/// - [SERVER-PORT-CONFLICT] step aside cleanly on EADDRINUSE (never kill the owner)
+/// - [SERVER-STATE-ISOLATION] all state lives in `${workspace}/.too_many_cooks/`
+/// - [SERVER-EPIPE] a dead stdio pipe can never loop into the logger
 ///
 /// Implements the deploy-toolkit `--version` contract before anything else.
 
@@ -34,8 +40,7 @@
 }
 
 import crypto from "node:crypto";
-import { execSync } from "node:child_process";
-import net from "node:net";
+import type { Server } from "node:http";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -44,17 +49,26 @@ import {
   type AdminEventHub,
   type AgentEventHub,
   type Logger,
+  type Result,
   type TooManyCooksDb,
   createAdminEventHub,
   createAgentEventHub,
   createMcpServerForDb,
   defaultConfig,
   getServerPort,
+  getWorkspaceFolder,
   registerAdminRoutes,
 } from "too-many-cooks-core";
 
 import { createBackend } from "../src/backend.js";
 import { createLogger } from "./logger.js";
+import {
+  type LockOutcome,
+  acquireServerLock,
+  errorCode,
+  releaseServerLock,
+  resolveLockPath,
+} from "./server_lock.js";
 
 /** JSON-RPC bad request error response. */
 const BAD_REQUEST_JSON: string =
@@ -64,7 +78,18 @@ const BAD_REQUEST_JSON: string =
 const SESSION_NOT_FOUND_JSON: string =
   '{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found"},"id":null}';
 
+/// [SERVER-EPIPE] A dead stdout/stderr pipe is unrecoverable, not fatal-loopable.
+/// Without an 'error' listener an EPIPE surfaces as an uncaughtException, which
+/// used to re-enter the logger and write the "fatal" line to the same broken
+/// stream forever — the multi-gigabyte log loop in issue #33. Consume it here.
+const installPipeGuards: () => void = (): void => {
+  const swallow: () => void = (): void => { /* a broken stdio pipe is not recoverable */ };
+  process.stdout.on("error", swallow);
+  process.stderr.on("error", swallow);
+};
+
 const installProcessHandlers: (log: Logger) => void = (log: Logger): void => {
+  installPipeGuards();
   const shutdown: (signal: string) => void = (signal: string): void => {
     log.info("Server shutting down", { signal });
     process.exit(0);
@@ -72,6 +97,7 @@ const installProcessHandlers: (log: Logger) => void = (log: Logger): void => {
   process.on("SIGTERM", (): void => { shutdown("SIGTERM"); });
   process.on("SIGINT", (): void => { shutdown("SIGINT"); });
   process.on("uncaughtException", (err: Error): void => {
+    if (errorCode(err) === "EPIPE") {return;} // [SERVER-EPIPE] never re-enter the logger on a dead pipe
     log.fatal("Uncaught exception", { error: String(err), stack: err.stack ?? "" });
   });
   process.on("unhandledRejection", (reason: unknown): void => {
@@ -83,65 +109,63 @@ const main: () => Promise<void> = async (): Promise<void> => {
   const log: Logger = createLogger();
   installProcessHandlers(log);
   log.info("Server starting...");
+  const workspace: string = getWorkspaceFolder();
+  const port: number = getServerPort();
+  const lockPath: string = resolveLockPath(workspace);
+  guardSingleInstance(lockPath, workspace, port, log);
+  process.on("exit", (): void => { releaseServerLock(lockPath); });
   try {
-    await startServer(log);
+    await startServer(log, port);
   } catch (e) {
     log.fatal("Fatal error", { error: String(e) });
     throw e;
   }
 };
 
-/** Maximum time to wait for port to become free after killing a process. */
-const PORT_FREE_TIMEOUT_MS: number = 5000;
-
-/** Timeout for port check connection attempt (ms). */
-const PORT_CHECK_TIMEOUT_MS: number = 500;
-
-/** Delay between port-free polls in milliseconds. */
-const PORT_POLL_DELAY_MS: number = 100;
-
-/** Perform a raw TCP probe and return a Promise<boolean> (non-async to avoid require-await). */
-// eslint-disable-next-line @typescript-eslint/promise-function-async
-const tcpProbe: (port: number) => Promise<boolean> = (port: number): Promise<boolean> =>
-  new Promise((resolve: (value: boolean) => void): void => {
-    const socket: net.Socket = net.createConnection({ port, host: "127.0.0.1" });
-    const timer: NodeJS.Timeout = setTimeout((): void => { socket.destroy(); resolve(false); }, PORT_CHECK_TIMEOUT_MS);
-    socket.once("connect", (): void => { clearTimeout(timer); socket.destroy(); resolve(true); });
-    socket.once("error", (): void => { clearTimeout(timer); resolve(false); });
-  });
-
-/** Check whether a port is in use by attempting a TCP connection. */
-const isPortInUse: (port: number) => Promise<boolean> = async (port: number): Promise<boolean> =>
-  await tcpProbe(port);
-
-/** Kill any existing process listening on the given port and wait for it to be freed. */
-const killExistingProcess: (port: number, log: Logger) => Promise<void> = async (port: number, log: Logger): Promise<void> => {
-  const inUse: boolean = await isPortInUse(port);
-  if (!inUse) {return;}
-  log.info("Port in use, killing existing process", { port });
-  try {
-    const output: string = execSync(`lsof -ti :${String(port)}`, { encoding: "utf8" }).trim();
-    if (output.length === 0) {return;}
-    const pids: readonly string[] = output.split("\n").map((pid: string): string => {return pid.trim()}).filter((pid: string): boolean => {return pid.length > 0});
-    for (const pid of pids) {
-      log.info("Killing process", { port, pid });
-      execSync(`kill -9 ${pid}`);
-    }
-    const start: number = Date.now();
-    while (Date.now() - start < PORT_FREE_TIMEOUT_MS) {
-      if (!(await isPortInUse(port))) {
-        log.info("Port is now free", { port });
-        return;
-      }
-      await new Promise((resolve: (value: undefined) => void): void => { setTimeout((): void => {resolve(undefined);}, PORT_POLL_DELAY_MS); });
-    }
-    log.warn("Port still in use after timeout — proceeding anyway", { port });
-  } catch {
-    // Lsof exits non-zero when no process found — that's fine
+/// [SERVER-SINGLE-INSTANCE] Claim this workspace folder, or exit cleanly if another
+/// LIVE Too Many Cooks already owns it. The other process is left completely
+/// untouched — we never kill it ([SERVER-NO-KILL]).
+const guardSingleInstance: (lockPath: string, workspace: string, port: number, log: Logger) => void = (
+  lockPath: string,
+  workspace: string,
+  port: number,
+  log: Logger,
+): void => {
+  const result: Result<LockOutcome, string> = acquireServerLock(lockPath, port, Date.now());
+  if (!result.ok) {
+    log.fatal("Could not acquire single-instance lock", { workspace, error: result.error });
+    process.exit(1);
   }
+  if (result.value.kind === "busy") {
+    log.error(
+      "Too Many Cooks is already running in this folder — refusing to start a second instance",
+      { workspace, existingPid: result.value.existing.pid, existingPort: result.value.existing.port },
+    );
+    process.exit(1);
+  }
+  log.info("Acquired single-instance lock", { workspace, port });
 };
 
-const startServer: (log: Logger) => Promise<void> = async (log: Logger): Promise<void> => {
+/// [SERVER-PORT-CONFLICT] If the port is taken, step aside cleanly. Too Many Cooks
+/// NEVER kills the process holding a port ([SERVER-NO-KILL]) — run a different
+/// folder on a different TMC_PORT instead.
+const handleListenError: (err: Error, port: number, log: Logger) => void = (
+  err: Error,
+  port: number,
+  log: Logger,
+): void => {
+  if (errorCode(err) === "EADDRINUSE") {
+    log.error(
+      "Port already in use by another process — stepping aside (Too Many Cooks never kills the process holding a port). Set TMC_PORT to run on a different port.",
+      { port },
+    );
+    process.exit(1);
+  }
+  log.fatal("Server listen error", { port, error: String(err) });
+  process.exit(1);
+};
+
+const startServer: (log: Logger, port: number) => Promise<void> = async (log: Logger, port: number): Promise<void> => {
   log.info("Creating server...");
 
   const cfg: typeof defaultConfig = defaultConfig;
@@ -170,11 +194,11 @@ const startServer: (log: Logger) => Promise<void> = async (log: Logger): Promise
   app.get("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
   app.delete("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
 
-  const port: number = getServerPort();
-  await killExistingProcess(port, log);
-  app.listen(port, (): void => {
+  const server: Server = app.listen(port, (): void => {
     log.info("Server listening", { port });
   });
+  // [SERVER-PORT-CONFLICT] Never crash unhandled on a busy port — step aside.
+  server.on("error", (err: Error): void => { handleListenError(err, port, log); });
 
   // Keep event loop alive
   const KEEP_ALIVE_INTERVAL_MS: number = 60000;

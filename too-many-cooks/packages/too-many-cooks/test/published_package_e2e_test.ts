@@ -60,8 +60,9 @@ const PRISMA_RUNTIME_REL_PATH: string = "node_modules/prisma/package.json";
 /** Workspace-relative path to the SQLite database file. */
 const DB_REL_PATH: string = ".too_many_cooks/data.db";
 
-/** Port the spawned server listens on. Fixed; if it clashes the bin's
- *  built-in port-takeover kicks in (the suite kills it anyway). */
+/** Port the spawned server listens on. Fixed; the suite boots one server at a
+ *  time and kills it before the next, so the port is free each boot. The server
+ *  never takes over a busy port ([SERVER-NO-KILL]) — it would step aside. */
 const PORT: number = 4067;
 
 /** Polling tuning for the readiness probe. */

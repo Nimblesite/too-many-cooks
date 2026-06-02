@@ -45,6 +45,8 @@ To target a specific workspace:
 TMC_WORKSPACE=/path/to/your/project too-many-cooks
 ```
 
+> **One server per folder.** Too Many Cooks isolates by workspace folder and never kills another process. If a server is already running in this folder it refuses to start a second one; if the port is already taken it steps aside cleanly rather than killing the owner. To run two projects at once, give each its own `TMC_PORT`. All state (database, logs, lock) lives in that folder's `.too_many_cooks/`.
+
 ## Upgrade
 
 If you installed globally, update all TMC packages to the latest version:

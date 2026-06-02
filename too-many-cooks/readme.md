@@ -90,6 +90,16 @@ The server starts on **port 4040** and exposes:
 TMC_PORT=5050 TMC_WORKSPACE=/path/to/project too-many-cooks
 ```
 
+<h3 style="font-weight:700;letter-spacing:-0.02em;">One server per folder — never kills anything</h3>
+
+Too Many Cooks isolates by **workspace folder**, and it **never** kills or signals another process:
+
+- **All state lives in `${workspace}/.too_many_cooks/`** — the database, the logs, and the single-instance lock. No other instance can touch it.
+- **If a server is already running in this folder, the second start exits immediately** with `Too Many Cooks is already running in this folder` (it would otherwise corrupt the shared database).
+- **If the port is already in use, the server steps aside cleanly** (a graceful `EADDRINUSE` exit) — it does **not** run `lsof`/`kill -9` against whatever owns the port. To run two folders at once, give each its own `TMC_PORT`.
+
+This is why two VS Code windows on two different projects can no longer collide: neither one can kill the other's server.
+
 <br>
 
 <h2 style="font-weight:700;letter-spacing:-0.02em;padding-bottom:0.5rem;border-bottom:2px solid #c46d3b;">Connect Your Agent</h2>
