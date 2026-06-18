@@ -1,21 +1,31 @@
 name: Release
 
+# Tag → release. The tagged SHA is built verbatim: NO branch detection, NO
+# commit, NO push, NO tag mutation. Version is stamped runner-local from the tag
+# in each build job. [CI-RELEASE]
+#
+# Shape: build jobs produce ARTIFACTS only (never touch the GitHub release);
+# one github-release job creates the release from those artifacts (no parallel
+# softprops race); the registry publish jobs consume the same VSIX artifact so
+# identical bytes ship everywhere.
+
 on:
   push:
     tags:
       - 'v*'
 
+# Least-privilege default: every job is read-only unless it explicitly escalates
+# (github-release needs contents: write; OIDC jobs need id-token: write).
+# [SWR-SEC-TOKEN-PRIVILEGE]
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   # CodeQL release gate ([GITHUB-CODE-SCANNING]). Scans the tagged SHA with the
-  # current query set and FAILS on any High/Critical finding. Every publish job
-  # below `needs:` this (build-mcp directly; build-vsix transitively via
-  # build-mcp; deploy-website directly), so a dirty scan BLOCKS the release — a
-  # release can never ship code CodeQL flagged. Reuses codeql.yml via
-  # workflow_call (DRY — no duplicated matrix).
+  # current query set and FAILS on any High/Critical finding. Both build jobs and
+  # deploy-website `needs:` this (the registry publishes transitively via
+  # build-vsix), so a dirty scan BLOCKS the release — code CodeQL flagged can
+  # never ship. Reuses codeql.yml via workflow_call (DRY — no duplicated matrix).
   codeql:
     name: CodeQL release gate
     permissions:
@@ -27,10 +37,13 @@ jobs:
       gate: true
 
   build-mcp:
-    name: Build npm Packages
+    name: Build & Publish npm Packages
     runs-on: ubuntu-latest
     needs: codeql
     environment: NPM Deployment
+    permissions:
+      contents: read
+      id-token: write # npm Trusted Publisher (OIDC) — no NPM_TOKEN
     steps:
       - uses: actions/checkout@v4
 
@@ -74,14 +87,17 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "NPM_TAG=$NPM_TAG" >> "$GITHUB_OUTPUT"
 
+      # First-class package.json mutation via `npm version` / `npm pkg set` — no
+      # ad hoc sed on a structured file. [SWR-VERSION-BUILD-STAMPING]
       - name: Stamp versions for publishing
         run: |
+          set -euo pipefail
           VERSION=${{ steps.version.outputs.VERSION }}
           cd too-many-cooks/packages/core
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           cd ../too-many-cooks
           npm version "$VERSION" --no-git-tag-version --allow-same-version
-          sed -i "s/\"too-many-cooks-core\": \"\\*\"/\"too-many-cooks-core\": \"^$VERSION\"/" package.json
+          npm pkg set "dependencies.too-many-cooks-core=^$VERSION"
 
       - name: Publish too-many-cooks-core to npm
         working-directory: too-many-cooks/packages/core
@@ -99,20 +115,26 @@ jobs:
         working-directory: too-many-cooks/packages/too-many-cooks
         run: npm pack
 
-      - name: Upload npm tarballs as release assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload npm tarballs as artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: |
+          name: npm-tarballs
+          path: |
             too-many-cooks/packages/core/too-many-cooks-core-${{ steps.version.outputs.VERSION }}.tgz
             too-many-cooks/packages/too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
-          name: Too Many Cooks ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          if-no-files-found: error
 
+  # Build the VSIX exactly once and publish it as an artifact. The github-release,
+  # Marketplace and Open VSX jobs consume that SAME artifact, so identical bytes
+  # ship everywhere. The extension bundles NO native binaries (pure JS that talks
+  # to the MCP server over HTTP), so a single universal VSIX is correct — no
+  # per-target build, and no dependency on build-mcp.
   build-vsix:
     name: Build VSCode Extension
     runs-on: ubuntu-latest
-    needs: build-mcp
+    needs: codeql
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -123,12 +145,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
 
-      - name: Build MCP server
-        working-directory: too-many-cooks
-        run: |
-          npm ci
-          npm run build
-
       - name: Install extension dependencies
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
@@ -137,37 +153,173 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # vsce is version-pinned: a floating `npx @vscode/vsce` would fetch and run
+      # the latest release at package time — a supply-chain risk. Bump deliberately.
       - name: Package VSCode extension
         working-directory: too_many_cooks_vscode_extension
         run: |
+          set -euo pipefail
           npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
-          npx vsce package --no-git-tag-version ${{ steps.version.outputs.VERSION }}
+          npx --yes @vscode/vsce@3.9.2 package --out "too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix"
 
-      - name: Publish VSIX to VS Code Marketplace
-        working-directory: too_many_cooks_vscode_extension
-        env:
-          VSCE_PAT: ${{ secrets.VSCODE_MARKETPLACE_PAT }}
-        run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "::error::VSCODE_MARKETPLACE_PAT not accessible. If it exists at the Nimblesite org level, add too-many-cooks to its allowed repositories under Org Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-          npx --yes @vscode/vsce publish --packagePath too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vsix
+          path: too_many_cooks_vscode_extension/too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
+          if-no-files-found: error
 
-      - name: Upload VSIX as release asset
+  # Single owner of the GitHub release — no parallel softprops race. Creates the
+  # release once from the build artifacts (npm tarballs + VSIX).
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-mcp
+      - build-vsix
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release with all assets
         uses: softprops/action-gh-release@v2
         with:
-          files: too_many_cooks_vscode_extension/too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
+          files: |
+            artifacts/*.tgz
+            artifacts/*.vsix
           name: Too Many Cooks ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
 
+  publish-marketplace:
+    name: Publish VSIX to VS Code Marketplace
+    runs-on: ubuntu-latest
+    needs: build-vsix
+    # Passwordless publish via Microsoft Entra ID OIDC — NO long-lived PAT.
+    # Binding the job to the `release` environment makes the GitHub OIDC subject
+    # deterministic (repo:Nimblesite/too-many-cooks:environment:release), so ONE
+    # federated credential covers every v* tag — Entra rejects tag wildcards in an
+    # explicit federated subject. AZURE_CLIENT_ID / AZURE_TENANT_ID (neither
+    # sensitive) live on the `release` environment / org. [SWR-SEC-TOKEN-PRIVILEGE]
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vsix
+          path: artifacts
+
+      # Exchange the GitHub Actions OIDC token for an Entra ID session (no client
+      # secret). The publisher identity has no Azure subscription role — its only
+      # authorization is Marketplace publisher membership — hence
+      # allow-no-subscriptions.
+      - uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      # Mint an Azure DevOps / Marketplace-scoped Entra access token from the OIDC
+      # session and hand it to vsce via VSCE_PAT (kept off argv + masked).
+      # 499b84ac-1321-427f-aa17-267ca6975798 is Azure DevOps' fixed first-party app
+      # id that vsce authenticates against; this explicit short-lived-token path is
+      # the reliable PAT-less recipe and sidesteps the `--azure-credential` publish
+      # bug (microsoft/vscode-vsce#1023). A hyphenated tag publishes --pre-release.
+      - name: Publish VSIX (Entra OIDC, no PAT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          flag=""
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            flag="--pre-release"
+            echo "Prerelease tag ${GITHUB_REF_NAME}; publishing with --pre-release"
+          fi
+          VSCE_PAT="$(az account get-access-token \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+            --query accessToken -o tsv)"
+          echo "::add-mask::${VSCE_PAT}"
+          export VSCE_PAT
+          published=0
+          shopt -s nullglob
+          for vsix in artifacts/*.vsix; do
+            echo "Publishing ${vsix}"
+            npx --yes @vscode/vsce@3.9.2 publish ${flag} --packagePath "${vsix}"
+            published=$((published + 1))
+          done
+          if [ "${published}" -eq 0 ]; then
+            echo "::error::no VSIX artifacts found to publish"
+            exit 1
+          fi
+          echo "Published ${published} VSIX(es) to the Marketplace"
+
+  publish-openvsx:
+    name: Publish VSIX (Open VSX)
+    runs-on: ubuntu-latest
+    needs: build-vsix
+    # Independent of publish-marketplace: the Open VSX push (which serves the
+    # VS Code forks — Cursor, Windsurf, Antigravity) must not be gated on the MS
+    # Marketplace publish, and vice versa. Open VSX has no OIDC/trusted-publishing
+    # path, so this uses an Open VSX token (OPEN_VSX_PAT) scoped to the release env.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vsix
+          path: artifacts
+
+      # ovsx is version-pinned: a floating `npx ovsx` would fetch and run the
+      # latest release inside the job that holds the token — a supply-chain risk.
+      - name: Publish to Open VSX Registry
+        env:
+          OVSX_PAT: ${{ secrets.OPEN_VSX_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "::error::OPEN_VSX_PAT is not set; cannot publish to Open VSX"
+            exit 1
+          fi
+          flag=""
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            flag="--pre-release"
+          fi
+          published=0
+          shopt -s nullglob
+          for vsix in artifacts/*.vsix; do
+            echo "Publishing ${vsix}"
+            npx --yes ovsx@1.0.0 publish ${flag} --packagePath "${vsix}"
+            published=$((published + 1))
+          done
+          if [ "${published}" -eq 0 ]; then
+            echo "::error::no VSIX artifacts found to publish"
+            exit 1
+          fi
+          echo "Published ${published} VSIX(es) to Open VSX"
+
+  # Website deploys only after the CodeQL gate passes, so the live site never
+  # gets ahead of an unscanned release. [CI-WORKFLOWS]
   deploy-website:
     name: Deploy Website to GitHub Pages
     runs-on: ubuntu-latest
     needs: codeql
     permissions:
-      contents: write
+      contents: read
       pages: write
       id-token: write
     concurrency:
