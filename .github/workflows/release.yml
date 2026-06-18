@@ -45,10 +45,10 @@ jobs:
       contents: read
       id-token: write # npm Trusted Publisher (OIDC) — no NPM_TOKEN
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
@@ -136,10 +136,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -186,11 +186,18 @@ jobs:
           merge-multiple: true
 
       - name: Create release with all assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
+          # Recursive globs: upload-artifact roots a multi-path artifact at the
+          # least-common-ancestor of its inputs, so the two npm tarballs download
+          # one directory deep (artifacts/core/*.tgz, artifacts/too-many-cooks/*.tgz).
+          # A non-recursive artifacts/*.tgz would silently match neither. **/* also
+          # matches the flat single-file VSIX. fail_on_unmatched_files makes a future
+          # layout drift FAIL loudly instead of shipping a release missing assets.
           files: |
-            artifacts/*.tgz
-            artifacts/*.vsix
+            artifacts/**/*.tgz
+            artifacts/**/*.vsix
+          fail_on_unmatched_files: true
           name: Too Many Cooks ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -210,7 +217,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -235,6 +242,7 @@ jobs:
       # id that vsce authenticates against; this explicit short-lived-token path is
       # the reliable PAT-less recipe and sidesteps the `--azure-credential` publish
       # bug (microsoft/vscode-vsce#1023). A hyphenated tag publishes --pre-release.
+      # --skip-duplicate makes a re-run over an already-published version idempotent.
       - name: Publish VSIX (Entra OIDC, no PAT)
         shell: bash
         run: |
@@ -253,7 +261,7 @@ jobs:
           shopt -s nullglob
           for vsix in artifacts/*.vsix; do
             echo "Publishing ${vsix}"
-            npx --yes @vscode/vsce@3.9.2 publish ${flag} --packagePath "${vsix}"
+            npx --yes @vscode/vsce@3.9.2 publish --skip-duplicate ${flag} --packagePath "${vsix}"
             published=$((published + 1))
           done
           if [ "${published}" -eq 0 ]; then
@@ -274,7 +282,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -285,6 +293,7 @@ jobs:
 
       # ovsx is version-pinned: a floating `npx ovsx` would fetch and run the
       # latest release inside the job that holds the token — a supply-chain risk.
+      # --skip-duplicate makes a re-run over an already-published version idempotent.
       - name: Publish to Open VSX Registry
         env:
           OVSX_PAT: ${{ secrets.OPEN_VSX_PAT }}
@@ -303,7 +312,7 @@ jobs:
           shopt -s nullglob
           for vsix in artifacts/*.vsix; do
             echo "Publishing ${vsix}"
-            npx --yes ovsx@1.0.0 publish ${flag} --packagePath "${vsix}"
+            npx --yes ovsx@1.0.0 publish --skip-duplicate ${flag} --packagePath "${vsix}"
             published=$((published + 1))
           done
           if [ "${published}" -eq 0 ]; then
@@ -313,11 +322,13 @@ jobs:
           echo "Published ${published} VSIX(es) to Open VSX"
 
   # Website deploys only after the CodeQL gate passes, so the live site never
-  # gets ahead of an unscanned release. [CI-WORKFLOWS]
+  # gets ahead of an unscanned release. Stable tags only: hyphenated SemVer
+  # prerelease tags (v0.14.0-rc.1, …) never overwrite the live site.
   deploy-website:
     name: Deploy Website to GitHub Pages
     runs-on: ubuntu-latest
     needs: codeql
+    if: ${{ !contains(github.ref_name, '-') }}
     permissions:
       contents: read
       pages: write
@@ -329,10 +340,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'

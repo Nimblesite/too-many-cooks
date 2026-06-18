@@ -11,4 +11,4 @@ dependencies:
   nadz: 0.0.7-beta
 
 dev_dependencies:
-  test: ^1.24.0
+  test: ^1.31.1
