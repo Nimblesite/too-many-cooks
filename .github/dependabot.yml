@@ -1,0 +1,55 @@
+# agent-pmo:0b21609
+# Dependabot — portfolio standard ([GITHUB-DEPENDABOT]).
+#
+# Goal: keep dependencies patched (supply-chain defense) WITHOUT blanketing the
+# repo in pull requests. Every ecosystem here is GROUPED, so a run opens at most
+# two PRs per ecosystem (one for minor/patch, one for majors) instead of one PR
+# per dependency. These group rules ALSO apply to Dependabot security updates,
+# so security fixes land grouped too.
+#
+# Only the ecosystems this repo actually uses are configured:
+#   - github-actions: the workflow files under .github/
+#   - npm: the three Node projects (MCP server monorepo, VS Code extension, website)
+#   - pub: the Dart codegen toolkit
+version: 2
+
+updates:
+  # GitHub Actions — pinned actions are a prime supply-chain target; keep current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # npm / Node — three independent projects, each with its own lockfile.
+  - package-ecosystem: npm
+    directories:
+      - /too-many-cooks
+      - /too_many_cooks_vscode_extension
+      - /website
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]
+      npm-major:
+        update-types: ["major"]
+
+  # pub / Dart — the codegen toolkit (codegen/pubspec.yaml).
+  - package-ecosystem: pub
+    directory: /codegen
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      pub-minor:
+        update-types: ["minor", "patch"]
+      pub-major:
+        update-types: ["major"]

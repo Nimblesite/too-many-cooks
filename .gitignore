@@ -1,5 +1,16 @@
+# agent-pmo:0b21609
 # OS
 .DS_Store
+Thumbs.db
+._*
+
+# Secrets — NEVER commit credentials ([GITIGNORE-RULES])
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+!*.pub.key
 
 # Dependencies
 node_modules/
@@ -62,3 +73,6 @@ too-many-cooks/packages/too-many-cooks/coverage
 
 
 logs/
+
+
+.deslop-cache/
