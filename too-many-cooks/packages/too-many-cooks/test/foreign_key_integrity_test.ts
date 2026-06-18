@@ -27,6 +27,44 @@ const openRawDb = (): Database.Database => {
   return db;
 };
 
+/// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: rebuild the messages table the way
+/// it looked BEFORE the to_agent cascade migration — to_agent ON DELETE NO ACTION —
+/// simulating a DB that predates 20260525_add_to_agent_fk_cascade.
+const downgradeMessagesToPreCascade = (path: string): void => {
+  const db = new Database(path);
+  db.pragma("foreign_keys = OFF");
+  db.exec(`
+    DROP TABLE IF EXISTS message_reads;
+    DROP TABLE IF EXISTS messages;
+    CREATE TABLE messages (
+      id TEXT PRIMARY KEY NOT NULL,
+      from_agent TEXT NOT NULL,
+      to_agent TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      read_at BIGINT,
+      CONSTRAINT messages_from_agent_fkey FOREIGN KEY (from_agent) REFERENCES identity (agent_name) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT messages_to_agent_fkey FOREIGN KEY (to_agent) REFERENCES identity (agent_name) ON DELETE NO ACTION ON UPDATE CASCADE
+    );
+    CREATE TABLE message_reads (
+      message_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      read_at BIGINT NOT NULL,
+      PRIMARY KEY (message_id, agent_name),
+      CONSTRAINT message_reads_message_id_fkey FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT message_reads_agent_name_fkey FOREIGN KEY (agent_name) REFERENCES identity (agent_name) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `);
+  db.close();
+};
+
+const messagesDdl = (path: string): string => {
+  const db = new Database(path);
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'messages'").get() as { sql: string } | undefined;
+  db.close();
+  return row?.sql ?? "";
+};
+
 describe("foreign_key_integrity", () => {
   afterEach(() => { deleteIfExists(TEST_FK_DB_PATH); });
 
@@ -299,5 +337,56 @@ describe("foreign_key_integrity", () => {
     assert.strictEqual(messagesAfter.value.length, 0, "All four cross-agent messages must cascade out");
     assert.strictEqual(agentsAfter.value.length, 1, "Only bob remains as an active agent");
     assert.strictEqual(agentsAfter.value[0]?.agentName, "fk-bob");
+  });
+
+  /// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: on a DB that predates the
+  /// to_agent cascade migration, reopening through createDb must repair the schema
+  /// (prisma db push rebuilds the table with ON DELETE CASCADE) so that deleting a
+  /// recipient cascade-deletes their inbound messages — no orphans survive. This
+  /// is the legacy-DB counterpart to the fresh-DB cascade tests above.
+  it("repairs a pre-cascade messages table on reopen, then cascade-deletes inbound messages (#43)", async () => {
+    deleteIfExists(TEST_FK_DB_PATH);
+    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
+    const first = createDb(config);
+    assert.strictEqual(first.ok, true);
+    if (!first.ok) { return; }
+    await first.value.close();
+
+    downgradeMessagesToPreCascade(TEST_FK_DB_PATH);
+    assert.match(
+      messagesDdl(TEST_FK_DB_PATH),
+      /messages_to_agent_fkey[\s\S]*ON DELETE NO ACTION/u,
+      "precondition: legacy messages table must lack the to_agent cascade",
+    );
+
+    const second = createDb(config);
+    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via prisma db push");
+    if (!second.ok) { return; }
+
+    assert.match(
+      messagesDdl(TEST_FK_DB_PATH),
+      /messages_to_agent_fkey[\s\S]*ON DELETE CASCADE/u,
+      "db push must rebuild the messages table with the to_agent cascade",
+    );
+
+    const sender = await second.value.register("pre-sender");
+    const recipient = await second.value.register("pre-recipient");
+    assert.strictEqual(sender.ok, true);
+    assert.strictEqual(recipient.ok, true);
+    if (!sender.ok || !recipient.ok) { return; }
+    await second.value.sendMessage(sender.value.agentName, sender.value.agentKey, recipient.value.agentName, "legacy inbound");
+
+    const wipe = await second.value.adminDeleteAgent("pre-recipient");
+    assert.strictEqual(wipe.ok, true, "deleting the recipient must succeed");
+    const after = await second.value.listAllMessages();
+    await second.value.close();
+
+    assert.strictEqual(after.ok, true);
+    if (!after.ok) { return; }
+    assert.strictEqual(
+      after.value.length,
+      0,
+      "inbound message to the deleted recipient MUST cascade out after schema repair — no orphans",
+    );
   });
 });

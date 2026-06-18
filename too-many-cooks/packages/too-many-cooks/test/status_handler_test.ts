@@ -53,9 +53,14 @@ describe("status handler", () => {
     assert.strictEqual(Array.isArray(parsed.agents), true);
     assert.strictEqual(Array.isArray(parsed.locks), true);
     assert.strictEqual(Array.isArray(parsed.plans), true);
-    assert.strictEqual(Array.isArray(parsed.messages), true);
     assert.strictEqual((parsed.agents as unknown[]).length, 0);
     assert.strictEqual((parsed.locks as unknown[]).length, 0);
+    // [STATUS-BOUNDED] Issues #41/#42: messages is a bounded overview, not a flat array.
+    const messages = parsed.messages as { total: number; unread: number; recent: unknown[] };
+    assert.strictEqual(messages.total, 0);
+    assert.strictEqual(messages.unread, 0);
+    assert.strictEqual(Array.isArray(messages.recent), true);
+    assert.strictEqual(messages.recent.length, 0);
   });
 
   it("returns populated status after registrations and actions", async () => {
@@ -84,6 +89,11 @@ describe("status handler", () => {
     assert.strictEqual((parsed.agents as unknown[]).length, 2);
     assert.strictEqual((parsed.locks as unknown[]).length, 1);
     assert.strictEqual((parsed.plans as unknown[]).length, 1);
-    assert.strictEqual((parsed.messages as unknown[]).length, 1);
+    // [STATUS-BOUNDED] Issues #41/#42: the reg1 -> reg2 direct message is one
+    // unread header in reg2's bounded overview.
+    const messages = parsed.messages as { total: number; unread: number; recent: unknown[] };
+    assert.strictEqual(messages.total, 1);
+    assert.strictEqual(messages.unread, 1);
+    assert.strictEqual(messages.recent.length, 1);
   });
 });

@@ -1,14 +1,13 @@
 /// Status tool - system overview.
 
 import type { Logger } from "../logger.js";
-import type { TooManyCooksDb } from "../db-interface.js";
+import type { MessageHeader, MessageOverview, TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
-import type { AgentIdentity, AgentPlan, DbError, FileLock, Message } from "../types.js";
+import type { AgentIdentity, AgentPlan, DbError, FileLock } from "../types.js";
 import {
   agentIdentityToJson,
   agentPlanToJson,
   fileLockToJson,
-  messageToJson,
 } from "../types.js";
 import {
   type CallToolResult,
@@ -16,8 +15,24 @@ import {
   type ToolCallback,
   textContent,
 } from "../mcp-types.js";
-import { BROADCAST_RECIPIENT } from "../notifications.js";
 import { type IdentityResult, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+
+/// [STATUS-BOUNDED] Issues #41/#42: cap on the recent-header slice embedded in a
+/// status overview. The payload is bounded by this constant regardless of how
+/// many messages exist on the server.
+const RECENT_MESSAGE_LIMIT: number = 20;
+
+/// [STATUS-BOUNDED] Serialize a header to JSON — id/from/to/timestamps only,
+/// NEVER the body. Full message content is the job of the `message get` tool.
+const messageHeaderToJson: (header: MessageHeader) => Record<string, unknown> = (
+  header: MessageHeader,
+): Record<string, unknown> => ({
+  id: header.id,
+  from_agent: header.fromAgent,
+  to_agent: header.toAgent,
+  created_at: header.createdAt,
+  ...(header.readAt === undefined ? {} : { read_at: header.readAt }),
+});
 
 /** Input schema for status tool. */
 export const STATUS_INPUT_SCHEMA: {
@@ -48,17 +63,6 @@ export const STATUS_TOOL_CONFIG: {
   annotations: null,
 } as const;
 
-/// [MSG-PRIVACY] Issue #11: an agent may only see broadcasts plus its own
-/// (sent or received) messages. Direct messages addressed to other agents
-/// must never be returned by the status overview. A caller with no resolved
-/// identity (agentName === null) sees broadcasts only.
-const isVisibleTo: (message: Message, agentName: string | null) => boolean = (
-  message: Message,
-  agentName: string | null,
-): boolean =>
-  message.toAgent === BROADCAST_RECIPIENT ||
-  (agentName !== null && (message.toAgent === agentName || message.fromAgent === agentName));
-
 /** Create status tool handler. */
 export const createStatusHandler: (
   db: TooManyCooksDb,
@@ -84,15 +88,18 @@ export const createStatusHandler: (
     if (!plansResult.ok) {return makeErrorResult(plansResult.error);}
     const plans: Array<Record<string, unknown>> = plansResult.value.map(agentPlanToJson);
 
-    const messagesResult: Result<readonly Message[], DbError> = await db.listAllMessages();
-    if (!messagesResult.ok) {return makeErrorResult(messagesResult.error);}
-
-    // [MSG-PRIVACY] Issue #11: filter direct messages by resolved caller identity.
+    // [STATUS-BOUNDED] Issues #41/#42, [MSG-PRIVACY] Issue #11: bounded, SQL-filtered
+    // overview. The caller sees only their own unread inbox + broadcasts, as headers
+    // (no bodies). Payload size is independent of total message history.
     const identity: IdentityResult = await resolveIdentity(db, args, getSession);
     const agentName: string | null = identity.isError ? null : identity.agentName;
-    const messages: Array<Record<string, unknown>> = messagesResult.value
-      .filter((message: Message): boolean => isVisibleTo(message, agentName))
-      .map(messageToJson);
+    const overviewResult: Result<MessageOverview, DbError> = await db.getMessageOverview(agentName, RECENT_MESSAGE_LIMIT);
+    if (!overviewResult.ok) {return makeErrorResult(overviewResult.error);}
+    const messages: Record<string, unknown> = {
+      total: overviewResult.value.total,
+      unread: overviewResult.value.unread,
+      recent: overviewResult.value.recent.map(messageHeaderToJson),
+    };
 
     log.debug("Status queried");
 

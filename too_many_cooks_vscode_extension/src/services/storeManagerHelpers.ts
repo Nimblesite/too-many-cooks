@@ -57,6 +57,24 @@ export async function fetchWithAuth(
   return await fetch(url, { headers });
 }
 
+/** Minimal shape of a fetch Response needed to validate its status. */
+export interface StatusLike {
+  readonly ok: boolean;
+  readonly status: number;
+}
+
+/**
+ * [VSIX-REFRESH-SURFACE] Issue #43: a non-ok /admin/status response must surface
+ * as an error, never be silently swallowed — otherwise the UI keeps showing stale
+ * pre-delete data with no indication anything failed. Throws on non-ok so callers
+ * (and the connect flow) react instead of leaving a stale view on screen.
+ */
+export function ensureStatusOk(response: StatusLike): void {
+  if (!response.ok) {
+    throw new Error(`Status refresh failed: server returned ${String(response.status)}`);
+  }
+}
+
 /** POST JSON with auth headers injected for cloud mode. */
 export async function postJsonWithAuth(
   url: string,

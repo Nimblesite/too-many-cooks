@@ -30,18 +30,24 @@ const deleteIfExists = (filePath: string): void => {
 const createTestLogger = () =>
   createLoggerWithContext(createLoggingContext());
 
-type StatusMessage = {
-  readonly content: string;
+/// [STATUS-BOUNDED] Issues #41/#42: status returns message HEADERS only (no body)
+/// in a bounded `recent` slice. Privacy is asserted via routing (from/to), which
+/// is even stronger than before — the body is never present at all. Headers carry
+/// snake_case JSON keys, so they are read as records rather than typed properties.
+type StatusOverview = {
+  readonly total: number;
+  readonly unread: number;
+  readonly recent: ReadonlyArray<Record<string, unknown>>;
 };
 
-const statusMessagesFor = async (
+const statusOverviewFor = async (
   db: TooManyCooksDb,
   agentKey: string,
-): Promise<readonly StatusMessage[]> => {
+): Promise<StatusOverview> => {
   const handler = createStatusHandler(db, createTestLogger());
   const result = await handler({ agent_key: agentKey }, {});
   assert.strictEqual(result.isError, false, "status must not error");
-  const parsed = JSON.parse(result.content[0].text) as { readonly messages: readonly StatusMessage[] };
+  const parsed = JSON.parse(result.content[0].text) as { readonly messages: StatusOverview };
   return parsed.messages;
 };
 
@@ -73,9 +79,10 @@ describe("status tool message privacy (#11)", () => {
     const sent = await db.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, secret);
     assert.strictEqual(sent.ok, true, "direct send must succeed");
 
-    const carolMessages = await statusMessagesFor(db, carol.value.agentKey);
+    const carolOverview = await statusOverviewFor(db, carol.value.agentKey);
+    assert.strictEqual(carolOverview.total, 0, "Carol's overview must count zero visible messages");
     assert.strictEqual(
-      carolMessages.some((m) => m.content === secret),
+      carolOverview.recent.some((m) => m.from_agent === alice.value.agentName && m.to_agent === bob.value.agentName),
       false,
       "Carol must NOT see a direct message addressed to Bob",
     );
@@ -88,17 +95,31 @@ describe("status tool message privacy (#11)", () => {
     const carol = await db.register("privacy-carol2");
     if (!alice.ok || !bob.ok || !carol.ok) { throw new Error("expected registrations ok"); }
 
-    const direct = "direct-to-bob";
-    const broadcast = "hello-everyone";
-    await db.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, direct);
-    await db.sendMessage(alice.value.agentName, alice.value.agentKey, BROADCAST, broadcast);
+    await db.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, "direct-to-bob");
+    await db.sendMessage(alice.value.agentName, alice.value.agentKey, BROADCAST, "hello-everyone");
 
-    const bobMessages = await statusMessagesFor(db, bob.value.agentKey);
-    assert.strictEqual(bobMessages.some((m) => m.content === direct), true, "Bob must see his own direct message");
-    assert.strictEqual(bobMessages.some((m) => m.content === broadcast), true, "Bob must see the broadcast");
+    const bobOverview = await statusOverviewFor(db, bob.value.agentKey);
+    assert.strictEqual(
+      bobOverview.recent.some((m) => m.to_agent === bob.value.agentName),
+      true,
+      "Bob must see his own direct message header",
+    );
+    assert.strictEqual(
+      bobOverview.recent.some((m) => m.to_agent === BROADCAST),
+      true,
+      "Bob must see the broadcast header",
+    );
 
-    const carolMessages = await statusMessagesFor(db, carol.value.agentKey);
-    assert.strictEqual(carolMessages.some((m) => m.content === direct), false, "Carol must NOT see Bob's direct message");
-    assert.strictEqual(carolMessages.some((m) => m.content === broadcast), true, "Carol must see the broadcast");
+    const carolOverview = await statusOverviewFor(db, carol.value.agentKey);
+    assert.strictEqual(
+      carolOverview.recent.some((m) => m.to_agent === bob.value.agentName),
+      false,
+      "Carol must NOT see Bob's direct message",
+    );
+    assert.strictEqual(
+      carolOverview.recent.some((m) => m.to_agent === BROADCAST),
+      true,
+      "Carol must see the broadcast header",
+    );
   });
 });

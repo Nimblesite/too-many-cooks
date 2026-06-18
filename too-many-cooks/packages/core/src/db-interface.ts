@@ -14,6 +14,26 @@ import type {
   Message,
 } from "./types.js";
 
+/// [STATUS-BOUNDED] Issues #41/#42: a message header carries routing/read
+/// metadata only — never the body. The `status` overview returns headers so its
+/// payload size is independent of message content length.
+export type MessageHeader = {
+  readonly id: string;
+  readonly fromAgent: string;
+  readonly toAgent: string;
+  readonly createdAt: number;
+  readonly readAt: number | undefined;
+};
+
+/// [STATUS-BOUNDED] Issues #41/#42: bounded overview of a caller's inbox. `total`
+/// and `unread` are counts (O(1) payload); `recent` is a bounded slice of the
+/// caller's most-recent UNREAD inbox headers (own + unread only, no bodies).
+export type MessageOverview = {
+  readonly total: number;
+  readonly unread: number;
+  readonly recent: readonly MessageHeader[];
+};
+
 /** Data access layer type. */
 export type TooManyCooksDb = {
   readonly register: (agentName: string) => Promise<Result<AgentRegistration, DbError>>;
@@ -77,6 +97,13 @@ export type TooManyCooksDb = {
   ) => Promise<Result<AgentPlan | null, DbError>>;
   readonly listPlans: () => Promise<Result<readonly AgentPlan[], DbError>>;
   readonly listAllMessages: () => Promise<Result<readonly Message[], DbError>>;
+  /// [STATUS-BOUNDED] Issues #41/#42: bounded, SQL-filtered overview for `status`.
+  /// `agentName === null` (unresolved caller) sees broadcasts only. No side
+  /// effects — unlike getMessages, this never marks anything read.
+  readonly getMessageOverview: (
+    agentName: string | null,
+    limit: number,
+  ) => Promise<Result<MessageOverview, DbError>>;
   readonly activate: (agentName: string) => Promise<Result<void, DbError>>;
   readonly deactivate: (agentName: string) => Promise<Result<void, DbError>>;
   readonly deactivateAll: () => Promise<Result<void, DbError>>;

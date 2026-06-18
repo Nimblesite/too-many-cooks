@@ -11,6 +11,9 @@ function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction
     case 'AddAgent':
       return { ...state, agents: [...state.agents, action.agent] };
     case 'RemoveAgent':
+      // [VSIX-REMOVE-AGENT] Issue #43: mirror the DB cascade — drop the agent and
+      // Every lock, plan, AND message (sent OR received) that references it, so the
+      // UI never shows rows orphaned against a deleted agent.
       return {
         ...state,
         agents: state.agents.filter((agent: Readonly<{ agentName: string }>): boolean => {
@@ -18,6 +21,9 @@ function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction
         }),
         locks: state.locks.filter((lock: Readonly<{ agentName: string }>): boolean => {
           return lock.agentName !== action.agentName;
+        }),
+        messages: state.messages.filter((message: Readonly<{ fromAgent: string; toAgent: string }>): boolean => {
+          return message.fromAgent !== action.agentName && message.toAgent !== action.agentName;
         }),
         plans: state.plans.filter((plan: Readonly<{ agentName: string }>): boolean => {
           return plan.agentName !== action.agentName;

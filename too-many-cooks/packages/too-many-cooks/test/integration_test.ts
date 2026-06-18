@@ -406,10 +406,11 @@ describe("Too Many Cooks MCP Server Integration", () => {
       });
     }
 
-    // Check status as a known agent. [MSG-PRIVACY] Issue #11: status only
-    // returns messages visible to the caller (broadcasts + its own sent or
-    // received), so the ring of direct sends yields exactly the two that touch
-    // the viewer (one it sent, one it received).
+    // Check status as a known agent. [STATUS-BOUNDED] Issues #41/#42 + [MSG-PRIVACY]
+    // Issue #11: status returns a bounded OVERVIEW of the caller's own inbox —
+    // total/unread counts plus recent UNREAD inbox headers (no bodies). In the
+    // ring of direct sends, the viewer has exactly two visible messages (one it
+    // sent, one it received); only the received one is an unread inbox header.
     const viewer = agents[0]!;
     const statusJson = JSON.parse(
       await client.callTool("status", { agent_key: viewer.key }),
@@ -423,28 +424,18 @@ describe("Too Many Cooks MCP Server Integration", () => {
       true,
       "Status response MUST include messages field",
     );
-    const msgs = statusJson.messages as Array<Record<string, unknown>>;
-    assert.strictEqual(
-      msgs.length,
-      2,
-      "Status returns only the caller's own sent/received messages",
-    );
-    // [MSG-PRIVACY] Issue #11: every returned message must involve the caller.
-    for (const m of msgs) {
-      assert.strictEqual(
-        m.to_agent === viewer.name || m.from_agent === viewer.name,
-        true,
-        "status must not leak messages unrelated to the caller",
-      );
-    }
+    const msgs = statusJson.messages as { total: number; unread: number; recent: Array<Record<string, unknown>> };
+    assert.strictEqual(msgs.total, 2, "viewer has two visible messages (one sent, one received)");
+    assert.strictEqual(msgs.unread, 1, "only the received message is an unread inbox item");
+    assert.strictEqual(msgs.recent.length, 1, "recent holds the single unread inbox header");
 
-    // Verify message structure
-    const firstMsg = msgs[0]!;
+    // [STATUS-BOUNDED] recent items are headers — routed to the caller, never bodies.
+    const firstMsg = msgs.recent[0]!;
     assert.ok("id" in firstMsg);
     assert.ok("from_agent" in firstMsg);
-    assert.ok("to_agent" in firstMsg);
-    assert.ok("content" in firstMsg);
+    assert.strictEqual(firstMsg.to_agent, viewer.name, "recent header must be addressed to the caller");
     assert.ok("created_at" in firstMsg);
+    assert.strictEqual("content" in firstMsg, false, "status headers must never carry the body");
   });
 
   it("agents release locks concurrently", async () => {

@@ -138,6 +138,7 @@ const createStorageDb = (): TooManyCooksDb => {
     },
     listPlans: async () => success([...plans.values()]),
     listAllMessages: async () => success([...messages]),
+    getMessageOverview: notImpl,
     activate: notImpl,
     deactivate: notImpl,
     deactivateAll: notImpl,

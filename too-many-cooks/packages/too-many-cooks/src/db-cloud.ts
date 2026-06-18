@@ -12,6 +12,8 @@ import type {
   LockResult,
   FileLock,
   Message,
+  MessageHeader,
+  MessageOverview,
   AgentPlan,
 } from "too-many-cooks-core";
 import {
@@ -60,6 +62,7 @@ const EP_LIST_LOCKS: string = "listLocks";
 const EP_RENEW_LOCK: string = "renewLock";
 const EP_SEND_MESSAGE: string = "sendMessage";
 const EP_GET_MESSAGES: string = "getMessages";
+const EP_GET_MESSAGE_OVERVIEW: string = "getMessageOverview";
 const EP_MARK_READ: string = "markRead";
 const EP_UPDATE_PLAN: string = "updatePlan";
 const EP_GET_PLAN: string = "getPlan";
@@ -149,6 +152,28 @@ const parseApiResponse: <T>(
     ? { ok: true, value: extract(body.value) }
     : { ok: false, error: extractDbError(body) };
 
+/// [STATUS-BOUNDED] Issues #41/#42: parse a message header (no body) from JSON.
+const messageHeaderFromJson: (raw: Record<string, unknown>) => MessageHeader = (
+  raw: Record<string, unknown>,
+): MessageHeader => ({
+  id: typeof raw.id === "string" ? raw.id : "",
+  fromAgent: typeof raw.from_agent === "string" ? raw.from_agent : "",
+  toAgent: typeof raw.to_agent === "string" ? raw.to_agent : "",
+  createdAt: typeof raw.created_at === "number" ? raw.created_at : 0,
+  readAt: typeof raw.read_at === "number" ? raw.read_at : undefined,
+});
+
+/// [STATUS-BOUNDED] Issues #41/#42: parse a bounded message overview from JSON.
+const messageOverviewFromJson: (raw: Record<string, unknown>) => MessageOverview = (
+  raw: Record<string, unknown>,
+): MessageOverview => ({
+  total: typeof raw.total === "number" ? raw.total : 0,
+  unread: typeof raw.unread === "number" ? raw.unread : 0,
+  recent: Array.isArray(raw.recent)
+    ? raw.recent.map((item: unknown): MessageHeader => messageHeaderFromJson(isRecord(item) ? item : {}))
+    : [],
+});
+
 /** API caller type. */
 type ApiCaller = (method: string, args: Record<string, unknown>) => Promise<ApiResponse>;
 
@@ -233,9 +258,9 @@ const buildLockMethods: (call: ApiCaller) => Pick<TooManyCooksDb,
 
 /** Build the message methods for TooManyCooksDb. */
 const buildMessageMethods: (call: ApiCaller) => Pick<TooManyCooksDb,
-  "getMessages" | "listAllMessages" | "markRead" | "sendMessage"
+  "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"
 > = (call: ApiCaller): Pick<TooManyCooksDb,
-  "getMessages" | "listAllMessages" | "markRead" | "sendMessage"
+  "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"
 > => ({
   sendMessage: async (fromAgent: string, fromKey: string, toAgent: string, content: string): Promise<Result<string, DbError>> =>
     parseApiResponse(await call(EP_SEND_MESSAGE, { fromAgent, fromKey, toAgent, content }), extractString),
@@ -246,6 +271,8 @@ const buildMessageMethods: (call: ApiCaller) => Pick<TooManyCooksDb,
       await call(EP_GET_MESSAGES, { agentName, agentKey, unreadOnly: options?.unreadOnly }),
       mappedArray(messageFromJson),
     ),
+  getMessageOverview: async (agentName: string | null, limit: number): Promise<Result<MessageOverview, DbError>> =>
+    parseApiResponse(await call(EP_GET_MESSAGE_OVERVIEW, { agentName, limit }), mapped(messageOverviewFromJson)),
   markRead: async (messageId: string, agentName: string, agentKey: string): Promise<Result<void, DbError>> =>
     parseApiResponse(await call(EP_MARK_READ, { messageId, agentName, agentKey }), extractVoid),
   listAllMessages: async (): Promise<Result<readonly Message[], DbError>> =>

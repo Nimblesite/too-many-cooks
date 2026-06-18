@@ -22,6 +22,8 @@ import {
   type LockResult,
   type Logger,
   type Message,
+  type MessageHeader,
+  type MessageOverview,
   type Result,
   type RetryPolicy,
   type TooManyCooksDataConfig,
@@ -848,6 +850,104 @@ const listAllMessages: (
   }
 };
 
+/// [STATUS-BOUNDED] Issues #41/#42: columns for a message header — never `content`.
+const MESSAGE_HEADER_COLUMNS: string = "id, from_agent, to_agent, created_at, read_at";
+
+/// [STATUS-BOUNDED] Predicate: every message visible to a named caller (own
+/// inbox, own sent, and broadcasts). Params: [agentName, agentName, '*'].
+const VISIBLE_TO_AGENT_WHERE: string = "to_agent = ? OR from_agent = ? OR to_agent = ?";
+
+/// [STATUS-BOUNDED] Predicate: a named caller's UNREAD inbox — mirrors the
+/// getMessages unreadOnly query. Params: [agentName, '*', agentName].
+const UNREAD_FOR_AGENT_WHERE: string =
+  "(to_agent = ? AND read_at IS NULL) OR (to_agent = ? AND NOT EXISTS " +
+  "(SELECT 1 FROM message_reads mr WHERE mr.message_id = messages.id AND mr.agent_name = ?))";
+
+/** Run a COUNT(*) query returning column `c` and narrow it to a number. */
+const countRows: (
+  db: Database.Database,
+  sql: string,
+  params: ReadonlyArray<number | string>,
+) => number = (
+  db: Database.Database,
+  sql: string,
+  params: ReadonlyArray<number | string>,
+): number => {
+  const row: Record<string, unknown> | undefined = toRow(db.prepare(sql).get(...params));
+  return typeof row?.c === "number" ? row.c : 0;
+};
+
+/** Map a SQLite row to a MessageHeader (no body). */
+const messageHeaderFromRow: (row: Record<string, unknown>) => MessageHeader = (
+  row: Record<string, unknown>,
+): MessageHeader => ({
+  id: typeof row.id === "string" ? row.id : "",
+  fromAgent: typeof row.from_agent === "string" ? row.from_agent : "",
+  toAgent: typeof row.to_agent === "string" ? row.to_agent : "",
+  createdAt: typeof row.created_at === "number" ? row.created_at : 0,
+  readAt: typeof row.read_at === "number" ? row.read_at : undefined,
+});
+
+/// [STATUS-BOUNDED] Overview for a named caller: total visible, unread inbox
+/// count, and a bounded slice of recent unread inbox headers.
+const agentMessageOverview: (
+  db: Database.Database,
+  agentName: string,
+  limit: number,
+) => MessageOverview = (
+  db: Database.Database,
+  agentName: string,
+  limit: number,
+): MessageOverview => {
+  const total: number = countRows(db, `SELECT COUNT(*) AS c FROM messages WHERE ${VISIBLE_TO_AGENT_WHERE}`, [agentName, agentName, BROADCAST_RECIPIENT]);
+  const unread: number = countRows(db, `SELECT COUNT(*) AS c FROM messages WHERE ${UNREAD_FOR_AGENT_WHERE}`, [agentName, BROADCAST_RECIPIENT, agentName]);
+  const rows: ReadonlyArray<Record<string, unknown>> = toRows(
+    db.prepare(`SELECT ${MESSAGE_HEADER_COLUMNS} FROM messages WHERE ${UNREAD_FOR_AGENT_WHERE} ORDER BY created_at DESC LIMIT ?`).all(agentName, BROADCAST_RECIPIENT, agentName, limit),
+  );
+  return { total, unread, recent: rows.map(messageHeaderFromRow) };
+};
+
+/// [STATUS-BOUNDED] Overview for an unresolved caller: broadcasts only. Reads
+/// cannot be tracked without an identity, so every broadcast counts as unread.
+const broadcastMessageOverview: (
+  db: Database.Database,
+  limit: number,
+) => MessageOverview = (
+  db: Database.Database,
+  limit: number,
+): MessageOverview => {
+  const total: number = countRows(db, "SELECT COUNT(*) AS c FROM messages WHERE to_agent = ?", [BROADCAST_RECIPIENT]);
+  const rows: ReadonlyArray<Record<string, unknown>> = toRows(
+    db.prepare(`SELECT ${MESSAGE_HEADER_COLUMNS} FROM messages WHERE to_agent = ? ORDER BY created_at DESC LIMIT ?`).all(BROADCAST_RECIPIENT, limit),
+  );
+  return { total, unread: total, recent: rows.map(messageHeaderFromRow) };
+};
+
+/// [STATUS-BOUNDED] Issues #41/#42: bounded, SQL-filtered inbox overview. No
+/// auto-mark-read side effect — `status` is a read-only overview.
+const getMessageOverview: (
+  db: Database.Database,
+  log: Logger,
+  agentName: string | null,
+  limit: number,
+) => Result<MessageOverview, DbError> = (
+  db: Database.Database,
+  log: Logger,
+  agentName: string | null,
+  limit: number,
+): Result<MessageOverview, DbError> => {
+  log.trace(`Building message overview (caller: ${agentName ?? "anonymous"})`);
+  try {
+    return success(
+      agentName === null
+        ? broadcastMessageOverview(db, limit)
+        : agentMessageOverview(db, agentName, limit),
+    );
+  } catch (e: unknown) {
+    return error({ code: ERR_DATABASE, message: String(e) });
+  }
+};
+
 /** Set agent active/inactive. */
 const setActive: (
   db: Database.Database,
@@ -1131,17 +1231,22 @@ const createMessageOps: (
   db: Database.Database,
   log: Logger,
   config: TooManyCooksDataConfig,
-) => Pick<TooManyCooksDb, "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> = (
+) => Pick<TooManyCooksDb, "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> = (
   db: Database.Database,
   log: Logger,
   config: TooManyCooksDataConfig,
-): Pick<TooManyCooksDb, "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> => ({
+): Pick<TooManyCooksDb, "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> => ({
   getMessages: async (
     name: string,
     key: string,
     options?: { unreadOnly?: boolean },
   ): Promise<Result<readonly Message[], DbError>> =>
     await Promise.resolve(getMessages(db, log, name, key, options?.unreadOnly ?? true)),
+  getMessageOverview: async (
+    name: string | null,
+    limit: number,
+  ): Promise<Result<MessageOverview, DbError>> =>
+    await Promise.resolve(getMessageOverview(db, log, name, limit)),
   listAllMessages: async (): Promise<Result<readonly Message[], DbError>> =>
     await Promise.resolve(listAllMessages(db, log)),
   markRead: async (msgId: string, name: string, key: string): Promise<Result<void, DbError>> =>
