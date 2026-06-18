@@ -163,22 +163,36 @@ const mapDbResult: <T>(
   return toDbError(transform(result.value, keychain));
 };
 
-/** Create an encrypting wrapper around a TooManyCooksDb. */
-export const withEncryption: (
+// withEncryption is split into per-domain factory groups so each stays within
+// max-lines-per-function without a lint suppression. Each group closes over the
+// same (db, currentKey, keychain); spreading them composes the full interface.
+
+/** Agent identity + lifecycle methods: plaintext passthroughs (no encrypted fields). */
+const buildAgentMethods: (
   db: TooManyCooksDb,
-  currentKey: WorkspaceKey,
-  keychain: Keychain,
-) => TooManyCooksDb =
-// eslint-disable-next-line max-lines-per-function -- single object literal implementing full TooManyCooksDb interface
-(
+) => Pick<TooManyCooksDb, "activate" | "authenticate" | "close" | "deactivate" | "deactivateAll" | "listAgents" | "lookupByKey" | "register"> = (
   db: TooManyCooksDb,
-  currentKey: WorkspaceKey,
-  keychain: Keychain,
-): TooManyCooksDb => {return {
+): Pick<TooManyCooksDb, "activate" | "authenticate" | "close" | "deactivate" | "deactivateAll" | "listAgents" | "lookupByKey" | "register"> => {return {
   register: async (agentName: string): Promise<Result<AgentRegistration, DbError>> => {return await db.register(agentName)},
   authenticate: async (name: string, key: string): Promise<Result<AgentIdentity, DbError>> => {return await db.authenticate(name, key)},
   lookupByKey: async (key: string): Promise<Result<string, DbError>> => {return await db.lookupByKey(key)},
   listAgents: async (): Promise<Result<readonly AgentIdentity[], DbError>> => {return await db.listAgents()},
+  activate: async (an: string): Promise<Result<void, DbError>> => {return await db.activate(an)},
+  deactivate: async (an: string): Promise<Result<void, DbError>> => {return await db.deactivate(an)},
+  deactivateAll: async (): Promise<Result<void, DbError>> => {return await db.deactivateAll()},
+  close: async (): Promise<Result<void, DbError>> => {return await db.close()},
+}};
+
+/** Lock methods: encrypt reason on the way out, decrypt on the way in. */
+const buildLockMethods: (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+) => Pick<TooManyCooksDb, "acquireLock" | "forceReleaseLock" | "listLocks" | "queryLock" | "releaseLock" | "renewLock"> = (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+): Pick<TooManyCooksDb, "acquireLock" | "forceReleaseLock" | "listLocks" | "queryLock" | "releaseLock" | "renewLock"> => {return {
   acquireLock: async (fp: string, an: string, ak: string, reason: string | null | undefined, timeout: number): Promise<Result<LockResult, DbError>> =>
     {return await mapDbResult(
       db.acquireLock(fp, an, ak, encryptField(reason, currentKey), timeout),
@@ -199,6 +213,18 @@ export const withEncryption: (
       keychain,
     )},
   renewLock: async (fp: string, an: string, ak: string, timeoutMs: number): Promise<Result<void, DbError>> => {return await db.renewLock(fp, an, ak, timeoutMs)},
+}};
+
+/** Message methods: encrypt content out; decrypt bodies in; overview is plaintext headers. */
+const buildMessageMethods: (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+) => Pick<TooManyCooksDb, "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> = (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+): Pick<TooManyCooksDb, "getMessageOverview" | "getMessages" | "listAllMessages" | "markRead" | "sendMessage"> => {return {
   sendMessage: async (from: string, key: string, to: string, content: string): Promise<Result<string, DbError>> =>
     {return await db.sendMessage(from, key, to, encrypt(content, currentKey))},
   getMessages: async (an: string, ak: string, opts?: { readonly unreadOnly?: boolean }): Promise<Result<readonly Message[], DbError>> =>
@@ -208,6 +234,29 @@ export const withEncryption: (
       keychain,
     )},
   markRead: async (id: string, an: string, ak: string): Promise<Result<void, DbError>> => {return await db.markRead(id, an, ak)},
+  listAllMessages: async (): Promise<Result<readonly Message[], DbError>> =>
+    {return await mapDbResult(
+      db.listAllMessages(),
+      (msgs: readonly Message[], kc: Keychain): Result<readonly Message[], string> => {return decryptArray(msgs, kc, decryptMessage)},
+      keychain,
+    )},
+  // [STATUS-BOUNDED] Overview returns message HEADERS only (id/from/to/timestamps),
+  // all of which are stored in plaintext — only bodies are encrypted — so the
+  // overview passes through untouched with no decryption needed.
+  getMessageOverview: async (an: string | null, limit: number): Promise<Result<MessageOverview, DbError>> =>
+    {return await db.getMessageOverview(an, limit)},
+}};
+
+/** Plan methods: encrypt goal/currentTask out, decrypt in. */
+const buildPlanMethods: (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+) => Pick<TooManyCooksDb, "getPlan" | "listPlans" | "updatePlan"> = (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+): Pick<TooManyCooksDb, "getPlan" | "listPlans" | "updatePlan"> => {return {
   updatePlan: async (an: string, ak: string, goal: string, task: string): Promise<Result<void, DbError>> =>
     {return await db.updatePlan(
       an,
@@ -226,25 +275,37 @@ export const withEncryption: (
       (plans: readonly AgentPlan[], kc: Keychain): Result<readonly AgentPlan[], string> => {return decryptArray(plans, kc, decryptPlan)},
       keychain,
     )},
-  listAllMessages: async (): Promise<Result<readonly Message[], DbError>> =>
-    {return await mapDbResult(
-      db.listAllMessages(),
-      (msgs: readonly Message[], kc: Keychain): Result<readonly Message[], string> => {return decryptArray(msgs, kc, decryptMessage)},
-      keychain,
-    )},
-  // [STATUS-BOUNDED] Overview returns message HEADERS only (id/from/to/timestamps),
-  // all of which are stored in plaintext — only bodies are encrypted — so the
-  // overview passes through untouched with no decryption needed.
-  getMessageOverview: async (an: string | null, limit: number): Promise<Result<MessageOverview, DbError>> =>
-    {return await db.getMessageOverview(an, limit)},
-  activate: async (an: string): Promise<Result<void, DbError>> => {return await db.activate(an)},
-  deactivate: async (an: string): Promise<Result<void, DbError>> => {return await db.deactivate(an)},
-  deactivateAll: async (): Promise<Result<void, DbError>> => {return await db.deactivateAll()},
-  close: async (): Promise<Result<void, DbError>> => {return await db.close()},
+}};
+
+/** Admin methods: only adminSendMessage encrypts; the rest are passthroughs. */
+const buildAdminMethods: (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+) => Pick<TooManyCooksDb, "adminDeleteAgent" | "adminDeleteLock" | "adminReset" | "adminResetKey" | "adminSendMessage"> = (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+): Pick<TooManyCooksDb, "adminDeleteAgent" | "adminDeleteLock" | "adminReset" | "adminResetKey" | "adminSendMessage"> => {return {
   adminDeleteLock: async (fp: string): Promise<Result<void, DbError>> => {return await db.adminDeleteLock(fp)},
   adminDeleteAgent: async (an: string): Promise<Result<void, DbError>> => {return await db.adminDeleteAgent(an)},
   adminResetKey: async (an: string): Promise<Result<AgentRegistration, DbError>> => {return await db.adminResetKey(an)},
   adminSendMessage: async (from: string, to: string, content: string): Promise<Result<string, DbError>> =>
     {return await db.adminSendMessage(from, to, encrypt(content, currentKey))},
   adminReset: async (): Promise<Result<void, DbError>> => {return await db.adminReset()},
+}};
+
+/** Create an encrypting wrapper around a TooManyCooksDb. */
+export const withEncryption: (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+) => TooManyCooksDb = (
+  db: TooManyCooksDb,
+  currentKey: WorkspaceKey,
+  keychain: Keychain,
+): TooManyCooksDb => {return {
+  ...buildAgentMethods(db),
+  ...buildLockMethods(db, currentKey, keychain),
+  ...buildMessageMethods(db, currentKey, keychain),
+  ...buildPlanMethods(db, currentKey, keychain),
+  ...buildAdminMethods(db, currentKey),
 }};

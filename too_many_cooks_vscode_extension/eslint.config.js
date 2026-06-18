@@ -1,0 +1,84 @@
+// Flat ESLint config (ESLint v10). Mirrors the MCP package's config and reuses
+// the shared rule set; adds VSIX-specific overrides migrated from the old
+// .eslintrc.js (interfaces, function declarations, tighter limits, readonly
+// parameter allow-list for VS Code API types).
+
+const eslint = require("@eslint/js");
+const tseslint = require("typescript-eslint");
+const { masterRules, testOverrides } = require("../eslint-rules.cjs");
+
+module.exports = tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./tsconfig.json",
+        tsconfigRootDir: __dirname,
+      },
+    },
+  },
+  {
+    rules: {
+      ...masterRules,
+      // Project-specific: reducers are pre-routed by action-type sets and switch
+      // over a subset with an intentional `default` catch-all, so a default makes
+      // the switch exhaustive (the pre-tseslint-8 behaviour).
+      "@typescript-eslint/switch-exhaustiveness-check": ["error", { considerDefaultExhaustiveForUnions: true }],
+      // Project-specific: VSIX uses interfaces for VSCode API compat
+      "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
+      // Project-specific: VSIX uses function declarations for hoisting
+      "func-style": ["error", "declaration"],
+      // Project-specific: VSIX enforces tighter limits
+      "max-lines": ["error", 300],
+      "max-params": ["error", 3],
+      // Project-specific: class methods that implement TreeDataProvider
+      "class-methods-use-this": ["error", { exceptMethods: ["getTreeItem"] }],
+      // Project-specific: enforce readonly parameters with VSIX-specific allow list
+      "@typescript-eslint/prefer-readonly-parameter-types": ["error", {
+        treatMethodsAsReadonly: true,
+        allow: [
+          "AbortController",
+          "AbortSignal",
+          "AgentTreeItem",
+          "AgentsTreeProvider",
+          "Buffer",
+          "ChildProcess",
+          "Error",
+          "ExtensionContext",
+          "LockTreeItem",
+          "LocksTreeProvider",
+          "MarkdownString",
+          "MessageTreeItem",
+          "MessagesTreeProvider",
+          "ReadableStream",
+          "ReadableStreamDefaultReader",
+          "ReadableStreamReadResult",
+          "Response",
+          "StoreManager",
+          "TreeItem",
+          "Uint8Array",
+          "WebviewPanel",
+        ],
+      }],
+    },
+  },
+  {
+    files: ["**/*.test.ts", "**/*.spec.ts"],
+    rules: testOverrides,
+  },
+  {
+    ignores: [
+      "out/**",
+      "coverage/**",
+      "coverage-integration/**",
+      "eslint.config.js",
+      "scripts/**",
+      "playwright.config.ts",
+      ".vscode-test/**",
+      ".vscode-test.mjs",
+    ],
+  },
+);

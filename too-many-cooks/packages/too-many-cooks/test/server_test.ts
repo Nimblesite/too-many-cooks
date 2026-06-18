@@ -33,11 +33,11 @@ describe("createTooManyCooksServer", () => {
     process.stderr.write = ((chunk: unknown): boolean => {
       chunks.push(String(chunk));
       return true;
-    }) as typeof process.stderr.write;
+    });
     process.stdout.write = ((chunk: unknown): boolean => {
       chunks.push(String(chunk));
       return true;
-    }) as typeof process.stdout.write;
+    });
     try {
       const config = {
         dbPath: "/nonexistent/path/that/does/not/exist/db.sqlite",

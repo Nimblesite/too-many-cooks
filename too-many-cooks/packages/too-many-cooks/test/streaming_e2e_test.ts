@@ -509,7 +509,7 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
 
     // Use admin REST to send message (bypasses MCP)
     await adminPost("/admin/send-message", {
-      fromAgent: reg.agent_name as string,
+      fromAgent: reg.agent_name,
       toAgent: "*",
       content: "Admin push test",
     });

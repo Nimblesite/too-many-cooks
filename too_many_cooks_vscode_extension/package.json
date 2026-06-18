@@ -247,7 +247,10 @@
         "tooManyCooks.connectionMode": {
           "type": "string",
           "default": "local",
-          "enum": ["local", "cloud"],
+          "enum": [
+            "local",
+            "cloud"
+          ],
           "description": "Default connection mode: local (SQLite) or cloud (TMC Cloud)"
         },
         "tooManyCooks.cloudApiUrl": {
@@ -263,7 +266,10 @@
         "tooManyCooks.cloudTransport": {
           "type": "string",
           "default": "stdio",
-          "enum": ["stdio", "http-streamable"],
+          "enum": [
+            "stdio",
+            "http-streamable"
+          ],
           "description": "MCP transport for cloud mode: stdio (each agent spawns own process) or http-streamable (shared server)"
         },
         "tooManyCooks.configureAgents": {
@@ -299,6 +305,7 @@
     "module-alias": "^2.2.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/eslint": "^9.6.1",
     "@types/mocha": "^10.0.6",
     "@types/node": "^25.9.3",
@@ -312,6 +319,7 @@
     "glob": "^13.0.6",
     "mocha": "^11.7.6",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.61.1"
   }
 }

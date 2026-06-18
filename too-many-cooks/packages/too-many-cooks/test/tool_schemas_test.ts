@@ -41,7 +41,7 @@ describe("message tool schema", () => {
 
   it("content description mentions 200 char limit", () => {
     assert.ok(
-      desc(MESSAGE_INPUT_SCHEMA as SchemaObj, "content").includes("200"),
+      desc(MESSAGE_INPUT_SCHEMA, "content").includes("200"),
     );
   });
 });
@@ -56,7 +56,7 @@ describe("plan tool schema", () => {
 
   it("goal description mentions 100 char limit", () => {
     assert.ok(
-      desc(PLAN_INPUT_SCHEMA as SchemaObj, "goal").includes("100"),
+      desc(PLAN_INPUT_SCHEMA, "goal").includes("100"),
     );
   });
 
@@ -69,29 +69,29 @@ describe("plan tool schema", () => {
 
   it("current_task description mentions char limit", () => {
     assert.ok(
-      desc(PLAN_INPUT_SCHEMA as SchemaObj, "current_task").includes("100"),
+      desc(PLAN_INPUT_SCHEMA, "current_task").includes("100"),
     );
   });
 });
 
 describe("register tool schema", () => {
   it("has name field for first registration", () => {
-    assert.ok("name" in props(REGISTER_INPUT_SCHEMA as SchemaObj));
+    assert.ok("name" in props(REGISTER_INPUT_SCHEMA));
   });
 
   it("has key field for reconnect", () => {
-    assert.ok("key" in props(REGISTER_INPUT_SCHEMA as SchemaObj));
+    assert.ok("key" in props(REGISTER_INPUT_SCHEMA));
   });
 
   it("name description says first registration only", () => {
     assert.ok(
-      desc(REGISTER_INPUT_SCHEMA as SchemaObj, "name").includes("FIRST"),
+      desc(REGISTER_INPUT_SCHEMA, "name").includes("FIRST"),
     );
   });
 
   it("key description says reconnect only", () => {
     assert.ok(
-      desc(REGISTER_INPUT_SCHEMA as SchemaObj, "key").includes("RECONNECT"),
+      desc(REGISTER_INPUT_SCHEMA, "key").includes("RECONNECT"),
     );
   });
 

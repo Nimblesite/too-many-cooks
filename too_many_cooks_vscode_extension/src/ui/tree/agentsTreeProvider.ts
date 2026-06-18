@@ -6,7 +6,7 @@ import { AgentTreeItem } from './agentTreeItem';
 import type { StoreManager } from '../../services/storeManager';
 import { selectAgentDetails } from '../../state/selectors';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const MS_PER_SECOND: number = 1000;
 
 export class AgentsTreeProvider implements vscode.TreeDataProvider<AgentTreeItem> {
@@ -24,12 +24,12 @@ export class AgentsTreeProvider implements vscode.TreeDataProvider<AgentTreeItem
     });
   }
 
-  // eslint-disable-next-line class-methods-use-this, @typescript-eslint/prefer-readonly-parameter-types
+   
   public getTreeItem(element: AgentTreeItem): vscode.TreeItem {
     return element;
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   public getChildren(element?: AgentTreeItem): AgentTreeItem[] {
     const { state }: Readonly<StoreManager> = this.storeManager;
     const details: readonly AgentDetails[] = selectAgentDetails(state);
@@ -120,7 +120,7 @@ function createAgentTooltip(detail: Readonly<AgentDetails>): vscode.MarkdownStri
   return md;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function appendLocksTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDetails>): void {
   if (detail.locks.length === 0) {
     return;
@@ -138,7 +138,7 @@ function appendLocksTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDet
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function appendMessagesTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDetails>): void {
   const unread: number = detail.receivedMessages.filter(
     (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
@@ -147,7 +147,7 @@ function appendMessagesTooltip(md: vscode.MarkdownString, detail: Readonly<Agent
     return;
   }
   md.appendMarkdown('\n---\n\n');
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+   
   let unreadStr: string = '';
   if (unread > 0) {
     unreadStr = ` **(${String(unread)} unread)**`;
@@ -223,7 +223,7 @@ function addMessageSummaryChild(children: AgentTreeItem[], detail: Readonly<Agen
   }
   const sent: number = detail.sentMessages.length;
   const recv: number = detail.receivedMessages.length;
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+   
   let unreadStr: string = '';
   if (unread > 0) {
     unreadStr = ` (${String(unread)} unread)`;

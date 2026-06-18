@@ -7,7 +7,7 @@ import type { StoreManager } from '../services/storeManager';
 import { getAgentNameFromItem } from './tree/treeItemUtils';
 import { getDialogService } from '../services/dialogService';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const MESSAGE_PREVIEW_LENGTH: number = 50;
 
 export function registerSendMessageCommand(
@@ -16,7 +16,7 @@ export function registerSendMessageCommand(
 ): vscode.Disposable {
   return vscode.commands.registerCommand(
     'tooManyCooks.sendMessage',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     async (item?: vscode.TreeItem, selection?: readonly vscode.TreeItem[]): Promise<void> => {
       await handleSendMessage(storeManager, logFn, { item, selection });
     },
@@ -24,7 +24,7 @@ export function registerSendMessageCommand(
 }
 
 interface SendInvocation {
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   readonly item: vscode.TreeItem | undefined;
   readonly selection: readonly vscode.TreeItem[] | undefined;
 }
@@ -117,7 +117,7 @@ async function selectRecipients(
 
 async function selectRecipient(
   storeManager: Readonly<StoreManager>,
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   item?: vscode.TreeItem,
 ): Promise<string | null> {
   const fromItem: string | null = getAgentNameFromItem(item);

@@ -37,7 +37,7 @@ import {
 } from './ui/messageCommands';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const DEFAULT_PORT: number = 4040;
 
 const logMessages: string[] = [];
@@ -58,7 +58,7 @@ function resolvePort(): number {
   return config.get<number>('port') ?? DEFAULT_PORT;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 export function activate(context: vscode.ExtensionContext): TestAPI {
   outputChannel = vscode.window.createOutputChannel('Too Many Cooks');
   outputChannel.show(true);
@@ -164,7 +164,7 @@ async function autoConnectOnActivation(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function registerAllCommands(
   context: vscode.ExtensionContext,
   sm: Readonly<StoreManager>,
@@ -236,7 +236,7 @@ function registerDashboardCommand(storeManager: Readonly<StoreManager>): vscode.
 function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode.Disposable {
   return vscode.commands.registerCommand(
     'tooManyCooks.deleteLock',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     async (item?: vscode.TreeItem): Promise<void> => {
       const dialogs: DialogService = getDialogService();
       const filePath: string | null = getFilePathFromItem(item);

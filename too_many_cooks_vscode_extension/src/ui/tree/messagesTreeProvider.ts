@@ -6,13 +6,13 @@ import { MessageTreeItem } from './messageTreeItem';
 import type { StoreManager } from '../../services/storeManager';
 import { selectMessages } from '../../state/selectors';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const MS_PER_SECOND: number = 1000;
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const SECONDS_PER_MINUTE: number = 60;
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const MINUTES_PER_HOUR: number = 60;
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const HOURS_PER_DAY: number = 24;
 
 export class MessagesTreeProvider implements vscode.TreeDataProvider<MessageTreeItem> {
@@ -30,12 +30,12 @@ export class MessagesTreeProvider implements vscode.TreeDataProvider<MessageTree
     });
   }
 
-  // eslint-disable-next-line class-methods-use-this, @typescript-eslint/prefer-readonly-parameter-types
+   
   public getTreeItem(element: MessageTreeItem): vscode.TreeItem {
     return element;
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   public getChildren(element?: MessageTreeItem): MessageTreeItem[] {
     if (typeof element !== 'undefined') {
       return [];
@@ -72,7 +72,7 @@ function createMessageItem(msg: Readonly<Message>): MessageTreeItem {
     target = msg.toAgent;
   }
   const relativeTime: string = getRelativeTimeShort(msg.createdAt);
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+   
   let statusPart: string = '';
   if (msg.readAt === null) {
     statusPart = ' [unread]';

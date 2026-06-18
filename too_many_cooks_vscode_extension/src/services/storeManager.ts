@@ -283,9 +283,7 @@ export class StoreManager {
   }
 
   private async doCallTool(name: string, args: Readonly<Record<string, unknown>>): Promise<string> {
-    if (this.mcpSessionId === null) {
-      this.mcpSessionId = await initMcpSession(this.baseUrl, '/mcp', 'too-many-cooks-vsix');
-    }
+    this.mcpSessionId ??= await initMcpSession(this.baseUrl, '/mcp', 'too-many-cooks-vsix');
     const result: Record<string, unknown> = await mcpJsonRpcRequest({
       baseUrl: this.baseUrl,
       method: 'tools/call',

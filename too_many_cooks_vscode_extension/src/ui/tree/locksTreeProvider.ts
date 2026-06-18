@@ -6,7 +6,7 @@ import type { FileLock } from '../../state/types';
 import { LockTreeItem } from './lockTreeItem';
 import type { StoreManager } from '../../services/storeManager';
 
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+ 
 const MS_PER_SECOND: number = 1000;
 
 export class LocksTreeProvider implements vscode.TreeDataProvider<LockTreeItem> {
@@ -24,12 +24,12 @@ export class LocksTreeProvider implements vscode.TreeDataProvider<LockTreeItem> 
     });
   }
 
-  // eslint-disable-next-line class-methods-use-this, @typescript-eslint/prefer-readonly-parameter-types
+   
   public getTreeItem(element: LockTreeItem): vscode.TreeItem {
     return element;
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   public getChildren(element?: LockTreeItem): LockTreeItem[] {
     if (typeof element === 'undefined') {
       return this.getRootItems();
@@ -84,9 +84,9 @@ export class LocksTreeProvider implements vscode.TreeDataProvider<LockTreeItem> 
     return items;
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   private getCategoryChildren(element: LockTreeItem): LockTreeItem[] {
-    // eslint-disable-next-line prefer-destructuring
+     
     const rawLabel: vscode.TreeItemLabel | string | undefined = element.label;
     let label: string = '';
     if (typeof rawLabel === 'string') {
