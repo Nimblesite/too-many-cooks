@@ -256,6 +256,18 @@ The `identity` table tracks connection state via an `active` column. The set of 
 
 The VSIX connects to `/admin/events` (Streamable HTTP) on startup and receives the same event stream as agents. When an `agent_deactivated` event arrives, the VSIX immediately reflects this in the tree view (greyed out, offline indicator, etc.). No polling — the VSIX is purely reactive to push events.
 
+#### `[VSIX-SORT]` — Tree views are sorted; default order is defined and user-selectable
+
+Every tree view renders in a **defined, deterministic order** — never raw insertion/registration order. Each view has a default sort key and a user-selectable sort, chosen via a `view/title` command and persisted (so a re-render driven by a push event never resets the user's choice). Ties are always broken by a stable secondary key so refreshes don't reorder equal rows. Defaults in **bold**:
+
+| View | Default sort | Other selectable keys | Tie-breaker |
+|------|--------------|-----------------------|-------------|
+| Agents | **`lastActive` descending** (most recently active first) | name, lock count, message count, online-first | `agentName` ascending |
+| Messages | **`createdAt` descending** (newest first) | oldest first, unread first, sender, recipient | `id` |
+| Locks / files | **`expiresAt` ascending** (soonest to expire first) | file path, holder, active-vs-expired | `filePath` ascending |
+
+Sort comparators are shared across providers (no per-view duplication). The chosen sort persists across reactive refreshes (`[VSIX behavior]`) and across reloads.
+
 ---
 
 ## Session Identity
@@ -327,3 +339,4 @@ Black-box, end-to-end tests. Interact via MCP protocol (HTTP) or VSCode UI, veri
 | VSCode extension | `too_many_cooks_vscode_extension/test/suite/` |
 | Process isolation `[SERVER-NO-KILL]` / `[SERVER-PORT-CONFLICT]` | `too-many-cooks/test/server_no_cross_kill_test.ts` |
 | Single instance per folder `[SERVER-SINGLE-INSTANCE]` | `too-many-cooks/test/server_single_instance_test.ts` |
+| Tree-view sort order `[VSIX-SORT]` | `too_many_cooks_vscode_extension/test/suite/` |

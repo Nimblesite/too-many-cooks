@@ -2,108 +2,93 @@
 name: code-dedup
 description: Searches for duplicate code, duplicate tests, and dead code, then safely merges or removes them. Use when the user says "deduplicate", "find duplicates", "remove dead code", "DRY up", or "code dedup". Requires test coverage — refuses to touch untested code.
 ---
-<!-- agent-pmo:74cf183 -->
+<!-- agent-pmo:795a9c2 -->
 
 # Code Dedup
 
-Carefully search for duplicate code, duplicate tests, and dead code across the repo. Merge duplicates and delete dead code — but only when test coverage proves the change is safe.
+Find duplicate code, duplicate tests, and dead code across the repo. Merge duplicates and delete dead code — but only when test coverage proves the change is safe.
 
 ## Prerequisites — hard gate
 
-Before touching ANY code, verify these conditions. If any fail, stop and report why.
+Stop and report if any of these fail:
 
-1. Run `make test` — all tests must pass. If tests fail, stop. Do not dedup a broken codebase.
-2. Run `make test` — tests are fail-fast AND enforce the coverage threshold from `coverage-thresholds.json`. If anything fails, stop and fix it before deduping.
-3. Verify the project uses **static typing**. TypeScript: `tsconfig.json` must have `"strict": true` — proceed.
-   - **Untyped JavaScript: STOP. Refuse to dedup.** Print: "This codebase has no static type checking. Deduplication without types is reckless — too high a risk of silent breakage. Add type checking first."
+1. **Tests green.** Run `make test` — it is fail-fast AND enforces the coverage threshold from `coverage-thresholds.json` (REPO-STANDARDS-SPEC [TEST-RULES]). Non-zero exit = stop. Never dedup a broken or under-covered codebase. Note the current coverage % — it is the floor and must not drop.
+2. **Static typing.** Dart is typed by default. TypeScript needs `"strict": true`. **Untyped JS: refuse** — print "No static type checking. Dedup without types is too risky. Add type checking first."
+3. **deslop reachable** (see below), or the CLI fallback declared.
+
+## Required tooling — deslop
+
+This skill is driven by **deslop** (docs: https://deslop.live/docs/for-ai/). It is the duplicate scanner — do not substitute grep or eyeballing. **Supported languages: `csharp`, `rust`, `python`, `dart`.** In this repo only the `codegen/` Dart toolkit is deslop-supported; the TypeScript packages (`too-many-cooks/`, `too_many_cooks_vscode_extension/`, `website/`) use the unsupported-language fallback below.
+
+**The MCP server is PREFERRED.** Use it when available. Key tools:
+- `mcp__deslop__top-offenders` — worst clusters first (primary input to Step 3).
+- `mcp__deslop__report-query` — AND-filter by `bucket`, `path_contains`, `language`, `min_score`, `min_size`; paginate with `offset`/`limit`.
+- `mcp__deslop__cluster-by-id` — full record for one cluster before merging.
+- `mcp__deslop__report-for-file` / `report-for-range` — narrow to a file/range during merge planning.
+- `mcp__deslop__find-similar` — call BEFORE writing any replacement. Reuse if `signals.fused ≥ 0.85` or bucket `identical`/`nearly_identical`; write new if `fused < 0.6` or empty; bias to reuse in between.
+- `mcp__deslop__rescan` — refresh the index; call after each merge/deletion to confirm the cluster is gone.
+
+**If the MCP server is unavailable, run the CLI instead** (same `.deslop.toml`, same report):
+- `deslop .` — full workspace scan; reads `.deslop.toml`, writes `deslop-report.json`, exits 3 when duplication exceeds the stored threshold. **This is exactly the CI gate** — the threshold lives in `.deslop.toml`, never a CLI/YAML number ([CI-DESLOP]).
+- `deslop . --no-fail-over` — same scan, but never fails on breach; local inspection only.
+
+Parse **only `deslop-report.json`** (the `.txt`/`.html` outputs are for humans). Decision fields: `metrics.duplication_percent`, `metrics.threshold.breached`, `clusters[].weight` (sorted desc), `clusters[].signals.fused`, `clusters[].bucket`. Re-run `deslop .` after each change in place of `rescan`.
+
+**Buckets** (act in this order): `identical` > `nearly_identical` > `loosely_similar` > `same_behavior`. `identical` is pure copy-paste and safest to merge. `same_behavior` needs human judgement — only on explicit request.
+
+**Unsupported language** (the TypeScript packages here): say so up front, label every finding `(no-deslop fallback)`, and use the language analyzer + symbol-level grep. Never pretend a structural scan ran.
+
+**Rule:** every cluster you act on must be cited in the final report by its cluster ID, bucket, and score/`fused`. No anonymous "found some duplicates".
 
 ## Steps
 
-Copy this checklist and track progress:
-
 ```
 Dedup Progress:
-- [ ] Step 1: Prerequisites passed (tests green, coverage met, typed)
+- [ ] Step 1: Prerequisites passed (tests green, coverage noted, typed, deslop MCP or CLI confirmed)
 - [ ] Step 2: Dead code scan complete
-- [ ] Step 3: Duplicate code scan complete
-- [ ] Step 4: Duplicate test scan complete
-- [ ] Step 5: Changes applied
-- [ ] Step 6: Verification passed (tests green, coverage stable)
+- [ ] Step 3: Duplicate code scan complete via deslop
+- [ ] Step 4: Duplicate test scan complete via deslop (filtered to test paths)
+- [ ] Step 5: Changes applied — each merge preceded by find-similar, followed by rescan/re-run
+- [ ] Step 6: Verification passed (tests green, coverage stable, deslop confirms targeted clusters gone)
 ```
 
-### Step 1 — Inventory test coverage
-
-Before deciding what to touch, understand what is tested.
-
-1. Run `make test` to confirm green baseline. `make test` is fail-fast AND enforces the coverage threshold from `coverage-thresholds.json` (REPO-STANDARDS-SPEC [TEST-RULES], [COVERAGE-THRESHOLDS-JSON]). It exits non-zero on any test failure OR coverage shortfall.
-2. Note the current coverage percentage — this is the floor. It must not drop.
-3. Identify which files/modules have coverage and which do not. Only files WITH coverage are candidates for dedup.
+### Step 1 — Inventory coverage
+Confirm the green baseline from the prerequisites. Only files WITH coverage are candidates — leave untested files alone.
 
 ### Step 2 — Scan for dead code
+Find code never called, imported, or referenced. Use the language's own signal first: `make lint` analyzer output (Dart), TS `noUnusedLocals`, zero-import functions. For each candidate, grep the whole codebase (tests, scripts, configs) — only dead if truly zero references. List with file:line. Do NOT delete yet.
 
-Search for code that is never called, never imported, never referenced.
+### Step 3 — Scan for duplicate code (deslop)
+1. MCP: `top-offenders`, then `report-query { bucket: "identical" }`, then `nearly_identical`, then `loosely_similar`. CLI: run `deslop .` and read clusters from `deslop-report.json`, worst `weight` first.
+2. For each cluster you intend to act on, fetch the full record (`cluster-by-id` / the report entry) and read every occurrence at its byte ranges. deslop measures structure, not semantics — if occurrences differ on a subtle condition or default, leave them and note "false positive".
+3. Record `{ cluster_id, bucket, score, occurrences[], decision, rationale }`. Do NOT merge yet.
 
-1. Look for unused exports, unused functions, unused classes, unused variables
-2. TypeScript: check for `noUnusedLocals`/`noUnusedParameters` in tsconfig, look for unexported functions with zero references
-3. For each candidate: **grep the entire codebase** for references (including tests, scripts, configs). Only mark as dead if truly zero references.
-4. List all dead code found with file paths and line numbers. Do NOT delete yet.
-
-### Step 3 — Scan for duplicate code
-
-Search for code blocks that do the same thing in multiple places.
-
-1. Look for functions/methods with identical or near-identical logic
-2. Look for copy-pasted blocks (same structure, maybe different variable names)
-3. Look for multiple implementations of the same algorithm or pattern
-4. Check across module boundaries — duplicates often hide in different packages within `too-many-cooks/packages/`, the VSIX, the website, and codegen.
-5. For each duplicate pair: note both locations, what they do, and how they differ (if at all)
-6. List all duplicates found. Do NOT merge yet.
-
-### Step 4 — Scan for duplicate tests
-
-Search for tests that verify the same behavior.
-
-1. Look for test functions with identical assertions against the same code paths
-2. Look for test fixtures/helpers that are duplicated across test files
-3. Look for integration tests that fully cover what a unit test also covers (keep the integration test, mark the unit test as redundant per CLAUDE.md rules)
-4. List all duplicate tests found. Do NOT delete yet.
+### Step 4 — Scan for duplicate tests (deslop)
+Same as Step 3, filtered to test paths: `report-query { path_contains: "test" }` (repeat for `spec`/`_test`), or filter `deslop-report.json` clusters by occurrence path. Keep the more thorough test (the integration/whole-app test wins if CLAUDE.md says so). Flag shared test fixtures/helpers as merge candidates rather than deletions.
 
 ### Step 5 — Apply changes (one at a time)
+Cycle per change: **change → `make test` → check coverage → continue or revert.**
 
-For each change, follow this cycle: **change → test → verify coverage → continue or revert**.
+**5a. Dead code:** delete, then `make test`. Non-zero exit = revert.
 
-#### 5a. Remove dead code
-- Delete dead code identified in Step 2
-- After each deletion: run `make test` (fail-fast + coverage + threshold all in one)
-- If `make test` exits non-zero (test failure OR coverage drop): **revert immediately** and investigate
-- Dead code removal should never break tests or drop coverage
+**5b. Merge duplicate code:** pick ONE cluster (worst `identical` first). Call `find-similar` before writing the replacement — reuse an existing canonical if it returns one. Extract shared logic, update call sites, `make test`. Tests fail = revert (subtle semantic difference). Coverage drops = add tests first. Then `rescan` (or re-run `deslop .`) to confirm the cluster is gone and no new one appeared.
 
-#### 5b. Merge duplicate code
-- For each duplicate pair: extract the shared logic into a single function/module
-- Update all call sites to use the shared version
-- After each merge: run `make test`
-- If tests fail: **revert immediately**. The duplicates may have subtle differences you missed.
-- If coverage drops: the shared code must have equivalent test coverage. Add tests if needed before proceeding.
-
-#### 5c. Remove duplicate tests
-- Delete the redundant test (keep the more thorough one)
-- After each deletion: run `make test`
-- If coverage drops below threshold, `make test` exits non-zero — **revert immediately**. The "duplicate" test was covering something the other wasn't.
+**5c. Duplicate tests:** delete the redundant test (keep the thorough one), `make test`. Coverage drop = revert (it covered something the other didn't). Confirm the cluster is gone.
 
 ### Step 6 — Final verification
-
-1. Run `make lint` — all linters and the format check must pass
-2. Run `make test` — tests must pass AND coverage must remain ≥ the baseline from Step 1
-3. Report: what was removed, what was merged, final coverage vs baseline
-
-(Only the 7 standard targets exist — `make lint` and `make test` cover formatting and coverage checks respectively.)
+1. `make lint` — linters + format check pass.
+2. `make test` — green AND coverage ≥ the Step 1 floor.
+3. Final `rescan` / `deslop .` — every cluster you acted on resolved, top-offender list shorter than at Step 3 start.
+4. Report: every cluster ID acted on (bucket, score, occurrences merged/deleted), the new top-offenders list, and final coverage vs baseline.
 
 ## Rules
 
-- **No test coverage = do not touch.** If a file has no tests covering it, leave it alone entirely. You cannot safely dedup what you cannot verify.
-- **Coverage must not drop.** If removing or merging code causes coverage to decrease, revert and investigate. The coverage floor from Step 1 is sacred.
-- **Untyped code = refuse to dedup.** Untyped JS is too dangerous. Types are the safety net that catches breakage at compile time. Without them, silent runtime errors are near-certain.
-- **One change at a time.** Make one dedup change, run tests, verify coverage. Never batch multiple dedup changes before testing.
-- **When in doubt, leave it.** If two code blocks look similar but you're not 100% sure they're functionally identical, leave both. False dedup is worse than duplication.
-- **Preserve public API surface.** Do not change function signatures, class names, or module exports that external code depends on. Internal refactoring only.
-- **Three similar lines is fine.** Do not create abstractions for trivial duplication. The cure must not be worse than the disease. Only dedup when the shared logic is substantial (>10 lines) or when there are 3+ copies.
+- **deslop is the scanner when supported** (dart here). MCP preferred, CLI acceptable. Cite every cluster by ID, bucket, and score. Unreachable MCP → use the CLI; never silently fall back to grep on a supported language.
+- **Unsupported language = best-effort scan, declared up front** and labelled `(no-deslop fallback)` (the TypeScript packages).
+- **No coverage = do not touch.** You cannot safely dedup what you cannot verify.
+- **Coverage must not drop.** The Step 1 floor is sacred — revert anything that lowers it.
+- **Untyped JS = refuse.** Types are the safety net.
+- **One change at a time.** Never batch dedup changes before testing.
+- **When in doubt, leave it.** False dedup is worse than duplication.
+- **Preserve public API.** Internal refactoring only — no signature/export changes external code depends on.
+- **Trivial duplication is fine.** Only dedup substantial shared logic (>10 lines) or 3+ copies.

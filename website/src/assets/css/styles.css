@@ -600,6 +600,37 @@ strong {
   color: var(--text-primary);
 }
 
+/* ---------- Showcase (VSCode extension) ---------- */
+.showcase {
+  padding: var(--space-20) 0;
+}
+
+.showcase-figure {
+  display: block;
+  max-width: 960px;
+  margin-inline: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--space-2);
+  overflow: hidden;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.showcase-figure:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 60px -20px rgba(0, 0, 0, 0.45);
+}
+
+.showcase-figure img {
+  width: 100%;
+}
+
+.showcase-caption {
+  text-align: center;
+  margin-top: var(--space-6);
+  font-size: var(--text-lg);
+}
+
 /* ---------- Features ---------- */
 .features {
   padding: var(--space-20) 0;

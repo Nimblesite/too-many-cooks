@@ -13,6 +13,7 @@ import type {
   FileLock,
   LockResult,
   Message,
+  MessageOverview,
   Result,
   TooManyCooksDb,
 } from "too-many-cooks-core";
@@ -231,6 +232,11 @@ export const withEncryption: (
       (msgs: readonly Message[], kc: Keychain): Result<readonly Message[], string> => {return decryptArray(msgs, kc, decryptMessage)},
       keychain,
     )},
+  // [STATUS-BOUNDED] Overview returns message HEADERS only (id/from/to/timestamps),
+  // all of which are stored in plaintext — only bodies are encrypted — so the
+  // overview passes through untouched with no decryption needed.
+  getMessageOverview: async (an: string | null, limit: number): Promise<Result<MessageOverview, DbError>> =>
+    {return await db.getMessageOverview(an, limit)},
   activate: async (an: string): Promise<Result<void, DbError>> => {return await db.activate(an)},
   deactivate: async (an: string): Promise<Result<void, DbError>> => {return await db.deactivate(an)},
   deactivateAll: async (): Promise<Result<void, DbError>> => {return await db.deactivateAll()},

@@ -3,7 +3,7 @@ name: spec-check
 description: Audit spec/plan documents against the codebase. Ensures every spec section has implementing code, tests, and matching logic. Use when the user says "check specs", "spec audit", or "verify specs".
 argument-hint: "[optional spec ID or filename filter]"
 ---
-<!-- agent-pmo:74cf183 -->
+<!-- agent-pmo:795a9c2 -->
 
 # spec-check
 
@@ -13,7 +13,7 @@ Audit spec/plan documents against the codebase. Ensures every spec section has i
 
 ## Arguments
 
-- `$ARGUMENTS` — optional spec name or ID to check (e.g., `LOCK-ACQUIRE` or `repo-standards`). If empty, check ALL specs. Spec IDs are descriptive slugs, NEVER numbered (see Step 1).
+- `$ARGUMENTS` — optional spec name or ID to check (e.g., `AUTH-TOKEN-VERIFY` or `repo-standards`). If empty, check ALL specs. Spec IDs are descriptive slugs, NEVER numbered (see Step 1).
 
 ## Instructions
 
@@ -38,9 +38,9 @@ If any ID violations are found, report them all and **STOP**:
 ```
 SPEC ID VIOLATIONS:
 
-- docs/specs/LOCK-SPEC.md line 12: [SPEC-001] → rename to descriptive ID (e.g., [LOCK-ACQUIRE])
-- docs/specs/LOCK-SPEC.md line 30: [LOCK-RELEASE] and [LOCK-ACQUIRE] are not adjacent (scattered group)
-- docs/specs/MSG-SPEC.md line 5: "## Message delivery" has no spec ID
+- docs/specs/AUTH-SPEC.md line 12: [SPEC-001] → rename to descriptive ID (e.g., [AUTH-LOGIN])
+- docs/specs/AUTH-SPEC.md line 30: [AUTH-TOKEN-VERIFY] and [AUTH-LOGIN] are not adjacent (scattered group)
+- docs/specs/CI-SPEC.md line 5: "## Coverage thresholds" has no spec ID
 
 Fix spec IDs first, then re-run spec-check.
 ```
@@ -69,13 +69,13 @@ Use Glob to find candidate files, then use Grep to confirm they contain spec IDs
 
 Spec IDs are **hierarchical descriptive slugs, NEVER numbered.** The format is `[GROUP-TOPIC]` or `[GROUP-TOPIC-DETAIL]`. The first word is the **group** — all sections sharing the same group MUST appear together in the spec's table of contents. IDs are uppercase, hyphen-separated, unique across the repo, and MUST NOT contain sequential numbers.
 
-The hierarchy depth varies by repo: two words for simple repos (`[LOCK-ACQUIRE]`), three for most (`[LOCK-ACQUIRE-RETRY]`), four for complex domains (`[MSG-CHAIN-REPLY-DELIVERY]`). The hierarchy mirrors the spec document's heading structure.
+The hierarchy depth varies by repo: two words for simple repos (`[AUTH-LOGIN]`), three for most (`[AUTH-TOKEN-VERIFY]`), four for complex domains (`[AUTH-OAUTH-REFRESH-FLOW]`). The hierarchy mirrors the spec document's heading structure.
 
 Examples of valid spec IDs (note how groups cluster):
-- `[LOCK-ACQUIRE]`, `[LOCK-RELEASE]`, `[LOCK-EXPIRY]` — all in the LOCK group
+- `[AUTH-LOGIN]`, `[AUTH-TOKEN-VERIFY]`, `[AUTH-TOKEN-REFRESH]` — all in the AUTH group
 - `[CI-TIMEOUT]`, `[CI-LINT]`, `[CI-RELEASE]` — all in the CI group
-- `[MSG-DELIVERY]`, `[MSG-REPLY]` — all in the MSG group
-- `[FEAT-DASHBOARD]`, `[FEAT-LOG-VIEWER]` — all in the FEAT group
+- `[LINT-ESLINT]`, `[LINT-RUFF]` — all in the LINT group
+- `[FEAT-DARK-MODE]`, `[FEAT-SEARCH-FILTER]` — all in the FEAT group
 
 Examples of INVALID spec IDs:
 - `[SPEC-001]` — numbered, meaningless
@@ -91,7 +91,7 @@ For each file, extract every spec ID and its associated section title (the headi
 ### Step 3: Filter specs
 
 - If `$ARGUMENTS` is non-empty, filter the discovered specs:
-  - If it matches a spec ID exactly (e.g., `LOCK-ACQUIRE`), check only that spec.
+  - If it matches a spec ID exactly (e.g., `AUTH-TOKEN-VERIFY`), check only that spec.
   - If it matches a partial name (e.g., `repo-standards`), check all specs in files whose path contains that string.
 - If `$ARGUMENTS` is empty, process ALL discovered specs.
 
@@ -114,39 +114,45 @@ Search the entire codebase for the spec ID string, **excluding** these directori
 - `.git/`
 - `*.md` files (markdown is docs, not code)
 
-Use Grep with the literal spec ID (e.g., `[LOCK-ACQUIRE]`) to find references in code files.
+Use Grep with the literal spec ID (e.g., `[AUTH-TOKEN-VERIFY]`) to find references in code files.
 
 Code files should contain comments referencing the spec ID. The search must catch **all** comment styles across languages:
 
-**C-style `//` comments** (JavaScript, TypeScript, Dart):
-- `// Implements [LOCK-ACQUIRE]`
-- `// [LOCK-ACQUIRE]`
-- `// Tests [LOCK-ACQUIRE]` (also counts as a code reference)
-- `/// Implements [LOCK-ACQUIRE]` (doc comments)
+**C-style `//` comments** (JavaScript, TypeScript, Rust, C#, F#, Java, Kotlin, Go, Swift, Dart):
+- `// Implements [AUTH-TOKEN-VERIFY]`
+- `// [AUTH-TOKEN-VERIFY]`
+- `// Tests [AUTH-TOKEN-VERIFY]` (also counts as a code reference)
+- `/// Implements [AUTH-TOKEN-VERIFY]` (doc comments)
 
-**Hash `#` comments** (Shell/Bash, YAML, TOML):
-- `# Implements [LOCK-ACQUIRE]`
-- `# [LOCK-ACQUIRE]`
-- `# Tests [LOCK-ACQUIRE]`
+**Hash `#` comments** (Python, Ruby, Shell/Bash, YAML, TOML):
+- `# Implements [AUTH-TOKEN-VERIFY]`
+- `# [AUTH-TOKEN-VERIFY]`
+- `# Tests [AUTH-TOKEN-VERIFY]`
 
-**HTML/XML comments** (HTML, CSS, SVG, XML, JSX templates):
-- `<!-- Implements [LOCK-ACQUIRE] -->`
-- `<!-- [LOCK-ACQUIRE] -->`
+**HTML/XML comments** (HTML, CSS, SVG, XML, XAML, JSX templates):
+- `<!-- Implements [AUTH-TOKEN-VERIFY] -->`
+- `<!-- [AUTH-TOKEN-VERIFY] -->`
+
+**ML-style comments** (F#, OCaml):
+- `(* Implements [AUTH-TOKEN-VERIFY] *)`
+
+**Lua comments:**
+- `-- Implements [AUTH-TOKEN-VERIFY]`
 
 **CSS comments:**
-- `/* Implements [LOCK-ACQUIRE] */`
+- `/* Implements [AUTH-TOKEN-VERIFY] */`
 
-**The key rule:** any comment in any language containing the exact spec ID string (e.g., `[LOCK-ACQUIRE]`) counts as a valid code reference. The Grep search uses the literal spec ID string, so it naturally matches all comment styles. Do NOT restrict the search to specific comment prefixes — just search for the spec ID string itself.
+**The key rule:** any comment in any language containing the exact spec ID string (e.g., `[AUTH-TOKEN-VERIFY]`) counts as a valid code reference. The Grep search uses the literal spec ID string, so it naturally matches all comment styles. Do NOT restrict the search to specific comment prefixes — just search for the spec ID string itself.
 
 **If NO code files reference the spec ID:**
 
 ```
-SPEC VIOLATION: [LOCK-ACQUIRE] "Section Title" has no implementing code.
+SPEC VIOLATION: [AUTH-TOKEN-VERIFY] "Section Title" has no implementing code.
 
 Every spec section must have at least one code file that references it via a comment
-containing the spec ID (e.g., `// Implements [LOCK-ACQUIRE]`).
+containing the spec ID (e.g., `// Implements [AUTH-TOKEN-VERIFY]`).
 
-ACTION REQUIRED: Add a comment referencing [LOCK-ACQUIRE] in the file(s) that implement
+ACTION REQUIRED: Add a comment referencing [AUTH-TOKEN-VERIFY] in the file(s) that implement
 this spec section, then re-run spec-check.
 ```
 
@@ -161,35 +167,74 @@ Search test files for the spec ID. Test files are found in:
 - `**/*.spec.*`
 - `**/*_test.*`
 - `**/test_*.*`
+- `**/*Tests.*`
+- `**/*Test.*`
 
 Use Grep to search these locations for the literal spec ID string.
 
-Tests should contain the spec ID in comments, test names, or annotations:
+Tests should contain the spec ID in comments, test names, or annotations. The search must catch **all** test frameworks across languages:
 
-**JavaScript/TypeScript** (Jest, Mocha, Vitest, node:test, Playwright):
-- `// Tests [LOCK-ACQUIRE]`
-- `describe('[LOCK-ACQUIRE] Lock acquisition', () => ...)`
-- `test('[LOCK-ACQUIRE] should acquire lock', () => ...)`
-- `it('[LOCK-ACQUIRE] acquires lock', () => ...)`
+**JavaScript/TypeScript** (Jest, Mocha, Vitest, Playwright):
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `describe('[AUTH-TOKEN-VERIFY] Authentication flow', () => ...)`
+- `test('[AUTH-TOKEN-VERIFY] should verify token', () => ...)`
+- `it('[AUTH-TOKEN-VERIFY] verifies token', () => ...)`
+
+**Python** (pytest, unittest):
+- `# Tests [AUTH-TOKEN-VERIFY]`
+- `def test_auth_token_verify_flow():`
+- `class TestAuthTokenVerify:`
+
+**Rust:**
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `#[test] // Tests [AUTH-TOKEN-VERIFY]`
+
+**C#** (xUnit, NUnit, MSTest):
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `[Fact] // Tests [AUTH-TOKEN-VERIFY]`
+- `[Test] // Tests [AUTH-TOKEN-VERIFY]`
+- `[TestMethod] // Tests [AUTH-TOKEN-VERIFY]`
+
+**F#** (xUnit, Expecto):
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `[<Fact>] // Tests [AUTH-TOKEN-VERIFY]`
+- `testCase "[AUTH-TOKEN-VERIFY] description" <| fun () ->`
+
+**Java/Kotlin** (JUnit, TestNG):
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `@Test // Tests [AUTH-TOKEN-VERIFY]`
+
+**Go:**
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `func TestAuthTokenVerify(t *testing.T) { // Tests [AUTH-TOKEN-VERIFY]`
+
+**Swift** (XCTest):
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `func testAuthTokenVerify() { // Tests [AUTH-TOKEN-VERIFY]`
 
 **Dart** (flutter_test):
-- `// Tests [LOCK-ACQUIRE]`
-- `test('[LOCK-ACQUIRE] description', () { ... });`
+- `// Tests [AUTH-TOKEN-VERIFY]`
+- `test('[AUTH-TOKEN-VERIFY] description', () { ... });`
+
+**Ruby** (RSpec, Minitest):
+- `# Tests [AUTH-TOKEN-VERIFY]`
+- `describe '[AUTH-TOKEN-VERIFY] Authentication' do`
+- `it '[AUTH-TOKEN-VERIFY] verifies token' do`
 
 **Shell** (bats, shunit2):
-- `# Tests [LOCK-ACQUIRE]`
-- `@test "[LOCK-ACQUIRE] description" {`
+- `# Tests [AUTH-TOKEN-VERIFY]`
+- `@test "[AUTH-TOKEN-VERIFY] description" {`
 
 **The key rule:** same as Check A — search for the literal spec ID string in test files. Any occurrence of the exact spec ID in a test file counts. Do NOT restrict to specific patterns — just search for the spec ID string itself.
 
 **If NO test files reference the spec ID:**
 
 ```
-SPEC VIOLATION: [LOCK-ACQUIRE] "Section Title" has no tests.
+SPEC VIOLATION: [AUTH-TOKEN-VERIFY] "Section Title" has no tests.
 
 Every spec section must have corresponding tests that reference the spec ID.
 
-ACTION REQUIRED: Add tests for [LOCK-ACQUIRE] with a comment or test name containing
+ACTION REQUIRED: Add tests for [AUTH-TOKEN-VERIFY] with a comment or test name containing
 the spec ID, then re-run spec-check.
 ```
 
@@ -214,20 +259,20 @@ This is the most critical check. You must:
 4. **If the code deviates from the spec**, report a detailed error:
 
 ```
-SPEC VIOLATION: [LOCK-ACQUIRE] Code does not match spec.
+SPEC VIOLATION: [AUTH-TOKEN-VERIFY] Code does not match spec.
 
 SPEC SAYS:
-> "The lock must check the lock owner before granting acquisition"
-> (from docs/specs/LOCK-SPEC.md, line 42)
+> "The authentication flow must verify the token expiry before checking permissions"
+> (from docs/specs/AUTH-SPEC.md, line 42)
 
 CODE DOES:
-> `if (lockable(path)) { grant(path); }` (too-many-cooks/packages/core/src/lock.ts:42)
+> `if (hasPermission(user)) { verifyToken(token); }` (src/auth.ts:42)
 
-DEVIATION: The code grants the lock without checking the lock owner.
-The spec explicitly requires owner verification FIRST.
+DEVIATION: The code checks permissions BEFORE verifying token expiry.
+The spec explicitly requires token expiry verification FIRST.
 
-ACTION REQUIRED: Add owner verification in too-many-cooks/packages/core/src/lock.ts
-before granting the lock, as specified in [LOCK-ACQUIRE].
+ACTION REQUIRED: Reorder the logic in src/auth.ts to verify token expiry
+before checking permissions, as specified in [AUTH-TOKEN-VERIFY].
 ```
 
 **STOP HERE. Do not continue to other specs.**
@@ -254,10 +299,11 @@ Output a summary table:
 ```
 spec-check PASSED. All specs verified.
 
-| Spec ID         | Title                    | Code References | Test References | Logic Match |
-|-----------------|--------------------------|-----------------|-----------------|-------------|
-| [LOCK-ACQUIRE]  | Lock acquisition         | packages/core/src/lock.ts | test/lock_test.ts | PASS    |
-| [MSG-DELIVERY]  | Message delivery         | packages/core/src/messages.ts | test/messages_test.ts | PASS |
+| Spec ID        | Title                    | Code References | Test References | Logic Match |
+|----------------|--------------------------|-----------------|-----------------|-------------|
+| [AUTH-TOKEN-VERIFY]     | Authentication flow      | src/auth.ts     | tests/auth.test.ts | PASS     |
+| [RATE-LIMIT-CONFIG]     | Rate limiting            | src/rate.ts     | tests/rate.test.ts | PASS     |
+| ...            | ...                      | ...             | ...             | ...         |
 
 Checked N spec sections across M files. All have implementing code, tests, and matching logic.
 ```
@@ -280,4 +326,4 @@ Checked N spec sections across M files. All have implementing code, tests, and m
 - **Quote everything.** Always quote the spec text and the code in error messages so the developer sees exactly what's wrong.
 - **Be actionable.** Every error must tell the developer what file to change and what to do.
 - **Exclude docs from code search.** Markdown files are documentation, not implementation. Only search actual code files for spec references.
-- **No numbered IDs.** Spec IDs are hierarchical descriptive slugs (`[LOCK-ACQUIRE]`), NEVER sequential numbers (`[SPEC-001]`). The first word is the group — sections sharing a group must be adjacent in the TOC. If you encounter numbered or ungrouped IDs, flag them as a violation.
+- **No numbered IDs.** Spec IDs are hierarchical descriptive slugs (`[AUTH-TOKEN-VERIFY]`), NEVER sequential numbers (`[SPEC-001]`). The first word is the group — sections sharing a group must be adjacent in the TOC. If you encounter numbered or ungrouped IDs, flag them as a violation.

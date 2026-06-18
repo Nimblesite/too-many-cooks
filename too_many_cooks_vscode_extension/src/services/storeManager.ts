@@ -9,7 +9,7 @@
 
 import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../state/types';
 import type { ConnectionMode, ConnectionTarget } from './connectionTypes';
-import { LOCAL_BASE_URL_PREFIX, buildAuthHeaders, buildBaseUrl, fetchWithAuth, postJsonWithAuth } from './storeManagerHelpers';
+import { LOCAL_BASE_URL_PREFIX, buildAuthHeaders, buildBaseUrl, ensureStatusOk, fetchWithAuth, postJsonWithAuth } from './storeManagerHelpers';
 import { checkServerAvailable, isRecord } from './httpClient';
 import { extractToolResultText, initMcpSession, mcpJsonRpcRequest } from './mcpProtocol';
 import type { StatusData } from './statusParser';
@@ -202,10 +202,9 @@ export class StoreManager {
       this.authHeaders,
     );
     if (seq !== this.refreshSeq) { return; }
-    if (!response.ok) {
-      this.log(`[StoreManager] refreshStatus: response not ok (${String(response.status)})`);
-      return;
-    }
+    // [VSIX-REFRESH-SURFACE] Issue #43: surface a non-ok response instead of
+    // Silently returning, which would leave stale (pre-delete) data on screen.
+    ensureStatusOk(response);
     const json: unknown = await response.json();
     if (seq !== this.refreshSeq) { return; }
     if (!isRecord(json)) {

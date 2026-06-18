@@ -1,5 +1,5 @@
 name: CI
-# agent-pmo:74cf183
+# agent-pmo:0b21609
 
 on:
   pull_request:
@@ -82,3 +82,23 @@ jobs:
         with:
           run: npm test
           working-directory: too_many_cooks_vscode_extension
+
+  # Dependency review ([GITHUB-DEP-REVIEW]) — fails a PR that adds a dependency
+  # with known vulnerabilities. Lightweight, PR-only, no special token scopes.
+  # CodeQL source scanning is SEPARATE in codeql.yml ([GITHUB-CODE-SCANNING]).
+  # The two do NOT overlap with each other or with linting: dependency-review =
+  # vulnerable packages, CodeQL = vulnerable code, lint = style/correctness.
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # dependency-review posts its PR summary
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure

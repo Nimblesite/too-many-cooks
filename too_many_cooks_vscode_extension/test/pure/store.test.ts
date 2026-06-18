@@ -36,6 +36,24 @@ const MSG_1: Message = {
   readAt: null,
 };
 
+const MSG_TO_AGENT_1: Message = {
+  id: 'msg-2',
+  fromAgent: 'agent-2',
+  toAgent: 'agent-1',
+  content: 'reply',
+  createdAt: 1100,
+  readAt: null,
+};
+
+const MSG_BETWEEN_OTHERS: Message = {
+  id: 'msg-3',
+  fromAgent: 'agent-2',
+  toAgent: '*',
+  content: 'broadcast',
+  createdAt: 1200,
+  readAt: null,
+};
+
 const PLAN_1: AgentPlan = {
   agentName: 'agent-1',
   goal: 'Fix bugs',
@@ -102,6 +120,26 @@ describe('Agent actions', () => {
     assert.strictEqual(state.locks.length, 1);
     assert.strictEqual(state.locks[0]?.agentName, 'agent-2');
     assert.strictEqual(state.plans.length, 0);
+  });
+
+  // [VSIX-REMOVE-AGENT] Issue #43: removing an agent must also drop every message
+  // it sent OR received — otherwise the message tree shows orphans referencing a
+  // deleted agent. Mirrors the DB's from_agent/to_agent cascade delete.
+  it('RemoveAgent removes messages the agent sent or received', () => {
+    const store: Store = new Store();
+    store.dispatch({ agents: [AGENT_1, AGENT_2], type: 'SetAgents' });
+    store.dispatch({ messages: [MSG_1, MSG_TO_AGENT_1, MSG_BETWEEN_OTHERS], type: 'SetMessages' });
+
+    store.dispatch({ agentName: 'agent-1', type: 'RemoveAgent' });
+    const state: AppState = store.getState();
+
+    assert.strictEqual(
+      state.messages.some((m: Readonly<Message>): boolean => m.fromAgent === 'agent-1' || m.toAgent === 'agent-1'),
+      false,
+      'no message touching the removed agent may survive',
+    );
+    assert.strictEqual(state.messages.length, 1, 'only the message not touching agent-1 remains');
+    assert.strictEqual(state.messages[0]?.id, 'msg-3');
   });
 });
 

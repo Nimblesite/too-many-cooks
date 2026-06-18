@@ -128,6 +128,7 @@ const createMockDb = (): {
     },
     listPlans: async () => success([]),
     listAllMessages: async () => success([]),
+    getMessageOverview: notImplemented,
     activate: notImplemented,
     deactivate: notImplemented,
     deactivateAll: notImplemented,

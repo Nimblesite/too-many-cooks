@@ -1,4 +1,4 @@
-<!-- agent-pmo:74cf183 -->
+<!-- agent-pmo:0b21609 -->
 # too-many-cooks — Agent Instructions
 
 > ⚠️ **TOKEN DISCIPLINE.** Check file size first. `Grep` over `Read`. Use `offset`/`limit`.
@@ -24,6 +24,18 @@ Multi-agent coordination MCP server for AI agents editing the same codebase. Inc
 - Register on TMC immediately. Keep your key! It's critical. Do not lose it!
 - Check messages regularly, lock files before editing, unlock after
 - Don't edit locked files; signal intent via plans and messages
+
+## Branch & Git Discipline ([BRANCH-AGENT])
+- **NEVER push to `main` directly.** Every change ships PR → CI green → merge. No exceptions.
+- **NEVER list yourself (the agent) as a commit co-author.** No `Co-Authored-By` trailer, no agent attribution.
+- **Work on exactly ONE branch at a time.** Reuse the existing feature branch; never open a second.
+- **If multiple feature branches already exist, merge them into one FIRST**, before any other work.
+- **Worktrees are forbidden.** Never run `git worktree`.
+
+## Autonomous Operation ([AGENT-AUTONOMY])
+- **Act autonomously. Do NOT stop to ask the user questions.** When something is ambiguous, choose the most reasonable default, record the assumption, and continue to completion.
+- **No mid-task pauses** for confirmation, clarification, or approval. Deliver finished work plus a short summary of any assumptions.
+- **Auto-memory is OFF** (`.claude/settings.json` → `"autoMemoryEnabled": false`). All persistent rules go through a reviewed PR to this file — never auto-captured memory. ([AGENT-AUTOMEMORY])
 
 ## Hard Rules — Universal (no exceptions)
 
