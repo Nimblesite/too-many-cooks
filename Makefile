@@ -1,4 +1,4 @@
-# agent-pmo:74cf183
+# agent-pmo:795a9c2
 # =============================================================================
 # Standard Makefile — too-many-cooks
 # Cross-platform: Linux, macOS, Windows (via GNU Make)
@@ -7,8 +7,7 @@
 # =============================================================================
 
 .PHONY: build test lint fmt clean ci setup help \
-        mcp-server vscode-extension website-build website-dev \
-        vsix package-vsix
+        vsix website-dev rebuild-install-vsix
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -104,8 +103,9 @@ help:
 	@echo "  setup  - Install dependencies for all sub-packages"
 	@echo ""
 	@echo "Repo-specific targets:"
-	@echo "  vsix          - Package the VS Code extension to a .vsix file"
-	@echo "  website-dev   - Run the website locally"
+	@echo "  vsix                 - Package the VS Code extension to a .vsix file"
+	@echo "  rebuild-install-vsix - Clean rebuild + reinstall the extension locally"
+	@echo "  website-dev          - Run the website locally"
 
 # Internal: coverage threshold enforcement reading coverage-thresholds.json.
 # Not a public target; never invoked outside `_test`.
@@ -133,9 +133,35 @@ _coverage_check:
 # =============================================================================
 
 ## vsix: Package the VS Code extension to a .vsix file
-vsix:
-	cd $(EXT_DIR) && npx vsce package
+vsix: _vsix_package
+
+## rebuild-install-vsix: Clean rebuild + reinstall of the VS Code extension ([MAKE-IDE-EXT])
+##                       uninstall -> clean -> compile -> package -> install
+rebuild-install-vsix: _vsix_uninstall _vsix_clean _vsix_build _vsix_package _vsix_install
+	@echo "==> VS Code extension rebuilt and reinstalled."
 
 ## website-dev: Run the website locally
 website-dev:
 	cd $(WEB_DIR) && npm run dev
+
+# Internal VSIX sub-recipes (chained by vsix / rebuild-install-vsix). Not public.
+_vsix_uninstall:
+	@echo "==> Uninstalling Nimblesite.too-many-cooks (ignored if absent)..."
+	-code --uninstall-extension Nimblesite.too-many-cooks
+
+_vsix_clean:
+	@echo "==> Cleaning extension build output..."
+	$(RM) $(EXT_DIR)/out
+	cd $(EXT_DIR) && $(RM) too-many-cooks-*.vsix
+
+_vsix_build:
+	@echo "==> Compiling extension..."
+	cd $(EXT_DIR) && npm run pretest
+
+_vsix_package:
+	@echo "==> Packaging extension to .vsix..."
+	cd $(EXT_DIR) && npx vsce package
+
+_vsix_install:
+	@echo "==> Installing freshly packaged .vsix..."
+	cd $(EXT_DIR) && code --install-extension $$(ls -t too-many-cooks-*.vsix | head -1)

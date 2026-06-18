@@ -10,9 +10,26 @@ permissions:
   id-token: write
 
 jobs:
+  # CodeQL release gate ([GITHUB-CODE-SCANNING]). Scans the tagged SHA with the
+  # current query set and FAILS on any High/Critical finding. Every publish job
+  # below `needs:` this (build-mcp directly; build-vsix transitively via
+  # build-mcp; deploy-website directly), so a dirty scan BLOCKS the release — a
+  # release can never ship code CodeQL flagged. Reuses codeql.yml via
+  # workflow_call (DRY — no duplicated matrix).
+  codeql:
+    name: CodeQL release gate
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    uses: ./.github/workflows/codeql.yml
+    with:
+      gate: true
+
   build-mcp:
     name: Build npm Packages
     runs-on: ubuntu-latest
+    needs: codeql
     environment: NPM Deployment
     steps:
       - uses: actions/checkout@v4
@@ -148,6 +165,7 @@ jobs:
   deploy-website:
     name: Deploy Website to GitHub Pages
     runs-on: ubuntu-latest
+    needs: codeql
     permissions:
       contents: write
       pages: write
