@@ -2,6 +2,14 @@ name: Deploy Website to GitHub Pages
 # agent-pmo:74cf183
 
 on:
+  # Auto-deploy whenever website content lands on main, so docs/screenshot
+  # changes go live immediately instead of waiting for the next release tag.
+  # (release.yml also deploys Pages, but only on `v*` tags.)
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:

@@ -2,6 +2,8 @@
 
 Core types, tools, and interfaces for [Too Many Cooks](https://github.com/Nimblesite/too-many-cooks) multi-agent coordination.
 
+![Too Many Cooks VSCode Extension dashboard](https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/vsix-dashboard.png)
+
 ## Install
 
 ```bash
