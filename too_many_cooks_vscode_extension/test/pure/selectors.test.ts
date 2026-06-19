@@ -39,7 +39,7 @@ const EXPIRED_LOCK: FileLock = {
   agentName: 'agent-2',
   acquiredAt: 1000,
   expiresAt: FAR_PAST,
-  reason: null,
+  reason: undefined,
   version: 1,
 };
 
@@ -49,7 +49,7 @@ const MSG_UNREAD: Message = {
   toAgent: 'agent-2',
   content: 'hello',
   createdAt: 1000,
-  readAt: null,
+  readAt: undefined,
 };
 
 const MSG_READ: Message = {
@@ -67,7 +67,7 @@ const BROADCAST_MSG: Message = {
   toAgent: '*',
   content: 'everyone',
   createdAt: 1300,
-  readAt: null,
+  readAt: undefined,
 };
 
 const PLAN_1: AgentPlan = {

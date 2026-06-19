@@ -42,7 +42,7 @@ const LOCAL_SERVER_COMMAND: string = 'npx';
  *  published server build instead of a stale globally-installed binary. */
 const LOCAL_SERVER_PACKAGE: string = 'too-many-cooks@latest';
 
-/** npx flag that auto-confirms the one-off package install prompt. */
+/** Auto-confirm flag for npx — skips the one-off package install prompt. */
 const NPX_YES_FLAG: string = '-y';
 
 /** Cloud validation endpoint (matches cloud-connection.ts pattern). */

@@ -141,7 +141,7 @@ function appendLocksTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDet
  
 function appendMessagesTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDetails>): void {
   const unread: number = detail.receivedMessages.filter(
-    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
+    (msg: Readonly<Message>): boolean => { return msg.readAt === undefined; },
   ).length;
   if (detail.sentMessages.length === 0 && detail.receivedMessages.length === 0) {
     return;
@@ -203,7 +203,7 @@ function createLockChild(
   });
   if (expired) {
     item.description = 'EXPIRED';
-  } else if (lock.reason === null) {
+  } else if (lock.reason === undefined) {
     item.description = `${String(expiresIn)}s`;
   } else {
     item.description = `${String(expiresIn)}s (${lock.reason})`;
@@ -216,7 +216,7 @@ function createLockChild(
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function addMessageSummaryChild(children: AgentTreeItem[], detail: Readonly<AgentDetails>): void {
   const unread: number = detail.receivedMessages.filter(
-    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
+    (msg: Readonly<Message>): boolean => { return msg.readAt === undefined; },
   ).length;
   if (detail.sentMessages.length === 0 && detail.receivedMessages.length === 0) {
     return;

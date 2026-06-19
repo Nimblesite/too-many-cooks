@@ -23,7 +23,7 @@ const LOCK_2: FileLock = {
   agentName: 'agent-2',
   acquiredAt: 1100,
   expiresAt: 70000,
-  reason: null,
+  reason: undefined,
   version: 1,
 };
 
@@ -33,7 +33,7 @@ const MSG_1: Message = {
   toAgent: 'agent-2',
   content: 'hello',
   createdAt: 1000,
-  readAt: null,
+  readAt: undefined,
 };
 
 const MSG_TO_AGENT_1: Message = {
@@ -42,7 +42,7 @@ const MSG_TO_AGENT_1: Message = {
   toAgent: 'agent-1',
   content: 'reply',
   createdAt: 1100,
-  readAt: null,
+  readAt: undefined,
 };
 
 const MSG_BETWEEN_OTHERS: Message = {
@@ -51,7 +51,7 @@ const MSG_BETWEEN_OTHERS: Message = {
   toAgent: '*',
   content: 'broadcast',
   createdAt: 1200,
-  readAt: null,
+  readAt: undefined,
 };
 
 const PLAN_1: AgentPlan = {
