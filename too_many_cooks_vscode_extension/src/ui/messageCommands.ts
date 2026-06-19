@@ -14,16 +14,16 @@ function hasMessage(value: object): value is { readonly message: unknown } {
   return 'message' in value;
 }
 
-function hasStringProp<K extends string>(
+function hasStringProp(
   value: Readonly<Record<string, unknown>>,
-  key: K,
+  key: string,
 ): boolean {
   return typeof value[key] === 'string';
 }
 
-function hasNumberProp<K extends string>(
+function hasNumberProp(
   value: Readonly<Record<string, unknown>>,
-  key: K,
+  key: string,
 ): boolean {
   return typeof value[key] === 'number';
 }
@@ -189,7 +189,7 @@ export function registerCopyMessagesCommand(): vscode.Disposable {
       const messages: readonly Message[] = collectMessages(item, selection);
       const text: string = messages
         .map((msg: Readonly<Message>): string => {
-          return `[${String(new Date(msg.createdAt).toISOString())}] ` +
+          return `[${new Date(msg.createdAt).toISOString()}] ` +
             `${msg.fromAgent} → ${formatTarget(msg.toAgent)}\n${msg.content}`;
         })
         .join('\n\n---\n\n');

@@ -9,7 +9,7 @@ function extractLockFilePath(lock: unknown): string | null {
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 export function getFilePathFromItem(item?: vscode.TreeItem): string | null {
   if (typeof item === 'undefined') { return null; }
   // Duck-type checks to avoid instanceof failures across module boundaries.
@@ -22,7 +22,7 @@ export function getFilePathFromItem(item?: vscode.TreeItem): string | null {
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 export function getAgentNameFromItem(item?: vscode.TreeItem): string | null {
   if (typeof item === 'undefined') { return null; }
   if ('agentName' in item && typeof item.agentName === 'string') {

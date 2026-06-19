@@ -7,7 +7,7 @@ export interface DialogService {
   readonly showInformationMessage: (message: string) => Thenable<string | undefined>;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   readonly showInputBox: (options: Readonly<vscode.InputBoxOptions>) => Thenable<string | undefined>;
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   readonly showQuickPick: (items: readonly string[], options: Readonly<vscode.QuickPickOptions>) => Thenable<string | undefined>;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   readonly showWarningMessage: (message: string, options: Readonly<vscode.MessageOptions>, ...items: string[]) => Thenable<string | undefined>;

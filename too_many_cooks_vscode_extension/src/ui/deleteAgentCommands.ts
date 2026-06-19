@@ -9,7 +9,7 @@ import { getDialogService } from '../services/dialogService';
 type LogFn = (msg: string) => void;
 
 function pickItems(
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   item: vscode.TreeItem | undefined,
   selection: readonly vscode.TreeItem[] | undefined,
 ): readonly vscode.TreeItem[] {
@@ -19,7 +19,7 @@ function pickItems(
 }
 
 function collectAgentNames(
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   item: vscode.TreeItem | undefined,
   selection: readonly vscode.TreeItem[] | undefined,
 ): readonly string[] {
@@ -57,7 +57,7 @@ export function registerDeleteAgentCommand(
 ): vscode.Disposable {
   return vscode.commands.registerCommand(
     'tooManyCooks.deleteAgent',
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     async (item?: vscode.TreeItem, selection?: readonly vscode.TreeItem[]): Promise<void> => {
       const dialogs: DialogService = getDialogService();
       const names: readonly string[] = collectAgentNames(item, selection);

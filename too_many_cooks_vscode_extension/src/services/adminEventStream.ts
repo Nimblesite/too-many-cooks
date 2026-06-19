@@ -52,7 +52,7 @@ async function initAdminSession(baseUrl: string): Promise<string> {
 }
 
 async function readEventStream(
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   body: ReadableStream<Uint8Array>,
   onEvent: () => void,
   log: LogFn,
@@ -60,7 +60,7 @@ async function readEventStream(
   const reader: ReadableStreamDefaultReader<Uint8Array> = body.getReader();
   const decoder: TextDecoder = new TextDecoder();
   let buffer: string = '';
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+   
   let eventCount: number = 0;
   for (;;) {
     const result: ReadableStreamReadResult<Uint8Array> = await reader.read();
@@ -116,7 +116,7 @@ async function connectAndRead(
 ): Promise<boolean> {
   const innerController: AbortController = new AbortController();
   config.onInnerAbort?.(() => { innerController.abort(); });
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   function forwardAbort(): void { innerController.abort(); }
   outerSignal.addEventListener('abort', forwardAbort, { once: true });
   try {
@@ -159,7 +159,7 @@ async function reconnectLoop(
 }
 
 export async function startAdminEventStream(
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+   
   abortController: AbortController,
   config: Readonly<AdminEventStreamConfig>,
 ): Promise<void> {

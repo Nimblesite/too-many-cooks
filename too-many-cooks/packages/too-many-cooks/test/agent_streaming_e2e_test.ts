@@ -330,7 +330,7 @@ describe("agent_streaming_e2e_test", () => {
     await agent1.callTool("message", {
       action: "send",
       agent_key: key1,
-      to_agent: reg2.agent_name as string,
+      to_agent: reg2.agent_name,
       content: TEST_MESSAGE_CONTENT,
     });
 

@@ -60,7 +60,7 @@ export interface TestAPI {
   readonly getStoreManager: () => StoreManager;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function extractLabel(item: vscode.TreeItem): string {
   if (typeof item.label === 'string') {
     return item.label;
@@ -68,7 +68,7 @@ function extractLabel(item: vscode.TreeItem): string {
   return '';
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function extractDescription(item: vscode.TreeItem): string {
   if (typeof item.description === 'string') {
     return item.description;
@@ -76,14 +76,14 @@ function extractDescription(item: vscode.TreeItem): string {
   return '';
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function toAgentSnapshot(item: AgentTreeItem, provider: Readonly<AgentsTreeProvider>): TreeItemSnapshot {
   const label: string = extractLabel(item);
   const children: AgentTreeItem[] = provider.getChildren(item);
   const desc: string = extractDescription(item);
   if (children.length > 0) {
     const mapped: TreeItemSnapshot[] = children.map(
-      // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+       
       (child: AgentTreeItem): TreeItemSnapshot => { return toAgentSnapshot(child, provider); },
     );
     if (desc.length > 0) { return { children: mapped, description: desc, label }; }
@@ -93,14 +93,14 @@ function toAgentSnapshot(item: AgentTreeItem, provider: Readonly<AgentsTreeProvi
   return { label };
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function toLockSnapshot(item: LockTreeItem, provider: Readonly<LocksTreeProvider>): TreeItemSnapshot {
   const label: string = extractLabel(item);
   const children: LockTreeItem[] = provider.getChildren(item);
   const desc: string = extractDescription(item);
   if (children.length > 0) {
     const mapped: TreeItemSnapshot[] = children.map(
-      // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+       
       (child: LockTreeItem): TreeItemSnapshot => { return toLockSnapshot(child, provider); },
     );
     if (desc.length > 0) { return { children: mapped, description: desc, label }; }
@@ -110,7 +110,7 @@ function toLockSnapshot(item: LockTreeItem, provider: Readonly<LocksTreeProvider
   return { label };
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function toMessageSnapshot(item: MessageTreeItem): TreeItemSnapshot {
   const label: string = extractLabel(item);
   const desc: string = extractDescription(item);
@@ -152,7 +152,7 @@ function findInTree(
 
 function countLockTreeItems(locksProvider: Readonly<LocksTreeProvider>): number {
   const categories: LockTreeItem[] = locksProvider.getChildren();
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+   
   let count: number = 0;
   for (const cat of categories) {
     count += locksProvider.getChildren(cat).length;
@@ -160,24 +160,24 @@ function countLockTreeItems(locksProvider: Readonly<LocksTreeProvider>): number 
   return count;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 function countMessageTreeItems(messagesProvider: Readonly<MessagesTreeProvider>): number {
   return messagesProvider.getChildren().filter(
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     (item: MessageTreeItem): boolean => { return extractLabel(item) !== 'No messages'; },
   ).length;
 }
 
 function mapAgentSnapshots(provider: Readonly<AgentsTreeProvider>): TreeItemSnapshot[] {
   return provider.getChildren().map(
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     (item: AgentTreeItem): TreeItemSnapshot => { return toAgentSnapshot(item, provider); },
   );
 }
 
 function mapLockSnapshots(provider: Readonly<LocksTreeProvider>): TreeItemSnapshot[] {
   return provider.getChildren().map(
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+     
     (item: LockTreeItem): TreeItemSnapshot => { return toLockSnapshot(item, provider); },
   );
 }
@@ -271,7 +271,7 @@ function createStateMethods(
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+ 
 export function createTestAPI(config: TestAPIConfig): TestAPI {
   const { agentsProvider, locksProvider, logMessages, messagesProvider, storeManager }:
     Readonly<TestAPIConfig> = config;
@@ -279,6 +279,6 @@ export function createTestAPI(config: TestAPIConfig): TestAPI {
     ...createAsyncMethods(storeManager),
     ...createTreeMethods(agentsProvider, locksProvider, messagesProvider),
     ...createStateMethods({ locksProvider, logMessages, messagesProvider, storeManager }),
-    getStoreManager: (): StoreManager => storeManager,
+    getStoreManager: (): StoreManager => {return storeManager},
   } satisfies TestAPI;
 }

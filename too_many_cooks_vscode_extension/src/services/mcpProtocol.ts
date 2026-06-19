@@ -39,7 +39,7 @@ function extractToolResultText(result: Readonly<Record<string, unknown>>): strin
   if (!Array.isArray(contentArray) || contentArray.length === 0) {
     return '{"error":"No content"}';
   }
-  // eslint-disable-next-line prefer-destructuring, @typescript-eslint/typedef
+  // eslint-disable-next-line prefer-destructuring
   const firstItem: unknown = contentArray[0];
   if (!isRecord(firstItem)) {
     return '{"error":"Invalid content"}';
