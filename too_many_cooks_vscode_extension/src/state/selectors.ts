@@ -53,7 +53,7 @@ export function selectMessageCount(state: Readonly<AppState>): number {
 
 export function selectUnreadMessageCount(state: Readonly<AppState>): number {
   return state.messages.filter((msg: Message): boolean => {
-    return msg.readAt === undefined;
+    return msg.readAt === null;
   }).length;
 }
 

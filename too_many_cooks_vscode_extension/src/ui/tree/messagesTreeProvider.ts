@@ -74,7 +74,7 @@ function createMessageItem(msg: Readonly<Message>): MessageTreeItem {
   const relativeTime: string = getRelativeTimeShort(msg.createdAt);
    
   let statusPart: string = '';
-  if (msg.readAt === undefined) {
+  if (msg.readAt === null) {
     statusPart = ' [unread]';
   }
 
@@ -87,7 +87,7 @@ function createMessageItem(msg: Readonly<Message>): MessageTreeItem {
   item.contextValue = 'message';
   item.tooltip = createTooltip(msg);
 
-  if (msg.readAt === undefined) {
+  if (msg.readAt === null) {
     item.iconPath = new vscode.ThemeIcon(
       'circle-filled',
       new vscode.ThemeColor('charts.yellow'),
@@ -115,7 +115,7 @@ function createTooltip(msg: Readonly<Message>): vscode.MarkdownString {
   md.appendMarkdown('---\n\n');
   md.appendMarkdown(`**Sent:** ${String(sentDate)} (${relativeTime})\n\n`);
 
-  if (msg.readAt === undefined) {
+  if (msg.readAt === null) {
     md.appendMarkdown('**Status:** Unread\n\n');
   } else {
     const readDate: Date = new Date(msg.readAt);

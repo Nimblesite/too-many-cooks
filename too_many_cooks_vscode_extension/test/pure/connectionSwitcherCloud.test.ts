@@ -124,7 +124,7 @@ describe('Cloud Connection Switcher E2E', () => {
   it('StatusDecryptor decrypts all encrypted fields and preserves plaintext fields', () => {
     const encMsg: Message = {
       id: 'msg-1', fromAgent: 'a', toAgent: 'b',
-      content: 'ENCRYPTED', createdAt: 1000, readAt: undefined,
+      content: 'ENCRYPTED', createdAt: 1000, readAt: null,
     };
     const encPlan: AgentPlan = {
       agentName: 'p', goal: 'ENC_GOAL', currentTask: 'ENC_TASK', updatedAt: 2000,

@@ -159,7 +159,7 @@ function createLockTooltip(lock: Readonly<FileLock>): vscode.MarkdownString {
     const expiresIn: number = Math.round((lock.expiresAt - Date.now()) / MS_PER_SECOND);
     md.appendMarkdown(`- **Expires in:** ${String(expiresIn)}s\n`);
   }
-  if (lock.reason !== undefined) {
+  if (lock.reason !== null) {
     md.appendMarkdown(`- **Reason:** ${lock.reason}\n`);
   }
   return md;

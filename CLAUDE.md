@@ -11,7 +11,7 @@
 
 Multi-agent coordination MCP server for AI agents editing the same codebase. Includes a VSIX that allows the user to see the interactions and perform admin tasks. The MCP server enforces file locking, plan broadcasting, and message passing between agents to prevent edit collisions.
 
-**Primary language:** TypeScript / Node.js (plus a small Dart `codegen/` toolkit)
+**Primary language:** TypeScript / Node.js
 **Build command:** `make ci`
 **Test command:** `make test`
 **Lint command:** `make lint`
@@ -136,7 +136,6 @@ too-many-cooks/                     # MCP server (TypeScript/Node.js), monorepo 
     too-many-cooks/                 # the MCP server entrypoint
 too_many_cooks_vscode_extension/    # VSCode extension (TypeScript)
 website/                            # Documentation website (Eleventy)
-scripts/                            # Build/test shell scripts
-codegen/                            # Dart-based codegen toolkit for shared models
+scripts/                            # Build/test scripts (generate-models.sh runs typeDiagram model gen)
 docs/                               # specs/ (behavior) and plans/ (TODO checklists)
 ```

@@ -1,7 +1,13 @@
 #!/bin/bash
 # Generate TypeScript model interfaces from the TypeDiagram source.
 # Source of truth: too_many_cooks_vscode_extension/src/state/models.td
-# Tool: typeDiagram (https://typediagram.dev) — `typediagram --to typescript`.
+# Tool: typeDiagram (https://typediagram.dev) -- `typediagram --to typescript`.
+#
+# typeDiagram's TypeScript emitter currently outputs MUTABLE fields and uses
+# `undefined` for Option<T>. This repo's convention is `readonly` + `null`, so the
+# emitter output is normalized below (add `readonly`, map ` | undefined` -> ` | null`).
+# Remove this normalization once typeDiagram can emit a readonly/null ADT shape
+# natively (tracked upstream: Nimblesite/typeDiagram#50 bug, #51 ADT-template feature).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -16,7 +22,8 @@ echo "Generating $TS_OUT from $TD_SOURCE via typeDiagram..."
 {
   echo "$BANNER"
   echo ""
-  npx --yes typediagram --to typescript "$TD_SOURCE"
+  npx --yes typediagram --to typescript "$TD_SOURCE" \
+    | perl -pe 's/^(\s+)([A-Za-z_][A-Za-z0-9_]*):/${1}readonly $2:/; s/ \| undefined;/ | null;/'
 } > "$TS_OUT"
 
 echo "Done. TypeScript: $TS_OUT"

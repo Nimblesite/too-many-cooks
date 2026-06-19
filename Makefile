@@ -73,7 +73,7 @@ fmt:
 clean:
 	@echo "==> Cleaning build artifacts..."
 	$(RM) $(MCP_DIR)/build $(MCP_DIR)/coverage
-	$(RM) $(MCP_DIR)/packages/core/build $(MCP_DIR)/packages/local/build $(MCP_DIR)/packages/cloud-proxy/build
+	$(RM) $(MCP_DIR)/packages/core/build
 	$(RM) $(MCP_DIR)/packages/too-many-cooks/build $(MCP_DIR)/packages/too-many-cooks/coverage
 	$(RM) $(EXT_DIR)/out $(EXT_DIR)/coverage $(EXT_DIR)/coverage-integration
 	$(RM) $(WEB_DIR)/_site

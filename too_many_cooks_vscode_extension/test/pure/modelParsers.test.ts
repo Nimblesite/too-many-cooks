@@ -49,26 +49,26 @@ describe('field helpers', () => {
     assert.strictEqual(boolField({}, 'active'), false);
   });
 
-  it('nullableStringField returns string or undefined', () => {
+  it('nullableStringField returns string or null', () => {
     assert.strictEqual(nullableStringField({ reason: 'editing' }, 'reason'), 'editing');
-    assert.strictEqual(nullableStringField({ reason: null }, 'reason'), undefined);
-    assert.strictEqual(nullableStringField({ reason: 42 }, 'reason'), undefined);
-    assert.strictEqual(nullableStringField({}, 'reason'), undefined);
+    assert.strictEqual(nullableStringField({ reason: null }, 'reason'), null);
+    assert.strictEqual(nullableStringField({ reason: 42 }, 'reason'), null);
+    assert.strictEqual(nullableStringField({}, 'reason'), null);
   });
 
-  it('nullableNumberField returns number or undefined', () => {
+  it('nullableNumberField returns number or null', () => {
     assert.strictEqual(nullableNumberField({ readAt: 1000 }, 'readAt'), 1000);
-    assert.strictEqual(nullableNumberField({ readAt: null }, 'readAt'), undefined);
-    assert.strictEqual(nullableNumberField({ readAt: 'x' }, 'readAt'), undefined);
-    assert.strictEqual(nullableNumberField({}, 'readAt'), undefined);
+    assert.strictEqual(nullableNumberField({ readAt: null }, 'readAt'), null);
+    assert.strictEqual(nullableNumberField({ readAt: 'x' }, 'readAt'), null);
+    assert.strictEqual(nullableNumberField({}, 'readAt'), null);
   });
 
-  it('nullableBoolField returns boolean or undefined', () => {
+  it('nullableBoolField returns boolean or null', () => {
     assert.strictEqual(nullableBoolField({ flag: true }, 'flag'), true);
     assert.strictEqual(nullableBoolField({ flag: false }, 'flag'), false);
-    assert.strictEqual(nullableBoolField({ flag: null }, 'flag'), undefined);
-    assert.strictEqual(nullableBoolField({ flag: 'yes' }, 'flag'), undefined);
-    assert.strictEqual(nullableBoolField({}, 'flag'), undefined);
+    assert.strictEqual(nullableBoolField({ flag: null }, 'flag'), null);
+    assert.strictEqual(nullableBoolField({ flag: 'yes' }, 'flag'), null);
+    assert.strictEqual(nullableBoolField({}, 'flag'), null);
   });
 });
 
@@ -148,7 +148,7 @@ describe('parse functions', () => {
     assert.strictEqual(result.version, 3);
   });
 
-  it('parseFileLock with missing reason', () => {
+  it('parseFileLock with null reason', () => {
     const result = parseFileLock({
       file_path: '/src/test.ts',
       agent_name: 'test-agent',
@@ -157,7 +157,7 @@ describe('parse functions', () => {
       reason: null,
       version: 1,
     });
-    assert.strictEqual(result.reason, undefined);
+    assert.strictEqual(result.reason, null);
   });
 
   it('parseLockResult with lock', () => {
@@ -174,9 +174,9 @@ describe('parse functions', () => {
       },
     });
     assert.strictEqual(result.acquired, true);
-    assert.notStrictEqual(result.lock, undefined);
+    assert.notStrictEqual(result.lock, null);
     assert.strictEqual(result.lock?.filePath, '/src/test.ts');
-    assert.strictEqual(result.error, undefined);
+    assert.strictEqual(result.error, null);
   });
 
   it('parseLockResult without lock', () => {
@@ -186,7 +186,7 @@ describe('parse functions', () => {
       lock: null,
     });
     assert.strictEqual(result.acquired, false);
-    assert.strictEqual(result.lock, undefined);
+    assert.strictEqual(result.lock, null);
     assert.strictEqual(result.error, 'Held by other');
   });
 
@@ -207,7 +207,7 @@ describe('parse functions', () => {
     assert.strictEqual(result.readAt, 2000);
   });
 
-  it('parseMessage with missing readAt', () => {
+  it('parseMessage with null readAt', () => {
     const result = parseMessage({
       id: 'msg-2',
       from_agent: 'a',
@@ -216,7 +216,7 @@ describe('parse functions', () => {
       created_at: 1000,
       read_at: null,
     });
-    assert.strictEqual(result.readAt, undefined);
+    assert.strictEqual(result.readAt, null);
   });
 
   it('parseAgentPlan', () => {

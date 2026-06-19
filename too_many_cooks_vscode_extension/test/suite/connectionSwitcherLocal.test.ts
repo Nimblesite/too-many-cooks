@@ -265,7 +265,10 @@ suite('Connection Switcher', () => {
     if (createdClaudeDir) { fs.mkdirSync(claudeDir, { recursive: true }); }
 
     let originalConfig: string | null = null;
-    if (fs.existsSync(mcpConfigPath)) { originalConfig = fs.readFileSync(mcpConfigPath, 'utf-8'); }
+    // Read without a prior existsSync check: check-then-read is a TOCTOU race
+    // (CodeQL js/file-system-race). Attempt the read and treat a missing file as
+    // "no original" via the caught error. Same semantics, no race.
+    try { originalConfig = fs.readFileSync(mcpConfigPath, 'utf-8'); } catch { originalConfig = null; }
 
     try {
       const { createMcpConfigManager } = await import('../../src/services/mcpConfigManager');

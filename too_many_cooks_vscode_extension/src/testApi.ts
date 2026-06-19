@@ -184,7 +184,7 @@ function mapLockSnapshots(provider: Readonly<LocksTreeProvider>): TreeItemSnapsh
 
 function countUnread(storeManager: Readonly<StoreManager>): number {
   return storeManager.state.messages.filter(
-    (msg: Readonly<Message>): boolean => { return msg.readAt === undefined; },
+    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
   ).length;
 }
 

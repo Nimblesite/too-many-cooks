@@ -1,7 +1,7 @@
 // Deserialization layer: MCP server snake_case wire JSON -> camelCase models.
 // The model interfaces are generated from models.td by typeDiagram (types.gen.ts).
-// typeDiagram emits types only (no serde), so these parsers are maintained here.
-// Tracked upstream: typeDiagram should emit serde via an ADT output template.
+// TypeDiagram emits types only (no serde), so these parsers live here by hand.
+// Tracked upstream: Nimblesite/typeDiagram#51 (emit serde via an ADT output template).
 
 import type {
   AgentIdentity,
@@ -47,25 +47,25 @@ export function boolField(record: Readonly<Record<string, unknown>>, key: string
 export function nullableStringField(
   record: Readonly<Record<string, unknown>>,
   key: string,
-): string | undefined {
+): string | null {
   const value: unknown = record[key];
-  return typeof value === 'string' ? value : undefined;
+  return typeof value === 'string' ? value : null;
 }
 
 export function nullableNumberField(
   record: Readonly<Record<string, unknown>>,
   key: string,
-): number | undefined {
+): number | null {
   const value: unknown = record[key];
-  return typeof value === 'number' ? value : undefined;
+  return typeof value === 'number' ? value : null;
 }
 
 export function nullableBoolField(
   record: Readonly<Record<string, unknown>>,
   key: string,
-): boolean | undefined {
+): boolean | null {
   const value: unknown = record[key];
-  return typeof value === 'boolean' ? value : undefined;
+  return typeof value === 'boolean' ? value : null;
 }
 
 export function parseAgentIdentity(raw: Readonly<Record<string, unknown>>): AgentIdentity {
@@ -95,11 +95,11 @@ export function parseFileLock(raw: Readonly<Record<string, unknown>>): FileLock 
 }
 
 export function parseLockResult(raw: Readonly<Record<string, unknown>>): LockResult {
-  const lock: unknown = raw.lock;
+  const lockValue: unknown = raw.lock;
   return {
     acquired: boolField(raw, 'acquired'),
     error: nullableStringField(raw, 'error'),
-    lock: isRecord(lock) ? parseFileLock(lock) : undefined,
+    lock: isRecord(lockValue) ? parseFileLock(lockValue) : null,
   };
 }
 
