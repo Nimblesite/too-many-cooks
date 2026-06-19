@@ -16,7 +16,7 @@ jobs:
     # TIMEOUT EXCEPTION: Full E2E suite spins up MCP server, VSIX, and Playwright; needs more than 10 min.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
