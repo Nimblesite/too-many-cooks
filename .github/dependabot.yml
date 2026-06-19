@@ -27,7 +27,6 @@
 # Only the ecosystems this repo actually uses are configured:
 #   - github-actions: the workflow files under .github/
 #   - npm: the three Node projects (MCP server monorepo, VS Code extension, website)
-#   - pub: the Dart codegen toolkit
 #
 # REQUIREMENT: the `dependabot-upgrades` branch must exist. Cut it from main
 # AFTER this file + dependabot-automerge.yml are on main, so the staging branch
@@ -61,16 +60,4 @@ updates:
     labels: ["dependencies"]
     groups:
       npm:
-        patterns: ["*"]
-
-  # pub / Dart — the codegen toolkit (codegen/pubspec.yaml).
-  - package-ecosystem: pub
-    directory: /codegen
-    target-branch: "dependabot-upgrades"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    labels: ["dependencies"]
-    groups:
-      pub:
         patterns: ["*"]

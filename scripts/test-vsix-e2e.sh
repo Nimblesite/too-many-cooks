@@ -43,7 +43,7 @@ rm -rf "$TEST_WORKSPACE"
 mkdir -p "$TEST_WORKSPACE"
 
 cd "$MCP_DIR"
-TMC_WORKSPACE="$TEST_WORKSPACE" node packages/local/build/bin/server.js &
+TMC_WORKSPACE="$TEST_WORKSPACE" node packages/too-many-cooks/build/bin/server.js &
 MCP_PID=$!
 
 # Poll until server is ready (max 10s)

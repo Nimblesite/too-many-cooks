@@ -1,4 +1,4 @@
-/// Tests for generated type parsers and field helpers.
+/// Tests for the snake_case wire deserialization layer (state/modelParsers).
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
@@ -18,7 +18,7 @@ import {
   parseLockResult,
   parseMessage,
   stringField,
-} from '../../src/state/types.gen';
+} from '../../src/state/modelParsers';
 
 describe('field helpers', () => {
   it('stringField returns string value', () => {

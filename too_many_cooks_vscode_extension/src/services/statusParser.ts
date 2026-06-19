@@ -1,7 +1,13 @@
 // Parse server status JSON into typed state objects.
 
 import type { AgentIdentity, AgentPlan, FileLock, Message } from '../state/types';
-import { parseAgentIdentity, parseAgentPlan, parseFileLock, parseMessage } from '../state/types.gen';
+import {
+  parseAgentIdentity,
+  parseAgentPlan,
+  parseArray,
+  parseFileLock,
+  parseMessage,
+} from '../state/modelParsers';
 
 // Parsed status response from the server.
 export interface StatusData {
@@ -9,19 +15,6 @@ export interface StatusData {
   readonly locks: readonly FileLock[];
   readonly messages: readonly Message[];
   readonly plans: readonly AgentPlan[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function parseArray<T>(data: unknown, mapper: (raw: Readonly<Record<string, unknown>>) => T): T[] {
-  if (!Array.isArray(data)) {
-    return [];
-  }
-  return data
-    .filter((item: unknown): item is Record<string, unknown> => { return isRecord(item); })
-    .map(mapper);
 }
 
 export function parseStatusResponse(json: Readonly<Record<string, unknown>>): StatusData {

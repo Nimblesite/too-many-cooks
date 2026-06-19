@@ -19,7 +19,7 @@ start_server() {
   kill_port
   rm -rf "$TEST_WORKSPACE"
   mkdir -p "$TEST_WORKSPACE"
-  TMC_WORKSPACE="$TEST_WORKSPACE" node "$MCP_DIR/packages/local/build/bin/server.js" &
+  TMC_WORKSPACE="$TEST_WORKSPACE" node "$MCP_DIR/packages/too-many-cooks/build/bin/server.js" &
   MCP_PID=$!
   for i in $(seq 1 50); do
     if curl -sf "http://localhost:$PORT/admin/status" >/dev/null 2>&1; then
@@ -47,7 +47,7 @@ cd "$VSIX_DIR"
 npm run compile
 npm run compile:test
 
-# ── Start MCP server (needed for cloud-proxy and VSIX e2e tests) ─────────────
+# ── Start MCP server (needed for VSIX e2e tests) ─────────────────────────────
 start_server
 
 # ── local: tests + coverage ──────────────────────────────────────────────────
@@ -56,14 +56,7 @@ echo "========================================="
 echo "  local: tests + coverage"
 echo "========================================="
 cd "$MCP_DIR"
-npm run test:coverage -w packages/local
-
-# ── cloud-proxy: tests + coverage ────────────────────────────────────────────
-echo ""
-echo "========================================="
-echo "  cloud-proxy: tests + coverage"
-echo "========================================="
-npm run test:coverage -w packages/cloud-proxy
+npm run test:coverage -w packages/too-many-cooks
 
 # ── VSIX: pure unit tests + coverage ─────────────────────────────────────────
 echo ""
@@ -85,8 +78,7 @@ echo ""
 echo "========================================="
 echo "  Coverage reports"
 echo "========================================="
-echo "  local:        $MCP_DIR/packages/local/coverage/index.html"
-echo "  cloud-proxy:  $MCP_DIR/packages/cloud-proxy/coverage/index.html"
+echo "  local:        $MCP_DIR/packages/too-many-cooks/coverage/index.html"
 echo "  VSIX pure:    $VSIX_DIR/coverage/index.html"
 echo "  VSIX e2e:     $VSIX_DIR/coverage-integration/index.html"
 echo "========================================="

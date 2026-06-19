@@ -349,7 +349,10 @@
         document.querySelectorAll('.mermaid').forEach(el => {
           const code = el.getAttribute('data-mermaid') || el.textContent;
           el.removeAttribute('data-processed');
-          el.innerHTML = code;
+          // Mermaid diagram source is plain text (e.g. `A --> B`); assign as text,
+          // not HTML, so meta-characters aren't reinterpreted. Fixes CodeQL
+          // js/xss-through-dom and is also the correct sink for mermaid.run().
+          el.textContent = code;
         });
         mermaid.run();
       }, 100);

@@ -33,8 +33,17 @@ const TMC_WORKSPACE_ENV: string = 'TMC_WORKSPACE';
 /** Local base URL prefix. */
 const LOCAL_BASE_URL_PREFIX: string = 'http://localhost:';
 
-/** CLI binary name for the local server. */
-const LOCAL_SERVER_BIN: string = 'too-many-cooks';
+/** Command used to launch the local server. `npx` runs the published package
+ *  without requiring a global install, so the VSIX "Start Local Server" command
+ *  works on a clean machine (fixes the `spawn too-many-cooks ENOENT` failure). */
+const LOCAL_SERVER_COMMAND: string = 'npx';
+
+/** Package spec pinned to the `latest` dist-tag, so every start pulls the newest
+ *  published server build instead of a stale globally-installed binary. */
+const LOCAL_SERVER_PACKAGE: string = 'too-many-cooks@latest';
+
+/** Auto-confirm flag for npx — skips the one-off package install prompt. */
+const NPX_YES_FLAG: string = '-y';
 
 /** Cloud validation endpoint (matches cloud-connection.ts pattern). */
 const CLOUD_VALIDATE_ENDPOINT: string = 'listAgents';
@@ -66,6 +75,19 @@ const EMPTY_JSON_BODY: string = '{}';
 /** Default transport for local connections (typed via LocalTarget.transport). */
 const LOCAL_TRANSPORT: LocalTarget['transport'] = 'http-streamable';
 
+/** How to launch the local server child process: a command plus its arguments. */
+export interface LocalLaunchSpec {
+  readonly args: readonly string[];
+  readonly command: string;
+}
+
+/** Build the default local-server launch invocation: `npx -y too-many-cooks@latest`.
+ *  Using npx means no global install is required (no `spawn too-many-cooks ENOENT`)
+ *  and the latest published server is fetched on every start. */
+export function buildLocalLaunchSpec(): LocalLaunchSpec {
+  return { args: [NPX_YES_FLAG, LOCAL_SERVER_PACKAGE], command: LOCAL_SERVER_COMMAND };
+}
+
 /** Connection manager interface. */
 export interface ConnectionManager {
   readonly connectCloud: (target: CloudTarget) => Promise<void>;
@@ -84,7 +106,8 @@ interface ManagerState {
 
 /** Everything needed to spawn and reach the local server. */
 interface LocalServerSpec {
-  readonly bin: string;
+  readonly args: readonly string[];
+  readonly command: string;
   readonly port: number;
   readonly workspaceFolder: string;
 }
@@ -95,9 +118,9 @@ function buildLocalBaseUrl(port: number): string {
 }
 
 /** Platform-aware spawn configuration for the local server (Issue #17).
- *  On Windows the global npm bin is a `.cmd` shim that Node's spawn() can only
- *  resolve via the shell; on posix the shell is unnecessary (and lets a missing
- *  binary surface as an ENOENT 'error' event instead of a shell exit code). */
+ *  On Windows `npx` resolves to a `npx.cmd` shim that Node's spawn() can only
+ *  run via the shell; on posix the shell is unnecessary (and lets a missing
+ *  command surface as an ENOENT 'error' event instead of a shell exit code). */
 export function buildLocalSpawnConfig(platform: NodeJS.Platform): { readonly shell: boolean } {
   return { shell: platform === 'win32' };
 }
@@ -121,10 +144,10 @@ async function pollUntilReady(baseUrl: string, log: LogFn, signal: AbortSignal):
   throw new Error(`Local server did not start within ${String(STARTUP_TIMEOUT_MS)}ms`);
 }
 
-/** Spawn the too-many-cooks CLI as a child process. */
+/** Spawn the too-many-cooks server as a child process. */
 function spawnLocalServer(spec: LocalServerSpec, log: LogFn): ChildProcess {
-  log(`[ConnectionManager] Spawning local server '${spec.bin}' on port ${String(spec.port)} (workspace: ${spec.workspaceFolder})`);
-  const child: ChildProcess = spawn(spec.bin, [], {
+  log(`[ConnectionManager] Spawning local server '${spec.command} ${spec.args.join(' ')}' on port ${String(spec.port)} (workspace: ${spec.workspaceFolder})`);
+  const child: ChildProcess = spawn(spec.command, [...spec.args], {
     cwd: spec.workspaceFolder,
     detached: false,
     env: { ...process.env, [TMC_PORT_ENV]: String(spec.port), [TMC_WORKSPACE_ENV]: spec.workspaceFolder },
@@ -148,7 +171,7 @@ async function awaitServerReady(child: ChildProcess, spec: LocalServerSpec, log:
   const failure: Promise<never> = new Promise<never>(
     (_resolve: (value: never) => void, reject: (reason: Error) => void): void => {
       child.once('error', (err: Error): void => {
-        reject(new Error(`Local server '${spec.bin}' could not be started: ${err.message}`));
+        reject(new Error(`Local server '${spec.command}' could not be started: ${err.message}`));
       });
     },
   );
@@ -193,7 +216,7 @@ async function validateCloudCredentials(target: CloudTarget, log: LogFn): Promis
 }
 
 /** Create a connection manager instance. */
-export function createConnectionManager(workspaceFolder: string, log: LogFn, serverBin: string = LOCAL_SERVER_BIN): ConnectionManager {
+export function createConnectionManager(workspaceFolder: string, log: LogFn, launch: LocalLaunchSpec = buildLocalLaunchSpec()): ConnectionManager {
   const state: ManagerState = {
     localProcess: null,
     mode: 'disconnected',
@@ -212,7 +235,7 @@ export function createConnectionManager(workspaceFolder: string, log: LogFn, ser
 
   async function startLocal(port: number = DEFAULT_LOCAL_PORT): Promise<void> {
     if (state.mode !== 'disconnected') { disconnect(); }
-    const spec: LocalServerSpec = { bin: serverBin, port, workspaceFolder };
+    const spec: LocalServerSpec = { args: launch.args, command: launch.command, port, workspaceFolder };
     const child: ChildProcess = spawnLocalServer(spec, log);
     state.localProcess = child;
     await awaitServerReady(child, spec, log);

@@ -10,8 +10,7 @@ name: CodeQL
 # add security-rule linter plugins that re-cover CodeQL: no doubling up.
 #
 # Matrix tailored for this repo: TypeScript/JavaScript (MCP server, VS Code
-# extension, website) + `actions` (the workflow files themselves). The Dart
-# `codegen/` toolkit is NOT analysed — CodeQL has no Dart support. Action SHAs
+# extension, website) + `actions` (the workflow files themselves). Action SHAs
 # are kept current by the github-actions Dependabot group ([GITHUB-DEPENDABOT]).
 on:
   pull_request:

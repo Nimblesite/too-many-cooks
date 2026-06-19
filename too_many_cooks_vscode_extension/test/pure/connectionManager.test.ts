@@ -10,8 +10,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createConnectionManager } from '../../src/services/connectionManager';
-import type { ConnectionManager } from '../../src/services/connectionManager';
+import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import type { CloudTarget } from '../../src/services/connectionTypes';
+
+/** A launch spec whose command can never resolve, so startLocal fails fast via
+ *  an ENOENT 'error' event instead of npx reaching the network during tests. */
+const NONEXISTENT_LAUNCH: LocalLaunchSpec = { args: [], command: '/nonexistent/tmc-server-does-not-exist-zzz' };
 
 /** Collect log messages. */
 const createLogCollector = (): { readonly logs: string[]; readonly log: (msg: string) => void } => {
@@ -104,13 +108,13 @@ describe('ConnectionManager', () => {
   });
 
   describe('startLocal', () => {
-    it('rejects when server cannot be started (no binary available on port 1)', async () => {
+    it('rejects when server cannot be started (command not resolvable)', async () => {
       const { log, logs } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log, NONEXISTENT_LAUNCH);
 
-      // Port 1 is privileged and won't work; either the spawn fails fast
-      // (binary not resolvable -> ENOENT, Issue #17) or the server never binds
-      // and the startup poll times out. Both are valid startup failures.
+      // The injected launch command can never resolve; the spawn fails fast
+      // (ENOENT 'error', Issue #17). Both an ENOENT spawn failure and a startup
+      // poll timeout are valid startup failures.
       try {
         await cm.startLocal(1);
         assert.fail('Must throw when server cannot start');
