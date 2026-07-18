@@ -147,7 +147,7 @@ const openAndInit: (
   try {
     applyMigrations(config.dbPath);
   } catch (e: unknown) {
-    return error(`Prisma migrate deploy failed: ${String(e)}`);
+    return error(`Migration failed: ${String(e)}`);
   }
   let db: Database.Database;
   try {
@@ -157,7 +157,7 @@ const openAndInit: (
   } catch (e: unknown) {
     return error(`Failed to open database: ${String(e)}`);
   }
-  log.debug("Schema applied via prisma migrate deploy");
+  log.debug("Schema applied via in-process migration runner");
   return success(createDbOps(db, config, log));
 };
 

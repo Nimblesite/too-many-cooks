@@ -108,7 +108,7 @@ Defense in depth: even one un-guarded write to a dead pipe must not be able to s
 
 ## Database Schema (Prisma — SQLite)
 
-Schema defined in `packages/local/prisma/schema.prisma`. **No raw SQL anywhere.** All table creation, migrations, and queries go through Prisma.
+Schema defined in `packages/too-many-cooks/prisma/schema.prisma`. Prisma is the schema authority and the **migration-authoring** tool (`prisma migrate dev` at dev time). [DB-MIGRATE] At runtime the server never spawns Prisma or any process: it applies the shipped `prisma/migrations/*/migration.sql` files **in-process** via the `better-sqlite3` driver, tracked in `_prisma_migrations`, and rebuilds from scratch on detected out-of-band drift. See `src/migrate.ts`.
 
 > **TMC Cloud uses a SUPERSET of this schema** (PostgreSQL). The cloud schema contains these same 4 coordination tables with additional `tenantId`/`workspaceId` composite keys for multi-tenant sharding, plus cloud-only tables (tenants, workspaces, api_keys, etc.). See `tmc-cloud/prisma/schema.prisma`.
 

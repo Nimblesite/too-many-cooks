@@ -1,16 +1,15 @@
 /// Regression test: `npx too-many-cooks@latest` on Windows died at startup
 /// with "Prisma migrate deploy failed: Error: spawnSync npx ENOENT".
 ///
-/// Root cause: migrate.ts spawned the `npx` shim by bare name. On Windows the
-/// shim is a `.cmd`/`.ps1` script that Node's spawn() can only launch via a
-/// shell, so startup failed for every Windows install (same bug class as
-/// Issue #17 in the VS Code extension's connectionManager).
+/// Root cause: migrate.ts spawned the `npx` shim by bare name to run a Prisma
+/// command. On Windows the shim is a `.cmd`/`.ps1` script that Node's spawn()
+/// can only launch via a shell, so startup failed for every Windows install.
 ///
-/// Contract under test: applying the Prisma schema must NOT depend on any
-/// PATH-resolvable shim — the spawn must use absolute paths only (the current
-/// Node binary + the `prisma` runtime dependency's CLI entry). We prove it by
-/// emptying PATH for the duration of the call, which makes the bug reproduce
-/// on the Linux CI runners too, not just on Windows.
+/// Contract under test: applying the schema must NOT spawn any process or
+/// depend on a PATH-resolvable shim at all — the migration runner is fully
+/// in-process (better-sqlite3 + the shipped migration.sql files). We prove it
+/// by emptying PATH for the duration of the call: an in-process runner is
+/// completely unaffected, while any surviving subprocess spawn would ENOENT.
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";

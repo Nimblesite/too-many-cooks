@@ -1,8 +1,9 @@
-/// E2E test: re-running migrations repairs schema drift without any history.
+/// E2E test: re-opening a DB whose schema was mangled out-of-band repairs it.
 ///
-/// We use Prisma specifically because `prisma db push` diffs schema.prisma
-/// against the live DB and patches drift (missing columns, missing tables,
-/// missing indexes) — no migration tracking required. This test proves that
+/// The in-process migration runner (src/migrate.ts) builds an in-memory oracle
+/// of the target schema by replaying the migrations, then compares it to the
+/// live DB. When they differ (a column was dropped directly), it throws so
+/// createDb rebuilds the DB from the migrations. This test proves that
 /// behavior: spin up a fresh DB, drop a column directly via ALTER TABLE,
 /// then re-run createDb and assert the column is back.
 
@@ -53,7 +54,7 @@ describe("schema repair without migration history", () => {
   });
 
   it("re-running createDb restores a column that was dropped via ALTER TABLE", async () => {
-    // Step 1: create a fresh DB. Prisma db push lays down the full schema.
+    // Step 1: create a fresh DB. The migration runner lays down the full schema.
     const config = createDataConfig({ dbPath: TEST_DB_PATH });
     const firstOpen = createDb(config);
     assert.strictEqual(
@@ -71,8 +72,9 @@ describe("schema repair without migration history", () => {
     );
 
     // Step 2: corrupt the schema. Drop locks.reason directly with raw SQL —
-    // simulating a user/tool that mangled the DB outside Prisma's knowledge.
-    // There is NO migration history that records this column was ever removed.
+    // simulating a user/tool that mangled the DB out-of-band. The migration
+    // history still says everything is applied, so only the drift oracle can
+    // catch this.
     dropColumn(TEST_DB_PATH, TABLE_LOCKS, COLUMN_REASON);
     const afterDrop: readonly string[] = tableColumnNames(TEST_DB_PATH, TABLE_LOCKS);
     assert.ok(
@@ -80,8 +82,8 @@ describe("schema repair without migration history", () => {
       `setup: ${TABLE_LOCKS}.${COLUMN_REASON} must be gone after DROP COLUMN, got cols: ${afterDrop.join(",")}`,
     );
 
-    // Step 3: re-open the DB through createDb. applyMigrations runs prisma
-    // db push, which diffs schema.prisma vs the live DB and patches the drift.
+    // Step 3: re-open the DB through createDb. applyMigrations compares the
+    // live schema to the migration oracle, detects the drift, and rebuilds.
     const secondOpen = createDb(config);
     assert.strictEqual(
       secondOpen.ok,
@@ -95,7 +97,7 @@ describe("schema repair without migration history", () => {
     const afterRepair: readonly string[] = tableColumnNames(TEST_DB_PATH, TABLE_LOCKS);
     assert.ok(
       afterRepair.includes(COLUMN_REASON),
-      `${TABLE_LOCKS}.${COLUMN_REASON} must be restored by prisma db push, got cols: ${afterRepair.join(",")}`,
+      `${TABLE_LOCKS}.${COLUMN_REASON} must be restored by the migration runner, got cols: ${afterRepair.join(",")}`,
     );
   });
 });

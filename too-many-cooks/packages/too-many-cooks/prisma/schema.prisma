@@ -1,7 +1,7 @@
-generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
-}
+// [DB-MIGRATE] Prisma is used ONLY to author migrations (`prisma migrate dev`)
+// at dev time. The server never generates or imports a Prisma client — it
+// applies prisma/migrations/*/migration.sql in-process via better-sqlite3
+// (see src/migrate.ts). No client generator block is needed.
 
 datasource db {
   provider = "sqlite"

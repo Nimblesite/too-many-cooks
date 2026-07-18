@@ -339,11 +339,11 @@ describe("foreign_key_integrity", () => {
     assert.strictEqual(agentsAfter.value[0]?.agentName, "fk-bob");
   });
 
-  /// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: on a DB that predates the
-  /// to_agent cascade migration, reopening through createDb must repair the schema
-  /// (prisma db push rebuilds the table with ON DELETE CASCADE) so that deleting a
-  /// recipient cascade-deletes their inbound messages — no orphans survive. This
-  /// is the legacy-DB counterpart to the fresh-DB cascade tests above.
+  /// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: on a DB whose messages table was
+  /// mangled out-of-band (to_agent cascade missing), reopening through createDb must
+  /// repair the schema (the in-process migration runner's drift oracle detects the
+  /// mismatch and rebuilds from the migrations, restoring ON DELETE CASCADE) so that
+  /// deleting a recipient cascade-deletes their inbound messages — no orphans survive.
   it("repairs a pre-cascade messages table on reopen, then cascade-deletes inbound messages (#43)", async () => {
     deleteIfExists(TEST_FK_DB_PATH);
     const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
@@ -360,13 +360,13 @@ describe("foreign_key_integrity", () => {
     );
 
     const second = createDb(config);
-    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via prisma db push");
+    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via the in-process migration runner");
     if (!second.ok) { return; }
 
     assert.match(
       messagesDdl(TEST_FK_DB_PATH),
       /messages_to_agent_fkey[\s\S]*ON DELETE CASCADE/u,
-      "db push must rebuild the messages table with the to_agent cascade",
+      "the migration runner must rebuild the messages table with the to_agent cascade",
     );
 
     const sender = await second.value.register("pre-sender");

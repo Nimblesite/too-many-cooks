@@ -13,7 +13,7 @@
 ///   3. Spawn `node node_modules/too-many-cooks/build/bin/server.js`
 ///      (no tsx, no source paths — exactly what a real user runs).
 ///   4. Assert the server starts, the DB exists, the schema is correct,
-///      and prisma `db push`-based schema repair works after corruption.
+///      and the in-process migration runner repairs the schema after corruption.
 ///
 /// If this passes locally, `npm install -g too-many-cooks@<version>` works.
 /// If it fails, do not publish.
@@ -54,7 +54,13 @@ const BIN_REL_PATH: string = "node_modules/too-many-cooks/build/bin/server.js";
 /** Path inside the install where the prisma schema lives. */
 const SCHEMA_REL_PATH: string = "node_modules/too-many-cooks/prisma/schema.prisma";
 
-/** Path inside the install where the prisma CLI lives. */
+/** Path inside the install where the shipped migration files live — the
+ *  in-process runner (src/migrate.ts) applies these; they MUST ship. */
+const MIGRATIONS_REL_PATH: string = "node_modules/too-many-cooks/prisma/migrations";
+
+/** Path inside the install where the prisma package would land IF it were a
+ *  runtime dependency. It must NOT — migrations run in-process, no prisma at
+ *  runtime (regression: `npx prisma` at startup broke Windows installs). */
 const PRISMA_RUNTIME_REL_PATH: string = "node_modules/prisma/package.json";
 
 /** Workspace-relative path to the SQLite database file. */
@@ -78,7 +84,7 @@ const REQUIRED_TABLES: readonly string[] = [
   "plans",
 ];
 
-/** Column we drop to prove `db push` repairs drift. */
+/** Column we drop to prove the in-process runner repairs drift. */
 const DRIFT_TABLE: string = "locks";
 const DRIFT_COLUMN: string = "reason";
 
@@ -294,13 +300,23 @@ describe("published package: tarball + install + boot", () => {
   // Installed-tree asserts (proves npm install resolves runtime deps)
   // --------------------------------------------------------------------------
 
-  it("install resolves `prisma` as a runtime dependency (regression: 0.8.0 had it as devDep)", (): void => {
+  it("does NOT drag `prisma` in as a runtime dependency (migrations run in-process)", (): void => {
     const fx: Fixture = requireFixture();
     const p: string = join(fx.installDir, PRISMA_RUNTIME_REL_PATH);
     assert.ok(
-      existsSync(p),
-      `prisma must be installed at runtime — production runs \`npx prisma db push\`. Missing: ${p}`,
+      !existsSync(p),
+      `prisma must NOT be a runtime dependency — the server applies migrations in-process via better-sqlite3, never by spawning prisma. Found it at: ${p}`,
     );
+  });
+
+  it("ships the migration files the in-process runner applies", (): void => {
+    const fx: Fixture = requireFixture();
+    const dir: string = join(fx.installDir, MIGRATIONS_REL_PATH);
+    assert.ok(existsSync(dir), `Migrations dir must ship at install-relative ${MIGRATIONS_REL_PATH}`);
+    const sqlFiles: readonly string[] = readdirSync(dir, { withFileTypes: true })
+      .filter((e): boolean => e.isDirectory())
+      .filter((e): boolean => existsSync(join(dir, e.name, "migration.sql")));
+    assert.notStrictEqual(sqlFiles.length, 0, "At least one migration.sql must ship in the tarball");
   });
 
   it("installed package has the prisma schema at the path migrate.ts expects", (): void => {
@@ -340,10 +356,11 @@ describe("published package: tarball + install + boot", () => {
   });
 
   // --------------------------------------------------------------------------
-  // The schema-repair contract — `prisma db push` patches drift
+  // The schema-repair contract — the in-process runner detects out-of-band
+  // drift (drift oracle) and rebuilds the DB from the migrations.
   // --------------------------------------------------------------------------
 
-  it("re-spawning the bin after dropping a column restores the column via `prisma db push`", async (): Promise<void> => {
+  it("re-spawning the bin after dropping a column restores the column via the in-process migration runner", async (): Promise<void> => {
     const fx: Fixture = requireFixture();
     const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
     mkdirSync(join(workspace, ".too_many_cooks"), { recursive: true });
@@ -364,7 +381,8 @@ describe("published package: tarball + install + boot", () => {
     const dropped: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
     assert.ok(!dropped.includes(DRIFT_COLUMN), `setup: ${DRIFT_TABLE}.${DRIFT_COLUMN} gone after DROP COLUMN. Got: ${dropped.join(",")}`);
 
-    // Second boot — `prisma db push` must repair the drift.
+    // Second boot — the in-process runner's drift oracle must detect the
+    // mangled schema and rebuild it from the migrations.
     const second: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
     try {
       await pollUntilReady(PORT, second);
@@ -374,7 +392,7 @@ describe("published package: tarball + install + boot", () => {
     const afterRepair: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
     assert.ok(
       afterRepair.includes(DRIFT_COLUMN),
-      `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by prisma db push on the published bin. Got: ${afterRepair.join(",")}`,
+      `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by the in-process migration runner on the published bin. Got: ${afterRepair.join(",")}`,
     );
 
     rmSync(workspace, { recursive: true, force: true });
