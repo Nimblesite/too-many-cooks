@@ -6,11 +6,23 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Candidate directories (relative to this file) that contain prisma/schema.prisma. */
 const PKG_DIR_CANDIDATES: readonly string[] = ["..", "../.."];
+
+/** Module specifier of the Prisma CLI's JS entry point (its `bin` target). */
+const PRISMA_CLI_SPECIFIER: string = "prisma/build/index.js";
+
+/** Absolute path to the Prisma CLI, resolved from the `prisma` runtime
+ *  dependency. Spawned with process.execPath instead of the `npx` shim:
+ *  on Windows the shim is a `.cmd`/`.ps1` script that spawn() cannot launch
+ *  without a shell ("spawnSync npx ENOENT" — same bug class as Issue #17 in
+ *  the extension's connectionManager), and absolute paths need no PATH at all. */
+const resolvePrismaCli: () => string = (): string =>
+  createRequire(import.meta.url).resolve(PRISMA_CLI_SPECIFIER);
 
 /** Path segment for the Prisma schema relative to the package directory. */
 const SCHEMA_REL: string = "prisma/schema.prisma";
@@ -43,9 +55,9 @@ export const applyMigrations: (dbPath: string) => void = (dbPath: string): void 
   const pkgDir: string = findPackageDir();
   const schemaPath: string = `${pkgDir}/${SCHEMA_REL}`;
   execFileSync(
-    "npx",
+    process.execPath,
     [
-      "prisma",
+      resolvePrismaCli(),
       "db",
       "push",
       "--accept-data-loss",
