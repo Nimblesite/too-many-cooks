@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build -w packages/core && npm run build -w packages/too-many-cooks",
     "start": "node packages/too-many-cooks/build/bin/server.js",
-    "lint": "oxlint --type-aware --deny-warnings -c ../.oxlintrc.json",
+    "lint": "oxlint --type-aware --deny-warnings",
     "test": "npm run build -w packages/core && npm test -w packages/too-many-cooks",
     "test:local": "npm test -w packages/too-many-cooks"
   },

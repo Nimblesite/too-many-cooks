@@ -14,7 +14,7 @@ jobs:
     name: Build, Lint & Test
     runs-on: ubuntu-latest
     # TIMEOUT EXCEPTION: Full E2E suite spins up MCP server, VSIX, and Playwright; needs more than 10 min.
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -26,62 +26,23 @@ jobs:
           cache-dependency-path: |
             too-many-cooks/package-lock.json
             too_many_cooks_vscode_extension/package-lock.json
+            website/package-lock.json
 
-      # ── Install & Build ────────────────────────────────
-      - name: Install MCP server dependencies
-        working-directory: too-many-cooks
-        run: npm ci
+      # Same entry points developers run locally — no duplicated steps.
+      # make test computes coverage AND enforces coverage-thresholds.json.
+      - name: Install dependencies
+        run: make setup
 
-      - name: Build MCP server
-        working-directory: too-many-cooks
-        run: npm run build
+      - name: Lint
+        run: make lint
 
-      - name: Install extension dependencies
-        working-directory: too_many_cooks_vscode_extension
-        run: npm ci
-
-      - name: Compile extension and tests
-        working-directory: too_many_cooks_vscode_extension
-        run: npm run pretest
-
-      # ── Lint ───────────────────────────────────────────
-      - name: Lint MCP server
-        working-directory: too-many-cooks
-        run: npm run lint
-
-      - name: Lint extension
-        working-directory: too_many_cooks_vscode_extension
-        run: npm run lint
-
-      # ── Start MCP server ──────────────────────────────
-      - name: Start MCP server
-        working-directory: too-many-cooks
-        run: node packages/too-many-cooks/build/bin/server.js &
-        env:
-          TMC_PORT: '4040'
-
-      - name: Wait for MCP server to be ready
-        run: |
-          for i in $(seq 1 30); do
-            if curl -s http://localhost:4040/admin/status > /dev/null 2>&1; then
-              echo "MCP server ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "MCP server failed to start"
-          exit 1
-
-      # ── Tests ──────────────────────────────────────────
-      - name: Test MCP server
-        working-directory: too-many-cooks
-        run: npm test
-
-      - name: Test extension
+      - name: Test (fail-fast + coverage gate)
         uses: coactions/setup-xvfb@v1
         with:
-          run: npm test
-          working-directory: too_many_cooks_vscode_extension
+          run: make test
+
+      - name: Build
+        run: make build
 
   # Dependency review ([GITHUB-DEP-REVIEW]) — fails a PR that adds a dependency
   # with known vulnerabilities. Lightweight, PR-only, no special token scopes.

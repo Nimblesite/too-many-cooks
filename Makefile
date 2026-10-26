@@ -50,9 +50,9 @@ build:
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
 test:
 	@echo "==> Testing MCP server (fail-fast + coverage)..."
-	cd $(MCP_DIR) && npm test -- --bail
-	@echo "==> Testing VS Code extension..."
-	cd $(EXT_DIR) && npm test
+	cd $(MCP_DIR) && npm run build -w packages/core && npm run test:coverage -w packages/too-many-cooks
+	@echo "==> Testing VS Code extension (E2E + coverage)..."
+	cd $(EXT_DIR) && npm run test:coverage:integration
 	@$(MAKE) _coverage_check
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
@@ -111,19 +111,14 @@ help:
 # Not a public target; never invoked outside `_test`.
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
-	THRESHOLD=$$(jq -r '.default_threshold' "$(COVERAGE_THRESHOLDS_FILE)"); \
-	echo "Coverage threshold (default): $${THRESHOLD}%"; \
-	for proj in $(MCP_DIR) $(EXT_DIR); do \
-	  if [ -f "$$proj/coverage/coverage-summary.json" ]; then \
-	    PCT=$$(jq -r '.total.lines.pct' "$$proj/coverage/coverage-summary.json"); \
-	    PCT_INT=$$(awk "BEGIN{printf \"%d\", $$PCT}"); \
-	    echo "$$proj line coverage: $${PCT}% (threshold: $${THRESHOLD}%)"; \
-	    if [ "$$PCT_INT" -lt "$${THRESHOLD}" ]; then \
-	      echo "FAIL: $$proj $${PCT}% < $${THRESHOLD}%"; exit 1; \
-	    fi; \
-	  else \
-	    echo "WARN: $$proj has no coverage-summary.json; skipping threshold check"; \
-	  fi; \
+	for entry in "too-many-cooks:$(MCP_DIR)/packages/too-many-cooks/coverage" "too_many_cooks_vscode_extension:$(EXT_DIR)/coverage-integration"; do \
+	  name=$${entry%%:*}; dir=$${entry#*:}; summary="$$dir/coverage-summary.json"; \
+	  THRESHOLD=$$(jq -r --arg n "$$name" '.projects[$$n].threshold // .default_threshold' "$(COVERAGE_THRESHOLDS_FILE)"); \
+	  if [ ! -f "$$summary" ]; then echo "FAIL: $$summary missing — coverage was not computed for $$name"; exit 1; fi; \
+	  PCT=$$(jq -r '.total.lines.pct' "$$summary"); \
+	  PCT_INT=$$(awk "BEGIN{printf \"%d\", $$PCT}"); \
+	  echo "$$name line coverage: $${PCT}% (threshold: $${THRESHOLD}%)"; \
+	  if [ "$$PCT_INT" -lt "$${THRESHOLD}" ]; then echo "FAIL: $$name $${PCT}% < $${THRESHOLD}%"; exit 1; fi; \
 	done; \
 	echo "OK: coverage thresholds satisfied"
 

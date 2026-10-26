@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.16.0
+
+### Fixed
+- **Database creation no longer depends on `npx prisma` at runtime.** Starting the server (including the VSIX's `npx too-many-cooks@latest` launch) could fail before the DB existed — most visibly `spawnSync npx ENOENT` on Windows. The schema is now applied by a bundled, SHA256-verified [DataProviderMigrate](https://dataprovider.tech/docs/migrations/) binary spawned by absolute path, with no PATH lookup and no network (`[DB-MIGRATE]`).
+
+### Changed
+- **Prisma replaced by DataProvider migrations.** `packages/too-many-cooks/schema/tmc-schema.yaml` is the single source of truth. On startup the CLI diffs the live DB against it, creates a fresh DB, repairs drift in place (missing columns/tables/indexes, changed FK actions) and leaves data untouched when nothing changed. The npm package ships the CLI for darwin-arm64, darwin-x64, linux-x64 and win32-x64.
+- **TypeScript 7** compiles and type-checks everything (single version). Linting moved from ESLint/typescript-eslint to `oxlint --type-aware` (oxlint-tsgolint) with a shared root `.oxlintrc.json`.
+- Dependency upgrades: all pending Dependabot updates merged (MCP SDK 1.32, better-sqlite3 13, express 5.3, hono 4.13, mocha 12, GitHub Actions v7). `zod` peer is now `^4.6.6` (GHSA-mrhx-c7xc-m3w5). `npm audit` reports 0 vulnerabilities in every package.
+
 ## 0.13.0
 
 ### Fixed

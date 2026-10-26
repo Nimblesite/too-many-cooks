@@ -57,6 +57,7 @@ function waitForTestCompletion(timeout = 300000) {
 }
 
 const { execSync } = require('child_process');
+const { ensureServer } = require('./testServer');
 
 /** Try to find the system `code` CLI. Returns the path or null. */
 function findSystemCode() {
@@ -76,7 +77,9 @@ async function main() {
   logToFile('INFO', 'Extension development path:', extensionDevelopmentPath);
   logToFile('INFO', 'Extension tests path:', extensionTestsPath);
 
+  let server = { stop: () => undefined };
   try {
+    server = await ensureServer(logToFile);
     // Prefer system `code` CLI (resolves extension host correctly on macOS).
     // Fall back to downloaded Electron binary for CI/headless environments.
     const systemCode = findSystemCode();
@@ -119,10 +122,12 @@ async function main() {
       process.stdout.write('=== END TEST LOG ===\n\n');
     } catch { /* ignore */ }
 
+    server.stop();
     logStream.end();
     process.exit(failures > 0 ? 1 : 0);
   } catch (err) {
     logToFile('ERR', 'Failed:', String(err));
+    server.stop();
     logStream.end();
     process.exit(1);
   }
