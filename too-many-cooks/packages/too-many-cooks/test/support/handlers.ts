@@ -16,6 +16,7 @@ import {
   createMessageHandler,
   createNotificationEmitter,
   createPlanHandler,
+  createRegisterHandler,
   createStatusHandler,
 } from "too-many-cooks-core";
 
@@ -64,6 +65,13 @@ export const planHandlerFor = (
   getSession: SessionGetter,
 ): ToolCallback =>
   createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession);
+
+/** Register tool handler bound to a db + session setter (emitter/logger injected). */
+export const registerHandlerFor = (
+  db: TooManyCooksDb,
+  setSession: (agentName: string, agentKey: string) => void,
+): ToolCallback =>
+  createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
 
 /** Status payload overview of the caller's inbox ([STATUS-BOUNDED]). */
 export type MessagesOverview = {

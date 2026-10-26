@@ -2,19 +2,18 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import {
-  createRegisterHandler,
-} from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
 import { bindTestDb, registerAgent } from "./support/db_fixture.js";
 import {
   createSessionCapture,
-  createTestEmitter,
-  createTestLogger,
   parseToolJson,
+  registerHandlerFor,
 } from "./support/handlers.js";
 
 const TEST_DB_PATH = ".test_register_handler.db";
+
+/** Session setter that never records (for negative-path tests). */
+const noopSetSession = (): void => { /* noop */ };
 
 describe("register handler", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
@@ -22,7 +21,7 @@ describe("register handler", () => {
   it("registers a new agent with name", async () => {
     const db = testDb.db();
     const capture = createSessionCapture();
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), capture.setSession);
+    const handler = registerHandlerFor(db, capture.setSession);
     const result = await handler({ name: "test-agent" }, {});
     assert.strictEqual(result.isError, false);
     const parsed = parseToolJson(result);
@@ -40,7 +39,7 @@ describe("register handler", () => {
     const { agentKey } = await registerAgent(db, "reconnect-agent");
 
     const capture = createSessionCapture();
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), capture.setSession);
+    const handler = registerHandlerFor(db, capture.setSession);
     const result = await handler({ key: agentKey }, {});
     assert.strictEqual(result.isError, false);
     const parsed = parseToolJson(result);
@@ -51,8 +50,7 @@ describe("register handler", () => {
 
   it("fails when both name and key provided", async () => {
     const db = testDb.db();
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
+    const handler = registerHandlerFor(db, noopSetSession);
     const result = await handler({ name: "agent", key: "some-key" }, {});
     assert.strictEqual(result.isError, true);
     const parsed = parseToolJson(result);
@@ -61,8 +59,7 @@ describe("register handler", () => {
 
   it("fails when neither name nor key provided", async () => {
     const db = testDb.db();
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
+    const handler = registerHandlerFor(db, noopSetSession);
     const result = await handler({}, {});
     assert.strictEqual(result.isError, true);
     const parsed = parseToolJson(result);
@@ -71,8 +68,7 @@ describe("register handler", () => {
 
   it("fails reconnect with invalid key", async () => {
     const db = testDb.db();
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
+    const handler = registerHandlerFor(db, noopSetSession);
     const result = await handler({ key: "nonexistent-key" }, {});
     assert.strictEqual(result.isError, true);
   });
@@ -82,7 +78,7 @@ describe("register handler", () => {
     await registerAgent(db, "duplicate-agent");
 
     const capture = createSessionCapture();
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), capture.setSession);
+    const handler = registerHandlerFor(db, capture.setSession);
     const result = await handler({ name: "duplicate-agent" }, {});
     assert.strictEqual(result.isError, false);
     const parsed = parseToolJson(result);

@@ -10,27 +10,13 @@
 /// reset — exactly like the VSIX extension's lifecycle.
 
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import type { ChildProcess } from 'node:child_process';
-
-import {
-  type SpawnedServer,
-  killServer,
-  resetServerViaAdmin,
-  spawnServer,
-  waitForServer,
-} from './support/server_process.js';
-import {
-  ACCEPT_STREAMABLE,
-  ADMIN_EVENTS_PATH,
-  McpHttpClient,
-  initAdminEventsSession,
-  type ClientInfo,
-} from './support/mcp_http.js';
-import { SseEventCollector, extractEventType } from './support/sse.js';
-import { removeTree } from './support/fs_helpers.js';
+import { resetServerViaAdmin } from './support/server_process.js';
+import { McpHttpClient, type ClientInfo } from './support/mcp_http.js';
+import { type SseEventCollector, extractEventType } from './support/sse.js';
+import { bindSpawnedServer, connectAdminEventsStream } from './support/streaming.js';
 
 const TEST_PORT = 4047;
 const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
@@ -45,38 +31,18 @@ const MCP_CLIENT_INFO: ClientInfo = { name: 'admin-reset-mcp', version: '1.0.0' 
 // ============================================================
 
 /** Opens the admin GET /admin/events notification stream. */
-const connectAdminStream = async (): Promise<SseEventCollector> => {
-  const sessionId = await initAdminEventsSession(BASE_URL, ADMIN_CLIENT_INFO);
-  return SseEventCollector.open({
-    url: `${BASE_URL}${ADMIN_EVENTS_PATH}`,
-    headers: { Accept: ACCEPT_STREAMABLE, 'mcp-session-id': sessionId },
-  });
-};
+const connectAdminStream = async (): Promise<SseEventCollector> =>
+  connectAdminEventsStream(BASE_URL, ADMIN_CLIENT_INFO);
 
 const newMcpClient = (): McpHttpClient =>
   new McpHttpClient({ baseUrl: BASE_URL, clientInfo: MCP_CLIENT_INFO });
-
-let spawned: SpawnedServer | undefined;
 
 // ============================================================
 // Tests
 // ============================================================
 
 describe('admin_reset_stream_test', () => {
-  let serverProcess: ChildProcess;
-
-  before(async () => {
-    spawned = spawnServer({ port: TEST_PORT, tmpPrefix: TMP_PREFIX });
-    serverProcess = spawned.proc;
-    await waitForServer(BASE_URL);
-  });
-
-  after(() => {
-    killServer(serverProcess);
-    if (spawned !== undefined) {
-      removeTree(spawned.workspace);
-    }
-  });
+  bindSpawnedServer(TEST_PORT, TMP_PREFIX, BASE_URL);
 
   it('admin stream receives events AFTER /admin/reset', async () => {
     // 1. Open admin stream (like VSIX does on connect)

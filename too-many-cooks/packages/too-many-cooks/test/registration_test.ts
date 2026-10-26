@@ -6,7 +6,7 @@ import {
   ERR_VALIDATION,
 } from "too-many-cooks-core";
 import { bindTestDb } from "./support/db_fixture.js";
-import { expectErr, expectOk } from "./support/assertions.js";
+import { assertFieldSetEquals, expectErr, expectOk } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_registration.db";
 
@@ -50,10 +50,6 @@ describe("registration", () => {
     await testDb.db().register("agent1");
     await testDb.db().register("agent2");
     const agents = expectOk(await testDb.db().listAgents(), "list must be ok");
-    assert.strictEqual(agents.length, 2);
-    assert.deepStrictEqual(
-      new Set(agents.map((a) => a.agentName)),
-      new Set(["agent1", "agent2"]),
-    );
+    assertFieldSetEquals(agents, (a) => a.agentName, ["agent1", "agent2"]);
   });
 });

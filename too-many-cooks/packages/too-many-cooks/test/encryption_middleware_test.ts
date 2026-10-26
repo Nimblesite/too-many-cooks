@@ -14,8 +14,9 @@ import type {
 } from "too-many-cooks-core";
 import { success } from "too-many-cooks-core";
 
-import { deriveWorkspaceKey, encrypt } from "../src/crypto.js";
+import { type WorkspaceKey, deriveWorkspaceKey, encrypt } from "../src/crypto.js";
 import { withEncryption } from "../src/encryption-middleware.js";
+import { createInMemoryDb } from "./support/in_memory_db.js";
 
 /** Test passphrase. */
 const TEST_PASSPHRASE = "test-secret";
@@ -50,22 +51,28 @@ const FIXED_TIMESTAMP = 1700000000000;
 /** Fixed message ID. */
 const FIXED_MSG_ID = "msg-001";
 
+/** Lock version written by the mock db. */
+const LOCK_VERSION = 1;
+
+/** Derived workspace key shared by the mock and the encrypted wrapper. */
+const TEST_WK: WorkspaceKey = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
+
+/** Plaintext fields the mock captured while encrypting. */
+type CapturedFields = {
+  content: string;
+  goal: string;
+  task: string;
+  reason: string;
+};
+
 /** Create a minimal mock db that captures encrypted values. */
 const createMockDb = (): {
   readonly db: TooManyCooksDb;
-  readonly captured: { content: string; goal: string; task: string; reason: string };
+  readonly captured: CapturedFields;
 } => {
-  const captured = { content: "", goal: "", task: "", reason: "" };
+  const captured: CapturedFields = { content: "", goal: "", task: "", reason: "" };
 
-  const notImplemented = (): never => {
-    throw new Error("Not implemented in mock");
-  };
-
-  const db: TooManyCooksDb = {
-    register: notImplemented,
-    authenticate: notImplemented,
-    lookupByKey: notImplemented,
-    listAgents: notImplemented,
+  const db = createInMemoryDb({
     acquireLock: async (_fp, _an, _ak, reason, _t) => {
       captured.reason = reason ?? "";
       const lock: FileLock = {
@@ -74,91 +81,81 @@ const createMockDb = (): {
         acquiredAt: FIXED_TIMESTAMP,
         expiresAt: FIXED_TIMESTAMP,
         reason: reason ?? null,
-        version: 1,
+        version: LOCK_VERSION,
       };
       return success({ acquired: true, lock, error: undefined });
     },
-    releaseLock: notImplemented,
-    forceReleaseLock: notImplemented,
-    queryLock: async (_fp) => {
-      const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
+    queryLock: async () => {
       const lock: FileLock = {
         filePath: TEST_FILE,
         agentName: TEST_AGENT,
         acquiredAt: FIXED_TIMESTAMP,
         expiresAt: FIXED_TIMESTAMP,
-        reason: encrypt(TEST_REASON, wk),
-        version: 1,
+        reason: encrypt(TEST_REASON, TEST_WK),
+        version: LOCK_VERSION,
       };
       return success(lock);
     },
     listLocks: async () => success([]),
-    renewLock: notImplemented,
     sendMessage: async (_from, _key, _to, content) => {
       captured.content = content;
       return success(FIXED_MSG_ID);
     },
     getMessages: async () => {
-      const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
       const msg: Message = {
         id: FIXED_MSG_ID,
         fromAgent: TEST_AGENT,
         toAgent: TEST_AGENT,
-        content: encrypt(TEST_CONTENT, wk),
+        content: encrypt(TEST_CONTENT, TEST_WK),
         createdAt: FIXED_TIMESTAMP,
         readAt: undefined,
       };
       return success([msg]);
     },
-    markRead: notImplemented,
     updatePlan: async (_an, _ak, goal, task) => {
       captured.goal = goal;
       captured.task = task;
       return success(undefined);
     },
     getPlan: async () => {
-      const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
       const plan: AgentPlan = {
         agentName: TEST_AGENT,
-        goal: encrypt(TEST_GOAL, wk),
-        currentTask: encrypt(TEST_TASK, wk),
+        goal: encrypt(TEST_GOAL, TEST_WK),
+        currentTask: encrypt(TEST_TASK, TEST_WK),
         updatedAt: FIXED_TIMESTAMP,
       };
       return success(plan);
     },
     listPlans: async () => success([]),
     listAllMessages: async () => success([]),
-    getMessageOverview: notImplemented,
-    activate: notImplemented,
-    deactivate: notImplemented,
-    deactivateAll: notImplemented,
     close: async () => success(undefined),
-    adminDeleteLock: notImplemented,
-    adminDeleteAgent: notImplemented,
-    adminResetKey: notImplemented,
     adminSendMessage: async (_from, _to, content) => {
       captured.content = content;
       return success(FIXED_MSG_ID);
     },
-    adminReset: notImplemented,
-  };
+  });
 
   return { db, captured };
 };
 
-test("sendMessage encrypts content before passing to db", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
+/** Mock db wrapped in encryption middleware, plus its captured plaintexts. */
+const createEncryptedMock = (): {
+  readonly encrypted: TooManyCooksDb;
+  readonly captured: CapturedFields;
+} => {
   const { db, captured } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  return { encrypted: withEncryption(db, TEST_WK, [TEST_WK]), captured };
+};
+
+test("sendMessage encrypts content before passing to db", async () => {
+  const { encrypted, captured } = createEncryptedMock();
   await encrypted.sendMessage(TEST_AGENT, TEST_KEY, TEST_AGENT, TEST_CONTENT);
   assert.notEqual(captured.content, TEST_CONTENT);
   assert.notEqual(captured.content, "");
 });
 
 test("getMessages decrypts content from db", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted } = createEncryptedMock();
   const result = await encrypted.getMessages(TEST_AGENT, TEST_KEY);
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -170,18 +167,14 @@ test("getMessages decrypts content from db", async () => {
 });
 
 test("updatePlan encrypts goal and currentTask", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db, captured } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted, captured } = createEncryptedMock();
   await encrypted.updatePlan(TEST_AGENT, TEST_KEY, TEST_GOAL, TEST_TASK);
   assert.notEqual(captured.goal, TEST_GOAL);
   assert.notEqual(captured.task, TEST_TASK);
 });
 
 test("getPlan decrypts goal and currentTask", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted } = createEncryptedMock();
   const result = await encrypted.getPlan(TEST_AGENT);
   assert.equal(result.ok, true);
   if (result.ok && result.value !== null) {
@@ -191,9 +184,7 @@ test("getPlan decrypts goal and currentTask", async () => {
 });
 
 test("acquireLock encrypts reason", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db, captured } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted, captured } = createEncryptedMock();
   await encrypted.acquireLock(
     TEST_FILE, TEST_AGENT, TEST_KEY, TEST_REASON, FIXED_TIMESTAMP,
   );
@@ -202,9 +193,7 @@ test("acquireLock encrypts reason", async () => {
 });
 
 test("queryLock decrypts reason", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted } = createEncryptedMock();
   const result = await encrypted.queryLock(TEST_FILE);
   assert.equal(result.ok, true);
   if (result.ok && result.value !== null) {
@@ -213,17 +202,13 @@ test("queryLock decrypts reason", async () => {
 });
 
 test("adminSendMessage encrypts content", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db, captured } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted, captured } = createEncryptedMock();
   await encrypted.adminSendMessage(TEST_AGENT, TEST_AGENT, TEST_CONTENT);
   assert.notEqual(captured.content, TEST_CONTENT);
 });
 
 test("acquireLock with null reason passes null through", async () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const { db, captured } = createMockDb();
-  const encrypted = withEncryption(db, wk, [wk]);
+  const { encrypted, captured } = createEncryptedMock();
   await encrypted.acquireLock(
     TEST_FILE, TEST_AGENT, TEST_KEY, null, FIXED_TIMESTAMP,
   );

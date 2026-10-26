@@ -15,6 +15,7 @@ import {
   teardownTestDb,
 } from "./support/db_fixture.js";
 import {
+  assertFieldSetEquals,
   assertNonNullish,
   expectErr,
   expectOk,
@@ -83,11 +84,7 @@ describe("messages", () => {
       await d.getMessages(receiverName, receiverKey),
       "get must be ok",
     );
-    assert.strictEqual(messages.length, 2);
-    assert.deepStrictEqual(
-      new Set(messages.map((m) => m.content)),
-      new Set(["Message 1", "Message 2"]),
-    );
+    assertFieldSetEquals(messages, (m) => m.content, ["Message 1", "Message 2"]);
   });
 
   it("getMessages auto-marks messages as read", async () => {

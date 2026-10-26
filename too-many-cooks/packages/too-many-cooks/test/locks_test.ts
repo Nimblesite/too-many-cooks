@@ -9,6 +9,7 @@ import {
 } from "too-many-cooks-core";
 import { bindAgentDb } from "./support/db_fixture.js";
 import {
+  assertFieldSetEquals,
   assertNonNullish,
   expectErr,
   expectOk,
@@ -116,11 +117,7 @@ describe("locks", () => {
     await db.acquireLock("/list/file2.dart", agentName, agentKey, null, LOCK_TTL_MS);
 
     const locks = expectOk(await db.listLocks(), "list must be ok");
-    assert.strictEqual(locks.length, 2);
-    assert.deepStrictEqual(
-      new Set(locks.map((l) => l.filePath)),
-      new Set(["/list/file1.dart", "/list/file2.dart"]),
-    );
+    assertFieldSetEquals(locks, (l) => l.filePath, ["/list/file1.dart", "/list/file2.dart"]);
   });
 
   it("renewLock extends expiration", async () => {

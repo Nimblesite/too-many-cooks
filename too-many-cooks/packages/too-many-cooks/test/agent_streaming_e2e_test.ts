@@ -6,18 +6,10 @@
 /// This PROVES that agents receive streamed notifications over
 /// their Streamable HTTP connection.
 
-import { describe, it, before, after } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import type { ChildProcess } from "node:child_process";
-
-import {
-  type SpawnedServer,
-  killServer,
-  resetServerViaAdmin,
-  spawnServer,
-  waitForServer,
-} from "./support/server_process.js";
+import { resetServerViaAdmin } from "./support/server_process.js";
 import {
   ACCEPT_STREAMABLE,
   MCP_PATH,
@@ -29,8 +21,8 @@ import {
   extractEventType,
   parseJsonRecord,
 } from "./support/sse.js";
-import { removeTree } from "./support/fs_helpers.js";
 import { getRecordField, getStringField } from "./support/json.js";
+import { bindSpawnedServer } from "./support/streaming.js";
 
 // ============================================================
 // Named Constants
@@ -70,6 +62,12 @@ const LEVEL_INFO = "info";
 type AgentClients = {
   readonly sender: McpHttpClient;
   readonly listener: McpHttpClient;
+};
+
+/** What a stream trigger can act on: the sender client and its key. */
+type StreamContext = {
+  readonly sender: McpHttpClient;
+  readonly key1: string;
 };
 
 const newClient = (): McpHttpClient =>
@@ -114,86 +112,63 @@ const expectStreamEvent = async (
   assert.strictEqual(extractEventType(events[0] ?? ""), expected);
 };
 
-let spawned: SpawnedServer | undefined;
+/** Fresh clients + pair registration + open stream + trigger + expect event. */
+const withStreamEvent = async (
+  expected: string,
+  trigger: (ctx: StreamContext) => Promise<void>,
+): Promise<void> => {
+  const clients = await freshAgentClients();
+  const key1 = await registerPair(clients);
+  const stream = await connectAgentStream(clients.listener.getSessionId());
+  await trigger({ sender: clients.sender, key1 });
+  await expectStreamEvent(stream, expected);
+};
 
 // ============================================================
 // Tests
 // ============================================================
 
 describe("agent_streaming_e2e_test", () => {
-  let serverProcess: ChildProcess;
-
-  before(async () => {
-    spawned = spawnServer({ port: TEST_PORT, tmpPrefix: TMP_PREFIX });
-    serverProcess = spawned.proc;
-    await waitForServer(BASE_URL);
-  });
-
-  after(() => {
-    killServer(serverProcess);
-    if (spawned !== undefined) {
-      removeTree(spawned.workspace);
-    }
-  });
+  bindSpawnedServer(TEST_PORT, TMP_PREFIX, BASE_URL);
 
   it("agent receives message_sent notification via stream", async () => {
-    const clients = await freshAgentClients();
-    const key1 = await registerPair(clients);
-
-    const stream = await connectAgentStream(clients.listener.getSessionId());
-
-    await clients.sender.callTool("message", {
-      action: "send",
-      agent_key: key1,
-      to_agent: AGENT_2_NAME,
-      content: TEST_MESSAGE_CONTENT,
+    await withStreamEvent(EVENT_MESSAGE_SENT, async ({ sender, key1 }) => {
+      await sender.callTool("message", {
+        action: "send",
+        agent_key: key1,
+        to_agent: AGENT_2_NAME,
+        content: TEST_MESSAGE_CONTENT,
+      });
     });
-
-    await expectStreamEvent(stream, EVENT_MESSAGE_SENT);
   });
 
   it("agent receives lock_acquired notification via stream", async () => {
-    const clients = await freshAgentClients();
-    const key1 = await registerPair(clients);
-
-    const stream = await connectAgentStream(clients.listener.getSessionId());
-
-    await clients.sender.callTool("lock", {
-      action: "acquire",
-      file_path: TEST_FILE_PATH,
-      agent_key: key1,
-      reason: TEST_LOCK_REASON,
+    await withStreamEvent(EVENT_LOCK_ACQUIRED, async ({ sender, key1 }) => {
+      await sender.callTool("lock", {
+        action: "acquire",
+        file_path: TEST_FILE_PATH,
+        agent_key: key1,
+        reason: TEST_LOCK_REASON,
+      });
     });
-
-    await expectStreamEvent(stream, EVENT_LOCK_ACQUIRED);
   });
 
   it("agent receives agent_registered notification via stream", async () => {
-    const clients = await freshAgentClients();
-    await registerPair(clients);
-
-    const stream = await connectAgentStream(clients.listener.getSessionId());
-
-    // Register a third agent — agent2 should get notified
-    await clients.sender.callTool("register", { name: AGENT_3_NAME });
-
-    await expectStreamEvent(stream, EVENT_AGENT_REGISTERED);
+    await withStreamEvent(EVENT_AGENT_REGISTERED, async ({ sender }) => {
+      // Register a third agent — agent2 should get notified
+      await sender.callTool("register", { name: AGENT_3_NAME });
+    });
   });
 
   it("agent receives plan_updated notification via stream", async () => {
-    const clients = await freshAgentClients();
-    const key1 = await registerPair(clients);
-
-    const stream = await connectAgentStream(clients.listener.getSessionId());
-
-    await clients.sender.callTool("plan", {
-      action: "update",
-      agent_key: key1,
-      goal: TEST_GOAL,
-      current_task: TEST_TASK,
+    await withStreamEvent(EVENT_PLAN_UPDATED, async ({ sender, key1 }) => {
+      await sender.callTool("plan", {
+        action: "update",
+        agent_key: key1,
+        goal: TEST_GOAL,
+        current_task: TEST_TASK,
+      });
     });
-
-    await expectStreamEvent(stream, EVENT_PLAN_UPDATED);
   });
 
   it("agent receives lock_released notification via stream", async () => {

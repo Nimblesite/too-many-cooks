@@ -8,6 +8,7 @@ import {
 } from "too-many-cooks-core";
 import { bindAgentDb } from "./support/db_fixture.js";
 import {
+  assertFieldSetEquals,
   assertNonNullish,
   expectErr,
   expectOk,
@@ -113,11 +114,7 @@ describe("plans", () => {
     await db.updatePlan(agent2.agentName, agent2.agentKey, "Goal 2", "Task 2");
 
     const plans = expectOk(await db.listPlans(), "list must be ok");
-    assert.strictEqual(plans.length, 2);
-    assert.deepStrictEqual(
-      new Set(plans.map((p) => p.goal)),
-      new Set(["Goal 1", "Goal 2"]),
-    );
+    assertFieldSetEquals(plans, (p) => p.goal, ["Goal 1", "Goal 2"]);
   });
 
   it("plan updatedAt changes on update", async () => {

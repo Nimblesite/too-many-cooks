@@ -18,6 +18,18 @@ const CUSTOM_API_URL = "https://custom.supabase.co/functions/v1/tmc-api";
 /** Expected key version. */
 const EXPECTED_VERSION = 1;
 
+/** Asserts parseConfig fails and names the missing env var. */
+const expectMissingEnvError = (
+  env: Record<string, string | undefined>,
+  missingKey: string,
+): void => {
+  const result = parseConfig(env);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, new RegExp(missingKey, "u"));
+  }
+};
+
 test("parseConfig succeeds with all required env vars", () => {
   const result = parseConfig(VALID_ENV);
   assert.equal(result.ok, true);
@@ -30,36 +42,33 @@ test("parseConfig succeeds with all required env vars", () => {
 });
 
 test("parseConfig fails when TMC_API_KEY is missing", () => {
-  const result = parseConfig({
-    TMC_WORKSPACE_ID: VALID_ENV.TMC_WORKSPACE_ID,
-    TMC_WORKSPACE_SECRET: VALID_ENV.TMC_WORKSPACE_SECRET,
-  });
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.error, /TMC_API_KEY/u);
-  }
+  expectMissingEnvError(
+    {
+      TMC_WORKSPACE_ID: VALID_ENV.TMC_WORKSPACE_ID,
+      TMC_WORKSPACE_SECRET: VALID_ENV.TMC_WORKSPACE_SECRET,
+    },
+    "TMC_API_KEY",
+  );
 });
 
 test("parseConfig fails when TMC_WORKSPACE_ID is missing", () => {
-  const result = parseConfig({
-    TMC_API_KEY: VALID_ENV.TMC_API_KEY,
-    TMC_WORKSPACE_SECRET: VALID_ENV.TMC_WORKSPACE_SECRET,
-  });
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.error, /TMC_WORKSPACE_ID/u);
-  }
+  expectMissingEnvError(
+    {
+      TMC_API_KEY: VALID_ENV.TMC_API_KEY,
+      TMC_WORKSPACE_SECRET: VALID_ENV.TMC_WORKSPACE_SECRET,
+    },
+    "TMC_WORKSPACE_ID",
+  );
 });
 
 test("parseConfig fails when TMC_WORKSPACE_SECRET is missing", () => {
-  const result = parseConfig({
-    TMC_API_KEY: VALID_ENV.TMC_API_KEY,
-    TMC_WORKSPACE_ID: VALID_ENV.TMC_WORKSPACE_ID,
-  });
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.error, /TMC_WORKSPACE_SECRET/u);
-  }
+  expectMissingEnvError(
+    {
+      TMC_API_KEY: VALID_ENV.TMC_API_KEY,
+      TMC_WORKSPACE_ID: VALID_ENV.TMC_WORKSPACE_ID,
+    },
+    "TMC_WORKSPACE_SECRET",
+  );
 });
 
 test("parseConfig uses custom API URL when provided", () => {

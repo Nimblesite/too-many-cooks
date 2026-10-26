@@ -57,3 +57,17 @@ export const assertNonNullish = <T>(
   }
   return value;
 };
+
+/** Asserts `items` has `expected.length` elements whose `field` values
+ * equal the expected set (order-insensitive) ([DEDUP-DESLOP]). */
+export const assertFieldSetEquals = <T>(
+  items: readonly T[],
+  field: (item: T) => string,
+  expected: readonly string[],
+): void => {
+  assert.strictEqual(items.length, expected.length);
+  assert.deepStrictEqual(
+    new Set(items.map(field)),
+    new Set(expected),
+  );
+};

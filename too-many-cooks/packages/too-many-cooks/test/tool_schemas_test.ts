@@ -38,46 +38,41 @@ const desc = (schema: SchemaObj, name: string): string => {
   return d;
 };
 
+/** Asserts a schema field's maxLength constraint. */
+const assertFieldMaxLength = (schema: unknown, name: string, expected: number): void => {
+  assert.strictEqual(field(schemaRecord(schema), name).maxLength, expected);
+};
+
+/** Asserts a schema field's description mentions a needle. */
+const assertDescriptionMentions = (schema: unknown, name: string, needle: string): void => {
+  assert.ok(desc(schemaRecord(schema), name).includes(needle));
+};
+
 describe("message tool schema", () => {
   it("content has maxLength 200", () => {
-    assert.strictEqual(
-      field(schemaRecord(MESSAGE_INPUT_SCHEMA), "content").maxLength,
-      200,
-    );
+    assertFieldMaxLength(MESSAGE_INPUT_SCHEMA, "content", 200);
   });
 
   it("content description mentions 200 char limit", () => {
-    assert.ok(
-      desc(MESSAGE_INPUT_SCHEMA, "content").includes("200"),
-    );
+    assertDescriptionMentions(MESSAGE_INPUT_SCHEMA, "content", "200");
   });
 });
 
 describe("plan tool schema", () => {
   it("goal has maxLength 100", () => {
-    assert.strictEqual(
-      field(schemaRecord(PLAN_INPUT_SCHEMA), "goal").maxLength,
-      100,
-    );
+    assertFieldMaxLength(PLAN_INPUT_SCHEMA, "goal", 100);
   });
 
   it("goal description mentions 100 char limit", () => {
-    assert.ok(
-      desc(PLAN_INPUT_SCHEMA, "goal").includes("100"),
-    );
+    assertDescriptionMentions(PLAN_INPUT_SCHEMA, "goal", "100");
   });
 
   it("current_task has maxLength 100", () => {
-    assert.strictEqual(
-      field(schemaRecord(PLAN_INPUT_SCHEMA), "current_task").maxLength,
-      100,
-    );
+    assertFieldMaxLength(PLAN_INPUT_SCHEMA, "current_task", 100);
   });
 
   it("current_task description mentions char limit", () => {
-    assert.ok(
-      desc(PLAN_INPUT_SCHEMA, "current_task").includes("100"),
-    );
+    assertDescriptionMentions(PLAN_INPUT_SCHEMA, "current_task", "100");
   });
 });
 
@@ -91,15 +86,11 @@ describe("register tool schema", () => {
   });
 
   it("name description says first registration only", () => {
-    assert.ok(
-      desc(REGISTER_INPUT_SCHEMA, "name").includes("FIRST"),
-    );
+    assertDescriptionMentions(REGISTER_INPUT_SCHEMA, "name", "FIRST");
   });
 
   it("key description says reconnect only", () => {
-    assert.ok(
-      desc(REGISTER_INPUT_SCHEMA, "key").includes("RECONNECT"),
-    );
+    assertDescriptionMentions(REGISTER_INPUT_SCHEMA, "key", "RECONNECT");
   });
 
   it("does not require both name and key", () => {
