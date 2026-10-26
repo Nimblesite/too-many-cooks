@@ -285,9 +285,7 @@
     "compile": "tsc -p ./",
     "compile:test": "tsc -p tsconfig.test.json",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src/**/*.ts --max-warnings=0",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "lint:strict": "eslint src/**/*.ts --max-warnings=0 --rule 'no-warning-comments: [\"error\", {\"terms\": [\"todo\", \"fixme\", \"xxx\"], \"location\": \"anywhere\"}]'",
+    "lint": "oxlint --type-aware --deny-warnings -c ../.oxlintrc.json src",
     "pretest": "npm run compile && npm run compile:test",
     "test": "node scripts/runTests.js",
     "test:pure": "npm run compile:test && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
@@ -305,21 +303,17 @@
     "module-alias": "^2.2.3"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/eslint": "^9.6.1",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.6.5",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^8.61.1",
-    "@typescript-eslint/parser": "^8.61.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^3.0.0",
-    "c8": "^11.0.0",
-    "eslint": "^10.5.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "c8": "^12.0.0",
     "glob": "^13.0.6",
-    "mocha": "^11.7.6",
+    "mocha": "^12.0.3",
+    "oxlint": "^1.89.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "6.0.3",
-    "typescript-eslint": "^8.61.1"
+    "typescript": "^7.0.2"
   }
 }

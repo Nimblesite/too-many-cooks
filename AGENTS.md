@@ -19,6 +19,7 @@ MCP server that coordinates AI agents editing the same codebase: file locks, pla
 ## Git ([BRANCH-AGENT])
 - No git commands unless the user asks.
 - **NEVER push to `main`.** Every change ships PR → CI green → merge.
+- **Commit and push routinely**
 - **NEVER list yourself (the agent) as a commit co-author.** No `Co-Authored-By` trailer, no agent attribution.
 - **ONE feature branch at a time.** Reuse the existing one. If several exist, merge them into one FIRST.
 - **Worktrees are forbidden.**
@@ -26,6 +27,7 @@ MCP server that coordinates AI agents editing the same codebase: file locks, pla
 ## Autonomous Operation ([AGENT-AUTONOMY])
 - **Act autonomously.** On ambiguity, choose the most reasonable default, record the assumption, continue to completion. No mid-task pauses for approval.
 - **Auto-memory is OFF** (`.claude/settings.json`). Persistent rules go through a reviewed PR to this file. ([AGENT-AUTOMEMORY])
+- **Subagents are ILLEGAL.** Delegate legwork to pi agents, in order of preference: Kimi 3.1 → GLM 5.3 → DeepSeek 4.1 (use their flash variants when speed matters). ([AGENT-DELEGATION])
 
 ## Duplication — Be Vigilant ([DEDUP-DESLOP])
 Duplicate code is the #1 review rejection. Follow [deslop for AI](https://deslop.live/docs/for-ai/):
@@ -37,6 +39,7 @@ Duplicate code is the #1 review rejection. Follow [deslop for AI](https://deslop
 ## Hard Rules — Universal
 - **Literals are illegal.** Move all literals to named constants.
 - **No manual JSON serialization/deserialization.**
+- 
 - **Switch expressions/ternaries over if/else** (except in declarative contexts).
 - **Avoid global state.** If necessary, centralize it in immutable types.
 - **Return `Result<T,E>`** (`neverthrow`) instead of throwing. **NO PLACEHOLDERS** — throw if incomplete.
@@ -58,6 +61,7 @@ Duplicate code is the #1 review rejection. Follow [deslop for AI](https://deslop
 
 ## TypeScript
 - ALL lints on, as errors. `tsconfig.json` `"strict": true`.
+- **TypeScript 7 or higher — ONE version only**, for compiling AND linting. Lint = `oxlint --type-aware` (oxlint-tsgolint, TS 7) with the shared root `.oxlintrc.json`. ESLint/typescript-eslint are banned (they need the TS 6 API).
 - **ILLEGAL:** `any`, non-null `!`, `as` assertions, `.then()`, `@ts-ignore`/`@ts-nocheck`. Use type narrowing and generics.
 - Annotate every parameter and return type. Prefer type aliases over classes for data.
 
