@@ -5,31 +5,17 @@ import { selectActiveLocks, selectExpiredLocks } from '../../state/selectors';
 import type { FileLock } from '../../state/types';
 import { LockTreeItem } from './lockTreeItem';
 import type { StoreManager } from '../../services/storeManager';
+import { StoreTreeProviderBase } from './storeTreeProviderBase';
 
  
 const MS_PER_SECOND: number = 1000;
 
-export class LocksTreeProvider implements vscode.TreeDataProvider<LockTreeItem> {
-  private readonly changeEmitter: vscode.EventEmitter<LockTreeItem | null> =
-    new vscode.EventEmitter<LockTreeItem | null>();
-
-  public readonly onDidChangeTreeData: vscode.Event<LockTreeItem | null> =
-    this.changeEmitter.event;
-
-  private readonly unsubscribe: () => void;
-
-  public constructor(private readonly storeManager: Readonly<StoreManager>) {
-    this.unsubscribe = storeManager.subscribe((): void => {
-      this.changeEmitter.fire(null);
-    });
+export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
+  public constructor(storeManager: Readonly<StoreManager>) {
+    super(storeManager);
   }
 
-   
-  public getTreeItem(element: LockTreeItem): vscode.TreeItem {
-    return element;
-  }
-
-   
+ 
   public getChildren(element?: LockTreeItem): LockTreeItem[] {
     if (typeof element === 'undefined') {
       return this.getRootItems();
@@ -105,11 +91,6 @@ export class LocksTreeProvider implements vscode.TreeDataProvider<LockTreeItem> 
     return lockList.map((lock: Readonly<FileLock>): LockTreeItem => {
       return createLockItem(lock, now);
     });
-  }
-
-  public dispose(): void {
-    this.unsubscribe();
-    this.changeEmitter.dispose();
   }
 }
 

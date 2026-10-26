@@ -2,74 +2,37 @@
 /// addressed to other agents. An agent calling `status` may only see
 /// broadcasts (to_agent = "*") plus its own inbox/sent messages.
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
 import {
   type TooManyCooksDb,
-  createDataConfig,
-  createLoggerWithContext,
-  createLoggingContext,
   createStatusHandler,
 } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { bindTestDb } from "./support/db_fixture.js";
+import {
+  createTestLogger,
+  type MessagesOverview,
+  statusMessagesOverview,
+} from "./support/handlers.js";
 
 const TEST_DB_PATH = ".test_status_message_privacy.db";
 const BROADCAST = "*";
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
-
-/// [STATUS-BOUNDED] Issues #41/#42: status returns message HEADERS only (no body)
-/// in a bounded `recent` slice. Privacy is asserted via routing (from/to), which
-/// is even stronger than before — the body is never present at all. Headers carry
-/// snake_case JSON keys, so they are read as records rather than typed properties.
-type StatusOverview = {
-  readonly total: number;
-  readonly unread: number;
-  readonly recent: ReadonlyArray<Record<string, unknown>>;
-};
-
 const statusOverviewFor = async (
   db: TooManyCooksDb,
   agentKey: string,
-): Promise<StatusOverview> => {
+): Promise<MessagesOverview> => {
   const handler = createStatusHandler(db, createTestLogger());
   const result = await handler({ agent_key: agentKey }, {});
   assert.strictEqual(result.isError, false, "status must not error");
-  const parsed = JSON.parse(result.content[0].text) as { readonly messages: StatusOverview };
-  return parsed.messages;
+  return statusMessagesOverview(result);
 };
 
 describe("status tool message privacy (#11)", () => {
-  let db: TooManyCooksDb | undefined;
-
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok db"); }
-    db = result.value;
-  });
-
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  const testDb = bindTestDb(TEST_DB_PATH);
 
   it("does not expose a direct message between two other agents to a third agent", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     const alice = await db.register("privacy-alice");
     const bob = await db.register("privacy-bob");
     const carol = await db.register("privacy-carol");
@@ -89,7 +52,7 @@ describe("status tool message privacy (#11)", () => {
   });
 
   it("still shows the recipient their own direct message and broadcasts to everyone", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     const alice = await db.register("privacy-alice2");
     const bob = await db.register("privacy-bob2");
     const carol = await db.register("privacy-carol2");

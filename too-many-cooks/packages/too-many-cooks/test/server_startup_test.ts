@@ -5,10 +5,18 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { rmSync } from "node:fs";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import {
+  STILL_RUNNING,
+  fetchAdminStatus,
+  killServer,
+  spawnServer,
+  waitForExit,
+  waitForServer,
+} from "./support/server_process.js";
+import { getArrayField } from "./support/json.js";
 
 // ============================================================
 // Constants
@@ -18,17 +26,12 @@ const PORT_STATUS_RESPONDS = 4050;
 const PORT_CUSTOM = 4051;
 const PORT_CONFLICT = 4052;
 const PORT_INITIAL_STATE = 4053;
-const MAX_POLL_ATTEMPTS = 30;
-const POLL_INTERVAL_MS = 200;
-const ADMIN_STATUS_PATH = "/admin/status";
 const TMP_PREFIX = "/tmp/tmc-startup-";
 const STATUS_OK = 200;
 
 /** How long to wait for the losing server to step aside and exit. */
 const STEP_ASIDE_TIMEOUT_MS = 10000;
 
-/** Sentinel returned by waitForExit when the process never exits. */
-const STILL_RUNNING = "still-running";
 const EMPTY_ARRAY_LENGTH = 0;
 const AGENTS_FIELD = "agents";
 const LOCKS_FIELD = "locks";
@@ -50,69 +53,37 @@ type StatusResponse = {
 // Helpers
 // ============================================================
 
-const buildBaseUrl = (port: number): string =>
-  `http://localhost:${String(port)}`;
-
 const spawnOnPort = (port: number): {
   readonly proc: ChildProcess;
   readonly workspace: string;
 } => {
-  const workspace = mkdtempSync(TMP_PREFIX);
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "inherit"],
-    env: {
-      ...process.env,
-      TMC_PORT: String(port),
-      TMC_WORKSPACE: workspace,
-    },
-  });
-  return { proc, workspace };
+  const spawned = spawnServer({ port, tmpPrefix: TMP_PREFIX });
+  return { proc: spawned.proc, workspace: spawned.workspace };
 };
 
-const pollUntilReady = async (port: number): Promise<void> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) { return; }
-    } catch {
-      // Not ready yet
-    }
-    if (i === MAX_POLL_ATTEMPTS - 1) {
-      throw new Error(`Server on port ${String(port)} failed to start`);
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-};
+const pollUntilReady = async (port: number): Promise<void> =>
+  waitForServer(`http://localhost:${String(port)}`);
 
 const fetchStatus = async (port: number): Promise<{
   readonly status: number;
   readonly body: StatusResponse;
 }> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  const response = await fetch(url);
-  const body = (await response.json()) as StatusResponse;
-  return { status: response.status, body };
+  const { status, body } = await fetchAdminStatus(port);
+  return {
+    status,
+    body: {
+      agents: getArrayField(body, AGENTS_FIELD),
+      locks: getArrayField(body, LOCKS_FIELD),
+      plans: getArrayField(body, PLANS_FIELD),
+      messages: getArrayField(body, MESSAGES_FIELD),
+    },
+  };
 };
 
 const cleanup = (proc: ChildProcess, workspace: string): void => {
-  proc.kill();
+  killServer(proc);
   rmSync(workspace, { recursive: true, force: true });
 };
-
-/** Wait for a process to exit, returning its exit code, or STILL_RUNNING on timeout. */
-const waitForExit = async (
-  proc: ChildProcess,
-  timeoutMs: number,
-): Promise<number | null | typeof STILL_RUNNING> =>
-  new Promise((resolve) => {
-    if (proc.exitCode !== null) { resolve(proc.exitCode); return; }
-    const timer = setTimeout((): void => { resolve(STILL_RUNNING); }, timeoutMs);
-    proc.once("exit", (code: number | null): void => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
 
 // ============================================================
 // Tests

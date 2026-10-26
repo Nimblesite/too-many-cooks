@@ -2,27 +2,15 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
 import {
   type TooManyCooksDb,
-  createDataConfig,
   ERR_UNAUTHORIZED,
   ERR_VALIDATION,
   ERR_NOT_FOUND,
 } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
 
 const TEST_DB_PATH = ".test_messages.db";
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  } catch {
-    // ignore
-  }
-};
 
 describe("messages", () => {
   let db: TooManyCooksDb | undefined;
@@ -32,31 +20,22 @@ describe("messages", () => {
   let receiverKey = "";
 
   beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) {throw new Error("expected ok");}
-    db = result.value;
+    const fixture = freshTestDb(TEST_DB_PATH);
+    db = fixture.db;
 
     // Register sender
-    const senderReg = await db.register("sender-agent");
-    if (!senderReg.ok) {throw new Error("expected ok");}
-    const sender = senderReg.value;
+    const sender = await registerAgent(db, "sender-agent");
     senderName = sender.agentName;
     senderKey = sender.agentKey;
 
     // Register receiver
-    const receiverReg = await db.register("receiver-agent");
-    if (!receiverReg.ok) {throw new Error("expected ok");}
-    const receiver = receiverReg.value;
+    const receiver = await registerAgent(db, "receiver-agent");
     receiverName = receiver.agentName;
     receiverKey = receiver.agentKey;
   });
 
   afterEach(async () => {
-    await db?.close();
-    deleteIfExists(TEST_DB_PATH);
+    await teardownTestDb(db, TEST_DB_PATH);
   });
 
   it("sendMessage creates message with ID", async () => {
@@ -223,7 +202,8 @@ describe("messages", () => {
     const result = await db.getMessages(receiverName, receiverKey);
     if (!result.ok) {throw new Error("expected ok");}
     const messages = result.value;
-    const msg = messages[0]!;
+    const msg = messages[0];
+    assert.ok(msg !== undefined, "inbox should hold the sent message");
 
     assert.strictEqual(msg.fromAgent, senderName);
     assert.strictEqual(msg.toAgent, receiverName);

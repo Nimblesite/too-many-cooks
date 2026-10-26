@@ -19,68 +19,29 @@ import {
   selectUnreadMessageCount,
 } from '../../src/state/selectors';
 
-const AGENT_1: AgentIdentity = { agentName: 'agent-1', registeredAt: 1000, lastActive: 2000 };
-const AGENT_2: AgentIdentity = { agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 };
+import { makeAgentIdentity, makeFileLock, makeMessage, makePlan } from './testSupport';
+
+const AGENT_1: AgentIdentity = makeAgentIdentity();
+const AGENT_2: AgentIdentity = makeAgentIdentity({ agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 });
 
 const FAR_FUTURE: number = Date.now() + 600000;
 const FAR_PAST: number = 1000;
 
-const ACTIVE_LOCK: FileLock = {
-  filePath: '/active.ts',
-  agentName: 'agent-1',
-  acquiredAt: 1000,
-  expiresAt: FAR_FUTURE,
-  reason: 'editing',
-  version: 1,
-};
+const ACTIVE_LOCK: FileLock = makeFileLock({ filePath: '/active.ts', expiresAt: FAR_FUTURE });
+const EXPIRED_LOCK: FileLock = makeFileLock({ filePath: '/expired.ts', agentName: 'agent-2', expiresAt: FAR_PAST, reason: null });
 
-const EXPIRED_LOCK: FileLock = {
-  filePath: '/expired.ts',
-  agentName: 'agent-2',
-  acquiredAt: 1000,
-  expiresAt: FAR_PAST,
-  reason: null,
-  version: 1,
-};
+const MSG_UNREAD: Message = makeMessage();
+const MSG_READ: Message = makeMessage({ id: 'msg-2', fromAgent: 'agent-2', toAgent: 'agent-1', content: 'hi back', createdAt: 1100, readAt: 1200 });
+const BROADCAST_MSG: Message = makeMessage({ id: 'msg-3', toAgent: '*', content: 'everyone', createdAt: 1300 });
 
-const MSG_UNREAD: Message = {
-  id: 'msg-1',
-  fromAgent: 'agent-1',
-  toAgent: 'agent-2',
-  content: 'hello',
-  createdAt: 1000,
-  readAt: null,
-};
+const PLAN_1: AgentPlan = makePlan();
 
-const MSG_READ: Message = {
-  id: 'msg-2',
-  fromAgent: 'agent-2',
-  toAgent: 'agent-1',
-  content: 'hi back',
-  createdAt: 1100,
-  readAt: 1200,
-};
-
-const BROADCAST_MSG: Message = {
-  id: 'msg-3',
-  fromAgent: 'agent-1',
-  toAgent: '*',
-  content: 'everyone',
-  createdAt: 1300,
-  readAt: null,
-};
-
-const PLAN_1: AgentPlan = {
-  agentName: 'agent-1',
-  goal: 'Fix bugs',
-  currentTask: 'Reading code',
-  updatedAt: 1000,
-};
-
-const makeState = (overrides: Partial<AppState> = {}): AppState => ({
-  ...initialState,
-  ...overrides,
-});
+function makeState(overrides: Partial<AppState> = {}): AppState {
+  return {
+    ...initialState,
+    ...overrides,
+  };
+}
 
 describe('basic selectors', () => {
   it('selectConnectionStatus returns status', () => {

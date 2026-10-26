@@ -1,7 +1,7 @@
 /// Logger - replaces dart_logging package.
 
 /** Log levels in order of severity. */
-export const enum LogLevel {
+export enum LogLevel {
   TRACE = 0,
   DEBUG = 1,
   INFO = 2,

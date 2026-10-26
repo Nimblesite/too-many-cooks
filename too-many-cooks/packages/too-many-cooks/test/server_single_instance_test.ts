@@ -8,11 +8,18 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import {
+  ADMIN_STATUS_PATH,
+  STILL_RUNNING,
+  buildBaseUrl,
+  spawnServer,
+  waitForExit,
+  waitForServer,
+} from "./support/server_process.js";
 
 // ============================================================
 // Constants
@@ -20,13 +27,10 @@ import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
 
 const PORT_FIRST = 4071;
 const PORT_SECOND = 4072;
-const MAX_POLL_ATTEMPTS = 50;
-const POLL_INTERVAL_MS = 200;
-const ADMIN_STATUS_PATH = "/admin/status";
+const POLL_ATTEMPTS = 50;
 const TMP_PREFIX = "/tmp/tmc-singleinstance-";
 const STATUS_OK = 200;
 const REFUSE_TIMEOUT_MS = 10000;
-const STILL_RUNNING = "still-running";
 const LOCK_REL_PATH = ".too_many_cooks/server.lock";
 const ALREADY_RUNNING_MARKER = "already running in this folder";
 
@@ -34,55 +38,20 @@ const ALREADY_RUNNING_MARKER = "already running in this folder";
 // Helpers
 // ============================================================
 
-const buildBaseUrl = (port: number): string => `http://localhost:${String(port)}`;
-
 /// Spawn the server bound to an EXPLICIT workspace so two instances can share one.
 const spawnInWorkspace = (port: number, workspace: string): {
   readonly proc: ChildProcess;
-  readonly stderr: string[];
-} => {
-  const stderr: string[] = [];
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, TMC_PORT: String(port), TMC_WORKSPACE: workspace },
-  });
-  proc.stderr?.on("data", (chunk: Buffer): void => { stderr.push(chunk.toString()); });
-  return { proc, stderr };
-};
+  readonly stderr: readonly string[];
+} => spawnServer({ port, workspace, captureStderr: true });
 
 const pollUntilReady = async (port: number): Promise<void> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) { return; }
-    } catch {
-      // Not ready yet
-    }
-    if (i === MAX_POLL_ATTEMPTS - 1) {
-      throw new Error(`Server on port ${String(port)} failed to start`);
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
+  await waitForServer(buildBaseUrl(port), POLL_ATTEMPTS);
 };
 
 const fetchStatus = async (port: number): Promise<number> => {
   const response = await fetch(`${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`);
   return response.status;
 };
-
-const waitForExit = async (
-  proc: ChildProcess,
-  timeoutMs: number,
-): Promise<number | null | typeof STILL_RUNNING> =>
-  new Promise((resolve) => {
-    if (proc.exitCode !== null) { resolve(proc.exitCode); return; }
-    const timer = setTimeout((): void => { resolve(STILL_RUNNING); }, timeoutMs);
-    proc.once("exit", (code: number | null): void => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
 
 // ============================================================
 // Test

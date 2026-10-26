@@ -12,9 +12,32 @@ import type {
   LockResult,
   Message,
 } from './types.gen';
+import { isRecord } from '../services/httpClient';
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export { isRecord };
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+interface FieldLookup<T> {
+  readonly fallback: T | null;
+  readonly key: string;
+  readonly guard: (value: unknown) => value is T;
+  readonly record: Readonly<Record<string, unknown>>;
+}
+
+function field<T>(lookup: Readonly<FieldLookup<T>>): T | null {
+  const value: unknown = lookup.record[lookup.key];
+  return lookup.guard(value) ? value : lookup.fallback;
 }
 
 export function parseArray<T>(
@@ -30,42 +53,36 @@ export function parseArray<T>(
 }
 
 export function stringField(record: Readonly<Record<string, unknown>>, key: string): string {
-  const value: unknown = record[key];
-  return typeof value === 'string' ? value : '';
+  return field({ fallback: '', guard: isString, key, record }) ?? '';
 }
 
 export function numberField(record: Readonly<Record<string, unknown>>, key: string): number {
-  const value: unknown = record[key];
-  return typeof value === 'number' ? value : 0;
+  return field({ fallback: 0, guard: isNumber, key, record }) ?? 0;
 }
 
 export function boolField(record: Readonly<Record<string, unknown>>, key: string): boolean {
-  const value: unknown = record[key];
-  return typeof value === 'boolean' ? value : false;
+  return field({ fallback: false, guard: isBoolean, key, record }) ?? false;
 }
 
 export function nullableStringField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): string | null {
-  const value: unknown = record[key];
-  return typeof value === 'string' ? value : null;
+  return field({ fallback: null, guard: isString, key, record });
 }
 
 export function nullableNumberField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): number | null {
-  const value: unknown = record[key];
-  return typeof value === 'number' ? value : null;
+  return field({ fallback: null, guard: isNumber, key, record });
 }
 
 export function nullableBoolField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): boolean | null {
-  const value: unknown = record[key];
-  return typeof value === 'boolean' ? value : null;
+  return field({ fallback: null, guard: isBoolean, key, record });
 }
 
 export function parseAgentIdentity(raw: Readonly<Record<string, unknown>>): AgentIdentity {

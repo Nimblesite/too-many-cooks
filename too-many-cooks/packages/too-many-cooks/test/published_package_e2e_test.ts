@@ -31,6 +31,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
+import { pragmaColumnNames, rowName } from "./support/sqlite_rows.js";
 
 // ============================================================================
 // Constants
@@ -209,10 +210,10 @@ const killAndWait = async (proc: ChildProcess): Promise<void> => {
 const tableNames = (dbPath: string): readonly string[] => {
   const db: Database.Database = new Database(dbPath, { readonly: true });
   try {
-    const rows: ReadonlyArray<{ readonly name: string }> = db
+    const rows: readonly unknown[] = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all() as ReadonlyArray<{ readonly name: string }>;
-    return rows.map((r: { readonly name: string }): string => r.name);
+      .all();
+    return rows.map(rowName);
   } finally {
     db.close();
   }
@@ -221,9 +222,7 @@ const tableNames = (dbPath: string): readonly string[] => {
 const columnNames = (dbPath: string, table: string): readonly string[] => {
   const db: Database.Database = new Database(dbPath, { readonly: true });
   try {
-    const rows: ReadonlyArray<{ readonly name: string }> = db
-      .pragma(`table_info(${table})`) as ReadonlyArray<{ readonly name: string }>;
-    return rows.map((r: { readonly name: string }): string => r.name);
+    return pragmaColumnNames(db.pragma(`table_info(${table})`));
   } finally {
     db.close();
   }

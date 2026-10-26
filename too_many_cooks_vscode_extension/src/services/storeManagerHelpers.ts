@@ -1,6 +1,7 @@
 // HTTP helpers for StoreManager — extracted to keep storeManager.ts under 300 LOC.
 
 import type { ConnectionTarget } from './connectionTypes';
+import { postJsonRequest } from './httpClient';
 
 /** Local base URL prefix. */
 const LOCAL_BASE_URL_PREFIX: string = 'http://localhost:';
@@ -81,15 +82,5 @@ export async function postJsonWithAuth(
   body: Readonly<Record<string, unknown>>,
   authHeaders: Readonly<Record<string, string>>,
 ): Promise<string> {
-  const headers: Headers = new Headers();
-  headers.set(CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
-  for (const [key, value] of Object.entries(authHeaders)) {
-    headers.set(key, value);
-  }
-  const response: Response = await fetch(url, {
-    body: JSON.stringify(body),
-    headers,
-    method: 'POST',
-  });
-  return response.text();
+  return await postJsonRequest(url, body, authHeaders);
 }

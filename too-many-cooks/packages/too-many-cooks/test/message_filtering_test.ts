@@ -6,291 +6,105 @@
 
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import type { ChildProcess } from "node:child_process";
+
+import {
+  type SpawnedServer,
+  killServer,
+  resetServerViaAdmin,
+  spawnServer,
+  waitForServer,
+} from "./support/server_process.js";
+import {
+  ACCEPT_STREAMABLE,
+  MCP_PATH,
+  McpHttpClient,
+  type ClientInfo,
+} from "./support/mcp_http.js";
+import {
+  SseEventCollector,
+  extractEventType,
+  parseJsonRecord,
+} from "./support/sse.js";
+import { assertDefined } from "./support/assertions.js";
+import { getStringField } from "./support/json.js";
+import { removeTree } from "./support/fs_helpers.js";
 
 const TEST_PORT = 4055;
 const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
-const MCP_PATH = "/mcp";
-const ACCEPT = "application/json, text/event-stream";
-const MCP_PROTOCOL_VERSION = "2025-03-26";
 const STREAM_ESTABLISH_DELAY_MS = 300;
 const EVENT_TIMEOUT_MS = 1500;
-const EVENT_POLL_DELAY_MS = 50;
+const TMP_PREFIX = "/tmp/tmc-msg-filter-";
+
+const CLIENT_INFO: ClientInfo = { name: "msg-filter-test", version: "1.0" };
 
 // ============================================================
 // Helpers
 // ============================================================
 
-const parseJson = (text: string): Record<string, unknown> =>
-  JSON.parse(text) as Record<string, unknown>;
+const newClient = (): McpHttpClient =>
+  new McpHttpClient({ baseUrl: BASE_URL, clientInfo: CLIENT_INFO });
 
-const extractEventType = (streamData: string): string | undefined => {
-  const json = parseJson(streamData);
-  const params = json.params as Record<string, unknown> | undefined;
-  const data = params?.data as Record<string, unknown> | undefined;
-  return data?.event as string | undefined;
-};
-
-class AgentStreamClient {
-  private readonly events: string[] = [];
-  private consumed = 0;
-  private controller: AbortController | undefined;
-
-  static async connect(sessionId: string): Promise<AgentStreamClient> {
-    const client = new AgentStreamClient();
-    client.controller = new AbortController();
-    const signal = client.controller.signal;
-
-    void (async () => {
-      try {
-        const response = await fetch(`${BASE_URL}${MCP_PATH}`, {
-          method: "GET",
-          headers: {
-            Accept: ACCEPT,
-            "mcp-session-id": sessionId,
-          },
-          signal,
-        });
-        if (!response.ok) {return;}
-        const body = response.body;
-        if (body === null) {return;}
-        const reader = body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        for (;;) {
-          const chunk = await reader.read();
-          if (chunk.done) {break;}
-          buffer += decoder.decode(chunk.value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.substring(6).trim();
-              if (data.length > 0) {client.events.push(data);}
-            }
-          }
-        }
-      } catch {
-        // aborted - expected
-      }
-    })();
-
-    await new Promise((resolve) =>
-      setTimeout(resolve, STREAM_ESTABLISH_DELAY_MS),
-    );
-    return client;
-  }
-
-  async waitForEvents(
-    count: number,
-    timeoutMs: number = EVENT_TIMEOUT_MS,
-  ): Promise<string[]> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (this.events.length - this.consumed >= count) {
-        const result = this.events.slice(this.consumed);
-        this.consumed = this.events.length;
-        return result;
-      }
-      await new Promise((resolve) =>
-        setTimeout(resolve, EVENT_POLL_DELAY_MS),
-      );
-    }
-    const result = this.events.slice(this.consumed);
-    this.consumed = this.events.length;
-    return result;
-  }
-
-  close(): void {
-    this.controller?.abort();
-  }
-}
-
-class McpClient {
-  private sessionId = "";
-  private nextId = 1;
-
-  getSessionId(): string {
-    if (this.sessionId === "") {
-      throw new Error("Session not initialized");
-    }
-    return this.sessionId;
-  }
-
-  async initSession(): Promise<void> {
-    await this.request("initialize", {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: { name: "msg-filter-test", version: "1.0" },
-    });
-    if (this.sessionId === "") {
-      throw new Error("No session ID after init");
-    }
-    await this.postMcp(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        method: "notifications/initialized",
-        params: {},
-      }),
-    );
-  }
-
-  async callTool(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const result = await this.request("tools/call", {
-      name,
-      arguments: args,
-    });
-    const content = (result.content as Array<Record<string, unknown>>)[0];
-    return content?.text as string;
-  }
-
-  private async request(
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: this.nextId++,
-      method,
-      params,
-    });
-    const response = await this.postMcp(body);
-    const text = await response.text();
-    const json = this.parseMcpResponse(text);
-    if ("error" in json && json.error !== undefined) {
-      const errorObj = json.error as Record<string, unknown>;
-      const msg = (errorObj.message as string | undefined) ?? "Error";
-      return {
-        isError: true,
-        content: [{ type: "text", text: msg }],
-      };
-    }
-    return json.result as Record<string, unknown>;
-  }
-
-  private async postMcp(body: string): Promise<Response> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: ACCEPT,
-    };
-    if (this.sessionId !== "") {
-      headers["mcp-session-id"] = this.sessionId;
-    }
-    const response = await fetch(`${BASE_URL}${MCP_PATH}`, {
-      method: "POST",
-      headers,
-      body,
-    });
-    const sid = response.headers.get("mcp-session-id");
-    if (sid !== null) {
-      this.sessionId = sid;
-    }
-    return response;
-  }
-
-  private parseMcpResponse(text: string): Record<string, unknown> {
-    if (text.trimStart().startsWith("{")) {
-      return JSON.parse(text) as Record<string, unknown>;
-    }
-    for (const line of text.split("\n")) {
-      if (line.startsWith("data: ")) {
-        try {
-          return JSON.parse(line.substring(6)) as Record<string, unknown>;
-        } catch {
-          continue;
-        }
-      }
-    }
-    throw new Error(`Could not parse: ${text}`);
-  }
-}
-
-let tmpWorkspace = "";
-
-const spawnServer = (): ChildProcess => {
-  tmpWorkspace = mkdtempSync("/tmp/tmc-msg-filter-");
-  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, TMC_PORT: String(TEST_PORT), TMC_WORKSPACE: tmpWorkspace },
+/** Opens the agent's GET /mcp notification stream. */
+const connectAgentStream = async (
+  sessionId: string,
+): Promise<SseEventCollector> =>
+  SseEventCollector.open({
+    url: `${BASE_URL}${MCP_PATH}`,
+    headers: { Accept: ACCEPT_STREAMABLE, "mcp-session-id": sessionId },
+    settleMs: STREAM_ESTABLISH_DELAY_MS,
   });
-};
 
-const killProcess = (proc: ChildProcess): void => {
-  proc.kill();
-};
+/** Waits for events with this suite's timeout budget. */
+const waitForEvents = async (
+  stream: SseEventCollector,
+  count: number,
+): Promise<string[]> => stream.waitForEvents(count, EVENT_TIMEOUT_MS);
 
-const waitForServer = async (): Promise<void> => {
-  for (let i = 0; i < 30; i++) {
-    try {
-      const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) {return;}
-    } catch {
-      // not ready
-    }
-    if (i === 29) {throw new Error("Server failed to start");}
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-};
-
-const resetServer = async (): Promise<void> => {
-  const r = await fetch(`${BASE_URL}/admin/reset`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!r.ok) {
-    throw new Error("Failed to reset server");
-  }
-};
-
+let spawned: SpawnedServer | undefined;
 
 describe("message filtering", () => {
   let serverProcess: ChildProcess;
 
   before(async () => {
-    serverProcess = spawnServer();
-    await waitForServer();
+    spawned = spawnServer({ port: TEST_PORT, tmpPrefix: TMP_PREFIX });
+    serverProcess = spawned.proc;
+    await waitForServer(BASE_URL);
   });
 
   after(() => {
-    killProcess(serverProcess);
-    rmSync(tmpWorkspace, { recursive: true, force: true });
+    killServer(serverProcess);
+    if (spawned !== undefined) {
+      removeTree(spawned.workspace);
+    }
   });
 
   beforeEach(async () => {
-    await resetServer();
+    await resetServerViaAdmin(BASE_URL);
   });
 
   it("message_sent is NOT delivered to agent that is not the recipient", async () => {
     // Three agents: sender, recipient, bystander.
     // sender sends to recipient.
     // bystander MUST NOT receive the message_sent notification.
-    const sender = new McpClient();
-    const recipient = new McpClient();
-    const bystander = new McpClient();
+    const sender = newClient();
+    const recipient = newClient();
+    const bystander = newClient();
     await sender.initSession();
     await recipient.initSession();
     await bystander.initSession();
 
-    const senderReg = parseJson(
+    const senderReg = parseJsonRecord(
       await sender.callTool("register", { name: "sender" }),
     );
     await recipient.callTool("register", { name: "recipient" });
     await bystander.callTool("register", { name: "bystander" });
 
-    const senderKey = senderReg.agent_key as string;
+    const senderKey = getStringField(senderReg, "agent_key");
 
     // Open streams AFTER registration to avoid buffered events.
-    const recipientStream = await AgentStreamClient.connect(
-      recipient.getSessionId(),
-    );
-    const bystanderStream = await AgentStreamClient.connect(
-      bystander.getSessionId(),
-    );
+    const recipientStream = await connectAgentStream(recipient.getSessionId());
+    const bystanderStream = await connectAgentStream(bystander.getSessionId());
 
     // Send a message from sender to recipient only.
     await sender.callTool("message", {
@@ -300,8 +114,8 @@ describe("message filtering", () => {
       content: "hello recipient",
     });
 
-    const recipientEvents = await recipientStream.waitForEvents(1);
-    const bystanderEvents = await bystanderStream.waitForEvents(1);
+    const recipientEvents = await waitForEvents(recipientStream, 1);
+    const bystanderEvents = await waitForEvents(bystanderStream, 1);
 
     recipientStream.close();
     bystanderStream.close();
@@ -312,7 +126,9 @@ describe("message filtering", () => {
       true,
       "recipient MUST receive message_sent notification",
     );
-    const recipientEventType = extractEventType(recipientEvents[0]!);
+    const firstRecipientEvent = recipientEvents[0];
+    assertDefined(firstRecipientEvent, "recipient event payload");
+    const recipientEventType = extractEventType(firstRecipientEvent);
     assert.strictEqual(
       recipientEventType,
       "message_sent",
@@ -331,19 +147,19 @@ describe("message filtering", () => {
   });
 
   it("broadcast message_sent (* recipient) IS delivered to all agents", async () => {
-    const sender = new McpClient();
-    const agent2 = new McpClient();
+    const sender = newClient();
+    const agent2 = newClient();
     await sender.initSession();
     await agent2.initSession();
 
-    const senderReg = parseJson(
+    const senderReg = parseJsonRecord(
       await sender.callTool("register", { name: "sender-b" }),
     );
     await agent2.callTool("register", { name: "agent2-b" });
 
-    const senderKey = senderReg.agent_key as string;
+    const senderKey = getStringField(senderReg, "agent_key");
 
-    const agent2Stream = await AgentStreamClient.connect(agent2.getSessionId());
+    const agent2Stream = await connectAgentStream(agent2.getSessionId());
 
     await sender.callTool("message", {
       action: "send",
@@ -352,7 +168,7 @@ describe("message filtering", () => {
       content: "broadcast!",
     });
 
-    const events = await agent2Stream.waitForEvents(1);
+    const events = await waitForEvents(agent2Stream, 1);
     agent2Stream.close();
 
     assert.strictEqual(
@@ -360,8 +176,10 @@ describe("message filtering", () => {
       true,
       "agent2 MUST receive broadcast message_sent",
     );
+    const firstEvent = events[0];
+    assertDefined(firstEvent, "agent2 event payload");
     assert.strictEqual(
-      extractEventType(events[0]!),
+      extractEventType(firstEvent),
       "message_sent",
       "event type MUST be message_sent",
     );

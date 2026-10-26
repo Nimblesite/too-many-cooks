@@ -3,27 +3,30 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForAgentInTree,
-  waitForAgentGone,
-  waitForMessageInTree,
-  waitForCondition,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  installDialogMocks,
-  restoreDialogMocks,
-  getLabel,
-  getDescription,
-  getChildren,
-  hasChildWithLabel,
-  assertOk,
+  acquireLockAndWait,
   assertEqual,
+  assertOk,
+  callToolString,
+  ensureServerReady,
+  extractKeyFromResult,
+  getChildren,
+  getDescription,
+  getLabel,
+  getTestAPI,
+  hasChildWithLabel,
+  installDialogMocks,
+  reconnectFresh,
+  registerAgent,
+  requireTreeItem,
+  restoreDialogMocks,
+  safeDisconnect,
+  waitForAgentGone,
+  waitForAgentInTree,
+  waitForCondition,
+  waitForConnection,
+  waitForExtensionActivation,
+  waitForLockGone,
+  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -35,14 +38,8 @@ suite('Lock State Coverage', () => {
   let agentKey: string | undefined;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    const api = await reconnectFresh();
+    agentKey = await registerAgent(api, agentName);
   });
 
   suiteTeardown(async () => {
@@ -53,15 +50,7 @@ suite('Lock State Coverage', () => {
     const api = getTestAPI();
     if (!agentKey) { throw new Error('agentKey not set'); }
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/lock/active.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing active lock',
-    });
-
-    await waitForLockInTree(api, '/test/lock/active.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/test/lock/active.ts', 'Testing active lock');
 
     const locks = api.getLocks();
     const ourLock = locks.find(l => l.filePath === '/test/lock/active.ts');
@@ -76,19 +65,11 @@ suite('Lock State Coverage', () => {
     if (!agentKey) { throw new Error('agentKey not set'); }
 
     const lockPath = '/test/lock/description.ts';
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: lockPath,
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing lock description',
-    });
-
-    await waitForLockInTree(api, lockPath);
+    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing lock description');
 
     const lockItem = api.findLockInTree(lockPath);
     assertOk(lockItem, 'Lock should exist');
-    const desc = getDescription(lockItem!);
+    const desc = getDescription(requireTreeItem(lockItem, 'lockItem must exist'));
     assertOk(desc.startsWith(agentName), `Lock description should start with agent name, got: ${desc}`);
   });
 });
@@ -100,14 +81,8 @@ suite('Store Error Handling Coverage', () => {
   let agentKey: string | undefined;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    const api = await reconnectFresh();
+    agentKey = await registerAgent(api, agentName);
   });
 
   suiteTeardown(async () => {
@@ -118,15 +93,7 @@ suite('Store Error Handling Coverage', () => {
     const api = getTestAPI();
     if (!agentKey) { throw new Error('agentKey not set'); }
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/force/release.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Will be force released',
-    });
-
-    await waitForLockInTree(api, '/test/force/release.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/test/force/release.ts', 'Will be force released');
 
     await api.forceReleaseLock('/test/force/release.ts');
     await waitForLockGone(api, '/test/force/release.ts');
@@ -179,7 +146,7 @@ suite('Store Error Handling Coverage', () => {
 
     const msgItem = api.findMessageInTree('Test message via store');
     assertOk(msgItem, 'Message should appear in tree');
-    const label = getLabel(msgItem!);
+    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(label.includes(senderName), 'Message should show sender');
     assertOk(label.includes(receiverName), 'Message should show receiver');
   });
@@ -245,16 +212,9 @@ suite('Tree Provider Edge Cases', () => {
   let agentKey: string | undefined;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    const api = await ensureServerReady();
 
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    agentKey = await registerAgent(api, agentName);
   });
 
   suiteTeardown(async () => {
@@ -296,19 +256,11 @@ suite('Tree Provider Edge Cases', () => {
     const api = getTestAPI();
     if (!agentKey) { throw new Error('agentKey not set'); }
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/edge/case/file.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Edge case lock',
-    });
-
-    await waitForLockInTree(api, '/edge/case/file.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/edge/case/file.ts', 'Edge case lock');
 
     const agentItem = api.findAgentInTree(agentName);
     assertOk(agentItem, 'Agent should be in tree');
-    const desc = getDescription(agentItem!);
+    const desc = getDescription(requireTreeItem(agentItem, 'agentItem must exist'));
     assertOk(desc.includes('lock'), `Agent description should mention locks, got: ${desc}`);
   });
 
@@ -332,12 +284,12 @@ suite('Tree Provider Edge Cases', () => {
     }, 'Plan to appear in agent tree');
 
     const agentItem = api.findAgentInTree(agentName);
-    const children = getChildren(agentItem!);
+    const children = getChildren(requireTreeItem(agentItem, 'agentItem must exist'));
     assertOk(children, 'Agent should have children');
 
     const planChild = children!.find(c => getLabel(c).includes('Goal:'));
     assertOk(planChild, 'Agent should have plan child');
-    const planLabel = getLabel(planChild!);
+    const planLabel = getLabel(requireTreeItem(planChild, 'planChild must exist'));
     assertOk(planLabel.includes('Edge case goal'), `Plan child should contain goal, got: ${planLabel}`);
   });
 });

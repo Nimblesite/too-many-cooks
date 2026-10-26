@@ -6,26 +6,27 @@ import { AgentTreeItem } from '../../src/ui/tree/agentTreeItem';
 import { LockTreeItem } from '../../src/ui/tree/lockTreeItem';
 import { FileLock } from '../../src/state/types';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForAgentInTree,
-  waitForAgentGone,
-  waitForMessageInTree,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  installDialogMocks,
-  restoreDialogMocks,
-  mockWarningMessage,
-  mockQuickPick,
-  mockInputBox,
-  getLabel,
-  assertOk,
+  acquireLockAndWait,
   assertEqual,
+  assertOk,
+  callToolString,
+  ensureServerReady,
+  extractKeyFromResult,
+  getLabel,
+  getTestAPI,
+  installDialogMocks,
+  mockInputBox,
+  mockQuickPick,
+  mockWarningMessage,
+  registerAgent,
+  requireTreeItem,
+  restoreDialogMocks,
+  safeDisconnect,
+  waitForAgentGone,
+  waitForAgentInTree,
+  waitForConnection,
+  waitForLockGone,
+  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -36,13 +37,7 @@ suite('Command Integration - Dialog Mocking', () => {
   let agentKey: string | undefined;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
   });
 
   suiteTeardown(async () => {
@@ -59,8 +54,7 @@ suite('Command Integration - Dialog Mocking', () => {
     await api.connect();
     await waitForConnection();
 
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    agentKey = await registerAgent(api, agentName);
     assertOk(agentKey && agentKey.length > 0, 'Agent should have key');
   });
 
@@ -70,15 +64,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     const lockPath = '/cmd/delete/lock1.ts';
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: lockPath,
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing delete command',
-    });
-
-    await waitForLockInTree(api, lockPath);
+    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing delete command');
 
     mockWarningMessage('Release');
 
@@ -109,15 +95,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     const lockPath = '/cmd/delete/lock2.ts';
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: lockPath,
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing delete from agent tree',
-    });
-
-    await waitForLockInTree(api, lockPath);
+    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing delete from agent tree');
 
     mockWarningMessage('Release');
 
@@ -153,15 +131,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     const lockPath = '/cmd/cancel/lock.ts';
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: lockPath,
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing cancel',
-    });
-
-    await waitForLockInTree(api, lockPath);
+    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing cancel');
 
     mockWarningMessage(undefined);
 
@@ -316,7 +286,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     const msgItem = api.findMessageInTree('Broadcast test');
     assertOk(msgItem, 'Broadcast should be in tree');
-    const label = getLabel(msgItem!);
+    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(label.includes('all'), 'Should show "all" as recipient');
   });
 

@@ -6,11 +6,16 @@
 
 import * as vscode from 'vscode';
 
-// Register module-alias AFTER vscode import to avoid breaking
-// VSCode's built-in 'vscode' module resolution in Electron.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require('module-alias/register');
-import { getFilePathFromItem } from './ui/tree/treeItemUtils';
+import {
+  registerCopyAgentNameCommand,
+  registerCopyMessageAsQuoteCommand,
+  registerCopyMessageContentCommand,
+  registerCopyMessageIdCommand,
+  registerCopyMessageRecipientCommand,
+  registerCopyMessageSenderCommand,
+  registerCopyMessagesCommand,
+} from './ui/messageCommands';
+import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
 import { restoreLastConnection, showConnectionPicker } from './ui/connectionPicker';
 import { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
 import type { ConnectionPickerDeps } from './ui/connectionPicker';
@@ -25,16 +30,7 @@ import { createConnectionManager } from './services/connectionManager';
 import { createMcpConfigManager } from './services/mcpConfigManager';
 import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
-import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
-import {
-  registerCopyAgentNameCommand,
-  registerCopyMessageAsQuoteCommand,
-  registerCopyMessageContentCommand,
-  registerCopyMessageIdCommand,
-  registerCopyMessageRecipientCommand,
-  registerCopyMessageSenderCommand,
-  registerCopyMessagesCommand,
-} from './ui/messageCommands';
+import { getFilePathFromItem } from './ui/tree/treeItemUtils';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
 
  
@@ -86,8 +82,9 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
   registerAllCommands(context, storeManager, pickerDeps);
   log('Extension activated');
 
-  // eslint-disable-next-line no-void
-  if (autoConnect) { void autoConnectOnActivation(pickerDeps, storeManager); }
+  if (autoConnect) {
+    startAutoConnect(pickerDeps, storeManager);
+  }
 
   context.subscriptions.push({
     dispose: (): void => {
@@ -142,6 +139,12 @@ function createProviders(storeManager: StoreManager): Providers {
     },
   );
   return { agentsProvider, agentsTreeView, locksProvider, messagesProvider, messagesTreeView };
+}
+
+function startAutoConnect(pickerDeps: ConnectionPickerDeps, storeManager: StoreManager): void {
+  autoConnectOnActivation(pickerDeps, storeManager).catch((err: unknown): void => {
+    log(`Auto-connect failed: ${String(err)}`);
+  });
 }
 
 async function autoConnectOnActivation(

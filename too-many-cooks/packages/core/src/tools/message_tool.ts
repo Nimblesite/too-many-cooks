@@ -7,13 +7,8 @@ import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import type { DbError, Message } from "../types.js";
 import { messageToJson } from "../types.js";
-import {
-  type CallToolResult,
-  type SessionGetter,
-  type ToolCallback,
-  textContent,
-} from "../mcp-types.js";
-import { type IdentityResult, errorContent, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
+import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
 /** Input schema for message tool. */
 export const MESSAGE_INPUT_SCHEMA: {
@@ -117,14 +112,7 @@ const dispatchAction: (
         typeof args.message_id === "string" ? args.message_id : null,
       );
     default:
-      return {
-        content: [
-          textContent(
-            JSON.stringify({ error: `Unknown action: ${action}` }),
-          ),
-        ],
-        isError: true,
-      };
+      return unknownActionError(action);
   }
 };
 
@@ -141,18 +129,13 @@ export const createMessageHandler: (
   getSession: SessionGetter,
 ): ToolCallback =>
   {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionArg: unknown = args.action;
-    if (typeof actionArg !== "string") {
-      return errorContent("missing_parameter: action is required");
-    }
-    const action: string = actionArg;
-
-    const identity: IdentityResult = await resolveIdentity(db, args, getSession);
-    if (identity.isError) {return identity.result;}
-    const { agentName, agentKey }: { agentName: string; agentKey: string } = identity;
+    const actionOrError: string | CallToolResult = requireActionArg(args);
+    if (typeof actionOrError !== "string") {return actionOrError;}
+    const action: string = actionOrError;
     const log: Logger = logger.child({ tool: "message", action });
 
-    return await dispatchAction(action, db, emitter, log, agentName, agentKey, args);
+    return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> =>
+      await dispatchAction(action, db, emitter, log, agentName, agentKey, args));
   }};
 
 // ---------------------------------------------------------------------------
@@ -192,14 +175,7 @@ const handleSend: (
     toAgent,
   );
   log.info(`Message sent from ${agentName} to ${toAgent}`);
-  return {
-    content: [
-      textContent(
-        JSON.stringify({ sent: true, message_id: result.value }),
-      ),
-    ],
-    isError: false,
-  };
+  return jsonResult({ sent: true, message_id: result.value });
 };
 
 // ---------------------------------------------------------------------------
@@ -218,15 +194,7 @@ const handleGet: (
   unreadOnly: boolean,
 ): Promise<CallToolResult> => {
   const result: Result<readonly Message[], DbError> = await db.getMessages(agentName, agentKey, { unreadOnly });
-  if (!result.ok) {return makeErrorResult(result.error);}
-  return {
-    content: [
-      textContent(
-        JSON.stringify({ messages: result.value.map(messageToJson) }),
-      ),
-    ],
-    isError: false,
-  };
+  return listJsonResult(result, "messages", messageToJson);
 };
 
 // ---------------------------------------------------------------------------
@@ -249,8 +217,5 @@ const handleMarkRead: (
   }
   const result: Result<void, DbError> = await db.markRead(messageId, agentName, agentKey);
   if (!result.ok) {return makeErrorResult(result.error);}
-  return {
-    content: [textContent(JSON.stringify({ marked: true }))],
-    isError: false,
-  };
+  return jsonResult({ marked: true });
 };

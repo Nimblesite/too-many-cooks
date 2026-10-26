@@ -3,27 +3,27 @@
 // NO MOCKING. NO SKIPPING. FAIL HARD.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForCondition,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForAgentInTree,
-  waitForMessageInTree,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  restoreDialogMocks,
-  getLabel,
-  getDescription,
-  getChildren,
-  hasChildWithLabel,
-  findChildByLabel,
-  dumpTree,
-  assertOk,
   assertEqual,
+  assertOk,
+  callToolString,
+  dumpTree,
+  ensureServerReady,
+  extractKeyFromResult,
+  findChildByLabel,
+  getChildren,
+  getDescription,
+  getLabel,
+  getTestAPI,
+  hasChildWithLabel,
+  requireTreeItem,
+  restoreDialogMocks,
+  safeDisconnect,
+  waitForAgentInTree,
+  waitForCondition,
+  waitForConnection,
+  waitForLockGone,
+  waitForLockInTree,
+  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -36,15 +36,7 @@ suite('DB Integration - UI Verification', () => {
   const agent2Name = `test-agent-${testId}-2`;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    // Connect to ensure server is running, reset state, then disconnect
-    // so the first test can verify the connect flow
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
     await safeDisconnect();
   });
 
@@ -97,7 +89,7 @@ suite('DB Integration - UI Verification', () => {
 
     const agentItem = api.findAgentInTree(agent1Name);
     assertOk(agentItem, `${agent1Name} MUST appear in the tree`);
-    assertEqual(getLabel(agentItem!), agent1Name, `Label must be exactly "${agent1Name}"`);
+    assertEqual(getLabel(requireTreeItem(agentItem, 'agentItem must exist')), agent1Name, `Label must be exactly "${agent1Name}"`);
   });
 
   test('Register agent-2 → both agents visible in tree', async () => {
@@ -136,9 +128,9 @@ suite('DB Integration - UI Verification', () => {
     dumpTree('LOCKS after acquire', api.getLocksTreeSnapshot());
 
     assertOk(lockItem, '/src/main.ts MUST appear in the tree');
-    assertEqual(getLabel(lockItem!), '/src/main.ts', 'Label must be exact file path');
+    assertEqual(getLabel(requireTreeItem(lockItem, 'lockItem must exist')), '/src/main.ts', 'Label must be exact file path');
 
-    const desc = getDescription(lockItem!);
+    const desc = getDescription(requireTreeItem(lockItem, 'lockItem must exist'));
     assertOk(desc.startsWith(agent1Name), `Description should start with agent name. desc="${desc}", agent="${agent1Name}"`);
   });
 
@@ -215,13 +207,13 @@ suite('DB Integration - UI Verification', () => {
 
     const agentItem = api.findAgentInTree(agent1Name);
     assertOk(agentItem, `${agent1Name} MUST be in tree`);
-    const children = getChildren(agentItem!);
+    const children = getChildren(requireTreeItem(agentItem, 'agentItem must exist'));
     assertOk(children, 'Agent should have children');
 
-    const planChild = findChildByLabel(agentItem!, 'Goal: Implement feature X');
+    const planChild = findChildByLabel(requireTreeItem(agentItem, 'agentItem must exist'), 'Goal: Implement feature X');
     assertOk(planChild, 'Plan goal "Implement feature X" MUST appear in agent children');
 
-    const planDesc = getDescription(planChild!);
+    const planDesc = getDescription(requireTreeItem(planChild, 'planChild must exist'));
     assertOk(planDesc.includes('Writing tests'), `Plan description should contain task, got: ${planDesc}`);
   });
 
@@ -243,11 +235,11 @@ suite('DB Integration - UI Verification', () => {
     const msgItem = api.findMessageInTree('Starting work');
     assertOk(msgItem, 'Message MUST appear in tree');
 
-    const msgLabel = getLabel(msgItem!);
+    const msgLabel = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(msgLabel.includes(agent1Name), `Message label should contain sender, got: ${msgLabel}`);
     assertOk(msgLabel.includes(agent2Name), `Message label should contain recipient, got: ${msgLabel}`);
 
-    const msgDesc = getDescription(msgItem!);
+    const msgDesc = getDescription(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(msgDesc.includes('Starting work'), `Description should contain content preview, got: ${msgDesc}`);
   });
 

@@ -10,8 +10,8 @@ const BASE_URL: string = `http://localhost:${String(TEST_PORT)}`;
 
 let server: http.Server;
 
-function startTestServer(): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => {
+async function startTestServer(): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => {
     server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse): void => {
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer): void => { chunks.push(chunk); });
@@ -45,8 +45,8 @@ function startTestServer(): Promise<void> {
   });
 }
 
-function stopTestServer(): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => {
+async function stopTestServer(): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => {
     server.close((): void => { resolve(); });
   });
 }

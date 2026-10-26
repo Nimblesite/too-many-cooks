@@ -110,9 +110,9 @@ const makeEventData: (
 /** Create send function that pushes to a single agent session. */
 const createSendFn: (
   activeStreamSessions: Set<string>,
-) => (sid: string, srv: McpServer, d: Record<string, unknown>) => Promise<void> = (
+) => (sessionId: string, server: McpServer, data: Record<string, unknown>) => Promise<void> = (
   activeStreamSessions: Set<string>,
-): ((sid: string, srv: McpServer, d: Record<string, unknown>) => Promise<void>) =>
+): ((sessionId: string, server: McpServer, data: Record<string, unknown>) => Promise<void>) =>
   {return async (sessionId: string, server: McpServer, data: Record<string, unknown>): Promise<void> => {
     if (!activeStreamSessions.has(sessionId)) {
       // No active Streamable HTTP connection — skip silently.
@@ -132,14 +132,14 @@ export const createAgentEventHub: () => AgentEventHub = (): AgentEventHub => {
   const servers: Map<string, McpServer> = new Map<string, McpServer>();
   const sessionAgentNames: Map<string, string> = new Map<string, string>();
   const activeStreamSessions: Set<string> = new Set<string>();
-  const send: (sid: string, srv: McpServer, d: Record<string, unknown>) => Promise<void> = createSendFn(activeStreamSessions);
+  const send: (sessionId: string, server: McpServer, data: Record<string, unknown>) => Promise<void> = createSendFn(activeStreamSessions);
 
   const pushEvent: EventPushFn = (event: string, payload: Record<string, unknown>): void => {
     console.error(
       `[TMC] [AGENT-PUSH] ${event} → ${String(servers.size)} agent(s)`,
     );
     const data: Record<string, unknown> = makeEventData(event, payload);
-    for (const [sessionId, server] of [...servers.entries()]) {
+    for (const [sessionId, server] of servers.entries()) {
       fireAndForget(send(sessionId, server, data));
     }
   };
@@ -150,11 +150,11 @@ export const createAgentEventHub: () => AgentEventHub = (): AgentEventHub => {
       console.error(
         `[TMC] [AGENT-PUSH] ${event} (broadcast) → ${String(servers.size)} agent(s)`,
       );
-      for (const [sessionId, server] of [...servers.entries()]) {
+      for (const [sessionId, server] of servers.entries()) {
         fireAndForget(send(sessionId, server, data));
       }
     } else {
-      for (const [sessionId, agentName] of [...sessionAgentNames.entries()]) {
+      for (const [sessionId, agentName] of sessionAgentNames.entries()) {
         if (agentName === toAgent) {
           const server: McpServer | undefined = servers.get(sessionId);
           if (server !== undefined) {

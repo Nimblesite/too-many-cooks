@@ -10,18 +10,25 @@ import {
   REGISTER_INPUT_SCHEMA,
   REGISTER_TOOL_CONFIG,
 } from "too-many-cooks-core";
+import { isRecord } from "./support/json.js";
 
 type SchemaObj = Record<string, unknown>;
 
-const props = (schema: SchemaObj): Record<string, SchemaObj> => {
-  const p = schema.properties as Record<string, SchemaObj> | undefined;
-  if (p === undefined) {throw new Error("No properties in schema");}
+/** Narrows any schema value to a record without casts. */
+const schemaRecord = (schema: unknown): SchemaObj => {
+  if (!isRecord(schema)) {throw new Error("Invalid schema");}
+  return schema;
+};
+
+const props = (schema: SchemaObj): Record<string, unknown> => {
+  const p = schema.properties;
+  if (!isRecord(p)) {throw new Error("No properties in schema");}
   return p;
 };
 
 const field = (schema: SchemaObj, name: string): SchemaObj => {
   const f = props(schema)[name];
-  if (f === undefined) {throw new Error(`No field ${name} in schema`);}
+  if (!isRecord(f)) {throw new Error(`No field ${name} in schema`);}
   return f;
 };
 
@@ -34,7 +41,7 @@ const desc = (schema: SchemaObj, name: string): string => {
 describe("message tool schema", () => {
   it("content has maxLength 200", () => {
     assert.strictEqual(
-      field(MESSAGE_INPUT_SCHEMA as SchemaObj, "content").maxLength,
+      field(schemaRecord(MESSAGE_INPUT_SCHEMA), "content").maxLength,
       200,
     );
   });
@@ -49,7 +56,7 @@ describe("message tool schema", () => {
 describe("plan tool schema", () => {
   it("goal has maxLength 100", () => {
     assert.strictEqual(
-      field(PLAN_INPUT_SCHEMA as SchemaObj, "goal").maxLength,
+      field(schemaRecord(PLAN_INPUT_SCHEMA), "goal").maxLength,
       100,
     );
   });
@@ -62,7 +69,7 @@ describe("plan tool schema", () => {
 
   it("current_task has maxLength 100", () => {
     assert.strictEqual(
-      field(PLAN_INPUT_SCHEMA as SchemaObj, "current_task").maxLength,
+      field(schemaRecord(PLAN_INPUT_SCHEMA), "current_task").maxLength,
       100,
     );
   });
@@ -99,7 +106,7 @@ describe("register tool schema", () => {
     // Schema should NOT have required: ['name', 'key']
     // Either name or key, not both — validated in handler
     assert.strictEqual(
-      (REGISTER_INPUT_SCHEMA as SchemaObj).required,
+      schemaRecord(REGISTER_INPUT_SCHEMA).required,
       undefined,
     );
   });

@@ -7,13 +7,8 @@ import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
-import {
-  type CallToolResult,
-  type SessionGetter,
-  type ToolCallback,
-  textContent,
-} from "../mcp-types.js";
-import { type IdentityResult, errorContent, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
+import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
 /** Input schema for plan tool. */
 export const PLAN_INPUT_SCHEMA: {
@@ -76,44 +71,31 @@ export const createPlanHandler: (
   getSession: SessionGetter,
 ): ToolCallback =>
   {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionArg: unknown = args.action;
-    if (typeof actionArg !== "string") {
-      return errorContent("missing_parameter: action is required");
-    }
-    const action: string = actionArg;
+    const actionOrError: string | CallToolResult = requireActionArg(args);
+    if (typeof actionOrError !== "string") {return actionOrError;}
+    const action: string = actionOrError;
     const log: Logger = logger.child({ tool: "plan", action });
 
     if (action === "list") {return await handleList(db);}
 
-    const identity: IdentityResult = await resolveIdentity(db, args, getSession);
-    if (identity.isError) {return identity.result;}
-    const { agentName, agentKey }: { agentName: string; agentKey: string } = identity;
-
-    switch (action) {
-      case "update":
-        return await handleUpdate(
-          db,
-          emitter,
-          log,
-          agentName,
-          agentKey,
-          typeof args.goal === "string" ? args.goal : null,
-          typeof args.current_task === "string"
-            ? args.current_task
-            : null,
-        );
-      case "get":
-        return await handleGet(db, agentName);
-      default:
-        return {
-          content: [
-            textContent(
-              JSON.stringify({ error: `Unknown action: ${action}` }),
-            ),
-          ],
-          isError: true,
-        };
-    }
+    return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> => {
+      switch (action) {
+        case "update":
+          return await handleUpdate(
+            db,
+            emitter,
+            log,
+            agentName,
+            agentKey,
+            typeof args.goal === "string" ? args.goal : null,
+            typeof args.current_task === "string" ? args.current_task : null,
+          );
+        case "get":
+          return await handleGet(db, agentName);
+        default:
+          return unknownActionError(action);
+      }
+    });
   }};
 
 // ---------------------------------------------------------------------------
@@ -148,10 +130,7 @@ const handleUpdate: (
     current_task: currentTask,
   });
   log.info(`Plan updated for ${agentName}: ${currentTask}`);
-  return {
-    content: [textContent(JSON.stringify({ updated: true }))],
-    isError: false,
-  };
+  return jsonResult({ updated: true });
 };
 
 // ---------------------------------------------------------------------------
@@ -168,19 +147,9 @@ const handleGet: (
   const result: Result<AgentPlan | null, DbError> = await db.getPlan(agentName);
   if (!result.ok) {return makeErrorResult(result.error);}
   if (result.value !== null) {
-    return {
-      content: [
-        textContent(
-          JSON.stringify({ plan: agentPlanToJson(result.value) }),
-        ),
-      ],
-      isError: false,
-    };
+    return jsonResult({ plan: agentPlanToJson(result.value) });
   }
-  return {
-    content: [textContent(JSON.stringify({ plan: null }))],
-    isError: false,
-  };
+  return jsonResult({ plan: null });
 };
 
 // ---------------------------------------------------------------------------
@@ -189,13 +158,5 @@ const handleGet: (
 
 const handleList: (db: TooManyCooksDb) => Promise<CallToolResult> = async (db: TooManyCooksDb): Promise<CallToolResult> => {
   const result: Result<readonly AgentPlan[], DbError> = await db.listPlans();
-  if (!result.ok) {return makeErrorResult(result.error);}
-  return {
-    content: [
-      textContent(
-        JSON.stringify({ plans: result.value.map(agentPlanToJson) }),
-      ),
-    ],
-    isError: false,
-  };
+  return listJsonResult(result, "plans", agentPlanToJson);
 };

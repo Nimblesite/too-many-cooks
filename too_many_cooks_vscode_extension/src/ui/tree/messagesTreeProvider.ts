@@ -1,41 +1,19 @@
 // TreeDataProvider for messages view.
 
 import * as vscode from 'vscode';
+import { getRelativeTime, getRelativeTimeShort } from './relativeTime';
 import type { Message } from '../../state/types';
 import { MessageTreeItem } from './messageTreeItem';
 import type { StoreManager } from '../../services/storeManager';
+import { StoreTreeProviderBase } from './storeTreeProviderBase';
 import { selectMessages } from '../../state/selectors';
 
- 
-const MS_PER_SECOND: number = 1000;
- 
-const SECONDS_PER_MINUTE: number = 60;
- 
-const MINUTES_PER_HOUR: number = 60;
- 
-const HOURS_PER_DAY: number = 24;
-
-export class MessagesTreeProvider implements vscode.TreeDataProvider<MessageTreeItem> {
-  private readonly changeEmitter: vscode.EventEmitter<MessageTreeItem | null> =
-    new vscode.EventEmitter<MessageTreeItem | null>();
-
-  public readonly onDidChangeTreeData: vscode.Event<MessageTreeItem | null> =
-    this.changeEmitter.event;
-
-  private readonly unsubscribe: () => void;
-
-  public constructor(private readonly storeManager: Readonly<StoreManager>) {
-    this.unsubscribe = storeManager.subscribe((): void => {
-      this.changeEmitter.fire(null);
-    });
+export class MessagesTreeProvider extends StoreTreeProviderBase<MessageTreeItem> {
+  public constructor(storeManager: Readonly<StoreManager>) {
+    super(storeManager);
   }
 
-   
-  public getTreeItem(element: MessageTreeItem): vscode.TreeItem {
-    return element;
-  }
-
-   
+ 
   public getChildren(element?: MessageTreeItem): MessageTreeItem[] {
     if (typeof element !== 'undefined') {
       return [];
@@ -56,11 +34,6 @@ export class MessagesTreeProvider implements vscode.TreeDataProvider<MessageTree
     return sorted.map((msg: Readonly<Message>): MessageTreeItem => {
       return createMessageItem(msg);
     });
-  }
-
-  public dispose(): void {
-    this.unsubscribe();
-    this.changeEmitter.dispose();
   }
 }
 
@@ -124,30 +97,4 @@ function createTooltip(msg: Readonly<Message>): vscode.MarkdownString {
 
   md.appendMarkdown(`*ID: ${msg.id}*`);
   return md;
-}
-
-function getRelativeTime(timestamp: number): string {
-  const diff: number = Date.now() - timestamp;
-  const seconds: number = Math.floor(diff / MS_PER_SECOND);
-  const minutes: number = Math.floor(seconds / SECONDS_PER_MINUTE);
-  const hours: number = Math.floor(minutes / MINUTES_PER_HOUR);
-  const days: number = Math.floor(hours / HOURS_PER_DAY);
-
-  if (days > 0) { return `${String(days)}d ago`; }
-  if (hours > 0) { return `${String(hours)}h ago`; }
-  if (minutes > 0) { return `${String(minutes)}m ago`; }
-  return 'just now';
-}
-
-function getRelativeTimeShort(timestamp: number): string {
-  const diff: number = Date.now() - timestamp;
-  const seconds: number = Math.floor(diff / MS_PER_SECOND);
-  const minutes: number = Math.floor(seconds / SECONDS_PER_MINUTE);
-  const hours: number = Math.floor(minutes / MINUTES_PER_HOUR);
-  const days: number = Math.floor(hours / HOURS_PER_DAY);
-
-  if (days > 0) { return `${String(days)}d`; }
-  if (hours > 0) { return `${String(hours)}h`; }
-  if (minutes > 0) { return `${String(minutes)}m`; }
-  return 'now';
 }

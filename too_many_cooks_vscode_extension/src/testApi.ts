@@ -2,7 +2,6 @@
 
 import type * as vscode from 'vscode';
 import type { AgentDetails, AgentIdentity, AgentPlan, FileLock, Message } from './state/types';
-import type { AgentTreeItem } from './ui/tree/agentTreeItem';
 import type { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
 import type { LockTreeItem } from './ui/tree/lockTreeItem';
 import type { LocksTreeProvider } from './ui/tree/locksTreeProvider';
@@ -76,38 +75,24 @@ function extractDescription(item: vscode.TreeItem): string {
   return '';
 }
 
- 
-function toAgentSnapshot(item: AgentTreeItem, provider: Readonly<AgentsTreeProvider>): TreeItemSnapshot {
-  const label: string = extractLabel(item);
-  const children: AgentTreeItem[] = provider.getChildren(item);
-  const desc: string = extractDescription(item);
-  if (children.length > 0) {
-    const mapped: TreeItemSnapshot[] = children.map(
-       
-      (child: AgentTreeItem): TreeItemSnapshot => { return toAgentSnapshot(child, provider); },
-    );
-    if (desc.length > 0) { return { children: mapped, description: desc, label }; }
-    return { children: mapped, label };
-  }
-  if (desc.length > 0) { return { description: desc, label }; }
-  return { label };
+interface ProviderWithChildren<TItem> {
+  readonly getChildren: (element?: TItem) => TItem[];
 }
 
- 
-function toLockSnapshot(item: LockTreeItem, provider: Readonly<LocksTreeProvider>): TreeItemSnapshot {
+function toSnapshot<TItem extends vscode.TreeItem>(
+  item: TItem,
+  provider: Readonly<ProviderWithChildren<TItem>>,
+): TreeItemSnapshot {
   const label: string = extractLabel(item);
-  const children: LockTreeItem[] = provider.getChildren(item);
   const desc: string = extractDescription(item);
-  if (children.length > 0) {
-    const mapped: TreeItemSnapshot[] = children.map(
-       
-      (child: LockTreeItem): TreeItemSnapshot => { return toLockSnapshot(child, provider); },
-    );
-    if (desc.length > 0) { return { children: mapped, description: desc, label }; }
-    return { children: mapped, label };
+  const children: TItem[] = provider.getChildren(item);
+  if (children.length === 0) {
+    return desc.length > 0 ? { description: desc, label } : { label };
   }
-  if (desc.length > 0) { return { description: desc, label }; }
-  return { label };
+  const mapped: TreeItemSnapshot[] = children.map(
+    (child: TItem): TreeItemSnapshot => { return toSnapshot(child, provider); },
+  );
+  return desc.length > 0 ? { children: mapped, description: desc, label } : { children: mapped, label };
 }
 
  
@@ -168,17 +153,11 @@ function countMessageTreeItems(messagesProvider: Readonly<MessagesTreeProvider>)
   ).length;
 }
 
-function mapAgentSnapshots(provider: Readonly<AgentsTreeProvider>): TreeItemSnapshot[] {
+function mapSnapshots<TItem extends vscode.TreeItem>(
+  provider: Readonly<ProviderWithChildren<TItem>>,
+): TreeItemSnapshot[] {
   return provider.getChildren().map(
-     
-    (item: AgentTreeItem): TreeItemSnapshot => { return toAgentSnapshot(item, provider); },
-  );
-}
-
-function mapLockSnapshots(provider: Readonly<LocksTreeProvider>): TreeItemSnapshot[] {
-  return provider.getChildren().map(
-     
-    (item: LockTreeItem): TreeItemSnapshot => { return toLockSnapshot(item, provider); },
+    (item: TItem): TreeItemSnapshot => { return toSnapshot(item, provider); },
   );
 }
 
@@ -225,16 +204,16 @@ function createTreeMethods(
 ): Pick<TestAPI, 'findAgentInTree' | 'findLockInTree' | 'findMessageInTree' | 'getAgentsTreeSnapshot' | 'getLocksTreeSnapshot' | 'getMessagesTreeSnapshot'> {
   return {
     findAgentInTree: (name: string): TreeItemSnapshot | null => {
-      return findByLabel(mapAgentSnapshots(agentsProvider), name);
+      return findByLabel(mapSnapshots(agentsProvider), name);
     },
     findLockInTree: (filePath: string): TreeItemSnapshot | null => {
-      return findByLabel(mapLockSnapshots(locksProvider), filePath);
+      return findByLabel(mapSnapshots(locksProvider), filePath);
     },
     findMessageInTree: (content: string): TreeItemSnapshot | null => {
       return findByContent(messagesProvider.getChildren().map(toMessageSnapshot), content);
     },
-    getAgentsTreeSnapshot: (): TreeItemSnapshot[] => { return mapAgentSnapshots(agentsProvider); },
-    getLocksTreeSnapshot: (): TreeItemSnapshot[] => { return mapLockSnapshots(locksProvider); },
+    getAgentsTreeSnapshot: (): TreeItemSnapshot[] => { return mapSnapshots(agentsProvider); },
+    getLocksTreeSnapshot: (): TreeItemSnapshot[] => { return mapSnapshots(locksProvider); },
     getMessagesTreeSnapshot: (): TreeItemSnapshot[] => {
       return messagesProvider.getChildren().map(toMessageSnapshot);
     },

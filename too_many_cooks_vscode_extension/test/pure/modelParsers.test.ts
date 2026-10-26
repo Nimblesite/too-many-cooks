@@ -19,6 +19,7 @@ import {
   parseMessage,
   stringField,
 } from '../../src/state/modelParsers';
+import { assertMatches } from './testSupport';
 
 describe('field helpers', () => {
   it('stringField returns string value', () => {
@@ -140,12 +141,14 @@ describe('parse functions', () => {
       reason: 'editing',
       version: 3,
     });
-    assert.strictEqual(result.filePath, '/src/test.ts');
-    assert.strictEqual(result.agentName, 'test-agent');
-    assert.strictEqual(result.acquiredAt, 1000);
-    assert.strictEqual(result.expiresAt, 70000);
-    assert.strictEqual(result.reason, 'editing');
-    assert.strictEqual(result.version, 3);
+    assertMatches(result, {
+      filePath: '/src/test.ts',
+      agentName: 'test-agent',
+      acquiredAt: 1000,
+      expiresAt: 70000,
+      reason: 'editing',
+      version: 3,
+    });
   });
 
   it('parseFileLock with null reason', () => {
@@ -199,12 +202,14 @@ describe('parse functions', () => {
       created_at: 1000,
       read_at: 2000,
     });
-    assert.strictEqual(result.id, 'msg-1');
-    assert.strictEqual(result.fromAgent, 'sender');
-    assert.strictEqual(result.toAgent, 'receiver');
-    assert.strictEqual(result.content, 'hello');
-    assert.strictEqual(result.createdAt, 1000);
-    assert.strictEqual(result.readAt, 2000);
+    assertMatches(result, {
+      id: 'msg-1',
+      fromAgent: 'sender',
+      toAgent: 'receiver',
+      content: 'hello',
+      createdAt: 1000,
+      readAt: 2000,
+    });
   });
 
   it('parseMessage with null readAt', () => {

@@ -9,9 +9,9 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import { STILL_RUNNING, spawnServer, waitForExit } from "./support/server_process.js";
 
 // ============================================================
 // Constants
@@ -21,7 +21,6 @@ const PORT_FOREIGN = 4070;
 const TMP_PREFIX = "/tmp/tmc-nocrosskill-";
 const STEP_ASIDE_TIMEOUT_MS = 10000;
 const READY_TIMEOUT_MS = 10000;
-const STILL_RUNNING = "still-running";
 const SENTINEL_READY_MARKER = "LISTENING";
 
 /// A bare TCP listener that binds the port the same way the server does
@@ -62,30 +61,8 @@ const waitForMarker = async (
 const spawnServerOnPort = (port: number): {
   readonly proc: ChildProcess;
   readonly workspace: string;
-  readonly stderr: string[];
-} => {
-  const workspace = mkdtempSync(TMP_PREFIX);
-  const stderr: string[] = [];
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, TMC_PORT: String(port), TMC_WORKSPACE: workspace },
-  });
-  proc.stderr?.on("data", (chunk: Buffer): void => { stderr.push(chunk.toString()); });
-  return { proc, workspace, stderr };
-};
-
-const waitForExit = async (
-  proc: ChildProcess,
-  timeoutMs: number,
-): Promise<number | null | typeof STILL_RUNNING> =>
-  new Promise((resolve) => {
-    if (proc.exitCode !== null) { resolve(proc.exitCode); return; }
-    const timer = setTimeout((): void => { resolve(STILL_RUNNING); }, timeoutMs);
-    proc.once("exit", (code: number | null): void => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
+  readonly stderr: readonly string[];
+} => spawnServer({ port, tmpPrefix: TMP_PREFIX, captureStderr: true });
 
 // ============================================================
 // Test

@@ -1,62 +1,36 @@
 /// Tests for status tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
 import {
-  type TooManyCooksDb,
-  createDataConfig,
-  createLoggerWithContext,
-  createLoggingContext,
   createStatusHandler,
 } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { bindTestDb, registerAgent } from "./support/db_fixture.js";
+import {
+  createTestLogger,
+  parseToolJson,
+  statusMessagesOverview,
+} from "./support/handlers.js";
+import { getArrayField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_status_handler.db";
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
-
 describe("status handler", () => {
-  let db: TooManyCooksDb | undefined;
-
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
-  });
-
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  const testDb = bindTestDb(TEST_DB_PATH);
 
   it("returns empty status for fresh db", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     const handler = createStatusHandler(db, createTestLogger());
     const result = await handler({}, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(Array.isArray(parsed.agents), true);
     assert.strictEqual(Array.isArray(parsed.locks), true);
     assert.strictEqual(Array.isArray(parsed.plans), true);
-    assert.strictEqual((parsed.agents as unknown[]).length, 0);
-    assert.strictEqual((parsed.locks as unknown[]).length, 0);
+    assert.strictEqual(getArrayField(parsed, "agents").length, 0);
+    assert.strictEqual(getArrayField(parsed, "locks").length, 0);
     // [STATUS-BOUNDED] Issues #41/#42: messages is a bounded overview, not a flat array.
-    const messages = parsed.messages as { total: number; unread: number; recent: unknown[] };
+    const messages = statusMessagesOverview(result);
     assert.strictEqual(messages.total, 0);
     assert.strictEqual(messages.unread, 0);
     assert.strictEqual(Array.isArray(messages.recent), true);
@@ -64,34 +38,32 @@ describe("status handler", () => {
   });
 
   it("returns populated status after registrations and actions", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     // Register agents
-    const reg1 = await db.register("status-agent-1");
-    if (!reg1.ok) { throw new Error("expected ok"); }
-    const reg2 = await db.register("status-agent-2");
-    if (!reg2.ok) { throw new Error("expected ok"); }
+    const agent1 = await registerAgent(db, "status-agent-1");
+    const agent2 = await registerAgent(db, "status-agent-2");
 
     // Create some locks
-    await db.acquireLock("/status/file.ts", reg1.value.agentName, reg1.value.agentKey, "testing", 60000);
+    await db.acquireLock("/status/file.ts", agent1.agentName, agent1.agentKey, "testing", 60000);
 
     // Create plans
-    await db.updatePlan(reg1.value.agentName, reg1.value.agentKey, "Goal 1", "Task 1");
+    await db.updatePlan(agent1.agentName, agent1.agentKey, "Goal 1", "Task 1");
 
     // Send messages
-    await db.sendMessage(reg1.value.agentName, reg1.value.agentKey, reg2.value.agentName, "hello");
+    await db.sendMessage(agent1.agentName, agent1.agentKey, agent2.agentName, "hello");
 
     const handler = createStatusHandler(db, createTestLogger());
     // [MSG-PRIVACY] Issue #11: the direct message (reg1 -> reg2) is only visible
     // to its recipient, so query status as reg2 to see it.
-    const result = await handler({ agent_key: reg2.value.agentKey }, {});
+    const result = await handler({ agent_key: agent2.agentKey }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    assert.strictEqual((parsed.agents as unknown[]).length, 2);
-    assert.strictEqual((parsed.locks as unknown[]).length, 1);
-    assert.strictEqual((parsed.plans as unknown[]).length, 1);
+    const parsed = parseToolJson(result);
+    assert.strictEqual(getArrayField(parsed, "agents").length, 2);
+    assert.strictEqual(getArrayField(parsed, "locks").length, 1);
+    assert.strictEqual(getArrayField(parsed, "plans").length, 1);
     // [STATUS-BOUNDED] Issues #41/#42: the reg1 -> reg2 direct message is one
     // unread header in reg2's bounded overview.
-    const messages = parsed.messages as { total: number; unread: number; recent: unknown[] };
+    const messages = statusMessagesOverview(result);
     assert.strictEqual(messages.total, 1);
     assert.strictEqual(messages.unread, 1);
     assert.strictEqual(messages.recent.length, 1);

@@ -5,6 +5,7 @@
 
 import {
   type CipherGCM,
+  type CipherGCMTypes,
   type DecipherGCM,
   createCipheriv,
   createDecipheriv,
@@ -18,8 +19,7 @@ import { type Result, error, success } from "too-many-cooks-core";
 const CURRENT_KEY_VERSION: number = 1;
 
 /** AES-256-GCM algorithm identifier. */
-// eslint-disable-next-line @typescript-eslint/typedef -- literal const; typedef + prefer-as-const conflict
-const ALGORITHM = "aes-256-gcm" as const;
+const ALGORITHM: CipherGCMTypes = "aes-256-gcm";
 
 /** GCM initialization vector length in bytes. */
 const IV_LENGTH: number = 12;

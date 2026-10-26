@@ -20,6 +20,7 @@ import type {
   ConnectionTarget,
   LocalTarget,
 } from '../../src/services/connectionTypes';
+import { assertMatches } from './testSupport';
 
 /** Default port. */
 const DEFAULT_PORT = 4040;
@@ -63,22 +64,26 @@ describe('Mode Switch — Connection Target Transitions', () => {
   });
 
   it('Cloud stdio target has all fields set correctly', () => {
-    assert.strictEqual(TEST_CLOUD_TARGET.mode, 'cloud');
-    assert.strictEqual(TEST_CLOUD_TARGET.apiUrl, CLOUD_API_URL);
-    assert.strictEqual(TEST_CLOUD_TARGET.apiKey, 'test-key-123');
-    assert.strictEqual(TEST_CLOUD_TARGET.tenantId, 'tenant-abc');
-    assert.strictEqual(TEST_CLOUD_TARGET.workspaceId, 'ws-def');
-    assert.strictEqual(TEST_CLOUD_TARGET.passphrase, 'test-passphrase');
-    assert.strictEqual(TEST_CLOUD_TARGET.transport, 'stdio');
+    assertMatches(TEST_CLOUD_TARGET, {
+      mode: 'cloud',
+      apiUrl: CLOUD_API_URL,
+      apiKey: 'test-key-123',
+      tenantId: 'tenant-abc',
+      workspaceId: 'ws-def',
+      passphrase: 'test-passphrase',
+      transport: 'stdio',
+    });
   });
 
   it('Cloud HTTP target has transport=http-streamable', () => {
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.mode, 'cloud');
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.transport, 'http-streamable');
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.apiKey, 'test-key-456');
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.tenantId, 'tenant-xyz');
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.workspaceId, 'ws-uvw');
-    assert.strictEqual(TEST_CLOUD_HTTP_TARGET.passphrase, 'http-passphrase');
+    assertMatches(TEST_CLOUD_HTTP_TARGET, {
+      mode: 'cloud',
+      transport: 'http-streamable',
+      apiKey: 'test-key-456',
+      tenantId: 'tenant-xyz',
+      workspaceId: 'ws-uvw',
+      passphrase: 'http-passphrase',
+    });
   });
 
   // ─── Discriminated union narrowing ─────────────────────────────────

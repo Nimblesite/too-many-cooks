@@ -34,6 +34,21 @@ function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction
   }
 }
 
+// Replace the entry matching `key` (or append when absent), preserving order.
+interface UpsertByKeyArgs<T> {
+  readonly items: readonly T[];
+  readonly key: string;
+  readonly keyOf: (item: Readonly<T>) => string;
+  readonly value: T;
+}
+
+function upsertByKey<T>(args: Readonly<UpsertByKeyArgs<T>>): T[] {
+  const kept: T[] = args.items.filter(
+    (item: Readonly<T>): boolean => { return args.keyOf(item) !== args.key; },
+  );
+  return [...kept, args.value];
+}
+
 // Reduce lock-related actions.
 function reduceLockAction(state: Readonly<AppState>, action: Readonly<AppAction>): AppState {
   switch (action.type) {
@@ -42,12 +57,12 @@ function reduceLockAction(state: Readonly<AppState>, action: Readonly<AppAction>
     case 'UpsertLock':
       return {
         ...state,
-        locks: [
-          ...state.locks.filter((lock: Readonly<{ filePath: string }>): boolean => {
-            return lock.filePath !== action.lock.filePath;
-          }),
-          action.lock,
-        ],
+        locks: upsertByKey({
+          items: state.locks,
+          key: action.lock.filePath,
+          keyOf: (lock: Readonly<{ filePath: string }>): string => { return lock.filePath; },
+          value: action.lock,
+        }),
       };
     case 'RemoveLock':
       return {
@@ -85,12 +100,12 @@ function reduceDataAction(state: Readonly<AppState>, action: Readonly<AppAction>
     case 'UpsertPlan':
       return {
         ...state,
-        plans: [
-          ...state.plans.filter((plan: Readonly<{ agentName: string }>): boolean => {
-            return plan.agentName !== action.plan.agentName;
-          }),
-          action.plan,
-        ],
+        plans: upsertByKey({
+          items: state.plans,
+          key: action.plan.agentName,
+          keyOf: (plan: Readonly<{ agentName: string }>): string => { return plan.agentName; },
+          value: action.plan,
+        }),
       };
     default:
       return state;

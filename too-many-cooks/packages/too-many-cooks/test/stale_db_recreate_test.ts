@@ -6,21 +6,13 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import { existsSync, unlinkSync } from "node:fs";
 import Database from "better-sqlite3";
 
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
 
 const TEST_DB_PATH = ".test_stale_db_recreate.db";
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (existsSync(path)) { unlinkSync(path); }
-  } catch {
-    // ignore
-  }
-};
 
 /** Create a stale SQLite DB WITHOUT the `active` column on identity. */
 const createStaleDb = (dbPath: string): void => {

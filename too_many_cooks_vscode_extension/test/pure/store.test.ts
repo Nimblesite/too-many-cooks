@@ -6,60 +6,19 @@ import { Store } from '../../src/state/store';
 import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../../src/state/types';
 import { initialState } from '../../src/state/types';
 
-const AGENT_1: AgentIdentity = { agentName: 'agent-1', registeredAt: 1000, lastActive: 2000 };
-const AGENT_2: AgentIdentity = { agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 };
+import { makeAgentIdentity, makeFileLock, makeMessage, makePlan } from './testSupport';
 
-const LOCK_1: FileLock = {
-  filePath: '/src/file1.ts',
-  agentName: 'agent-1',
-  acquiredAt: 1000,
-  expiresAt: 70000,
-  reason: 'editing',
-  version: 1,
-};
+const AGENT_1: AgentIdentity = makeAgentIdentity();
+const AGENT_2: AgentIdentity = makeAgentIdentity({ agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 });
 
-const LOCK_2: FileLock = {
-  filePath: '/src/file2.ts',
-  agentName: 'agent-2',
-  acquiredAt: 1100,
-  expiresAt: 70000,
-  reason: null,
-  version: 1,
-};
+const LOCK_1: FileLock = makeFileLock();
+const LOCK_2: FileLock = makeFileLock({ filePath: '/src/file2.ts', agentName: 'agent-2', acquiredAt: 1100, reason: null });
 
-const MSG_1: Message = {
-  id: 'msg-1',
-  fromAgent: 'agent-1',
-  toAgent: 'agent-2',
-  content: 'hello',
-  createdAt: 1000,
-  readAt: null,
-};
+const MSG_1: Message = makeMessage();
+const MSG_TO_AGENT_1: Message = makeMessage({ id: 'msg-2', fromAgent: 'agent-2', toAgent: 'agent-1', content: 'reply', createdAt: 1100 });
+const MSG_BETWEEN_OTHERS: Message = makeMessage({ id: 'msg-3', fromAgent: 'agent-2', toAgent: '*', content: 'broadcast', createdAt: 1200 });
 
-const MSG_TO_AGENT_1: Message = {
-  id: 'msg-2',
-  fromAgent: 'agent-2',
-  toAgent: 'agent-1',
-  content: 'reply',
-  createdAt: 1100,
-  readAt: null,
-};
-
-const MSG_BETWEEN_OTHERS: Message = {
-  id: 'msg-3',
-  fromAgent: 'agent-2',
-  toAgent: '*',
-  content: 'broadcast',
-  createdAt: 1200,
-  readAt: null,
-};
-
-const PLAN_1: AgentPlan = {
-  agentName: 'agent-1',
-  goal: 'Fix bugs',
-  currentTask: 'Reading code',
-  updatedAt: 1000,
-};
+const PLAN_1: AgentPlan = makePlan();
 
 describe('Store', () => {
   it('starts with initial state', () => {

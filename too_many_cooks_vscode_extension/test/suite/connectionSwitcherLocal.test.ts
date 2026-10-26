@@ -21,6 +21,7 @@ import {
   resetServerState,
   assertOk,
   assertEqual,
+  TEST_PORT,
 } from './testHelpers';
 
 import * as fs from 'fs';
@@ -233,7 +234,7 @@ suite('Connection Switcher', () => {
     // setTarget to a local target and verify it doesn't break existing connection
     // (StoreManager.setTarget just reconfigures URL, doesn't reconnect)
     const sm = api.getStoreManager();
-    sm.setTarget({ mode: 'local', port: 4040, transport: 'http-streamable' });
+    sm.setTarget({ mode: 'local', port: Number(TEST_PORT), transport: 'http-streamable' });
     assertEqual(sm.getConnectionMode(), 'local', 'mode is local');
     const target = sm.getTarget();
     assertOk(target !== null, 'target not null');
@@ -246,7 +247,7 @@ suite('Connection Switcher', () => {
     assertEqual(sm.getTarget(), null, 'target null after disconnect');
 
     // Reconnect works after setTarget
-    sm.setTarget({ mode: 'local', port: 4040, transport: 'http-streamable' });
+    sm.setTarget({ mode: 'local', port: Number(TEST_PORT), transport: 'http-streamable' });
     await sm.connect();
     await waitForConnection();
     assertEqual(sm.getConnectionMode(), 'local', 'mode after reconnect');

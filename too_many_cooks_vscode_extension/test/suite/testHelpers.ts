@@ -67,6 +67,107 @@ export async function waitForExtensionActivation(): Promise<void> {
   console.log('[TEST HELPER] Extension activation complete');
 }
 
+/** Activate the extension and ensure it is connected to the server. */
+export async function activateAndConnect(): Promise<TestAPI> {
+  await waitForExtensionActivation();
+  const api = getTestAPI();
+  if (!api.isConnected()) {
+    await api.connect();
+    await waitForConnection();
+  }
+  return api;
+}
+
+/** Activate, drop any stale session, and reconnect fresh. */
+export async function reconnectFresh(): Promise<TestAPI> {
+  await waitForExtensionActivation();
+  await safeDisconnect();
+  const api = getTestAPI();
+  await api.connect();
+  await waitForConnection();
+  return api;
+}
+
+/** Activate, connect, and wipe server state so tests start clean. */
+export async function ensureServerReady(): Promise<TestAPI> {
+  const api = await activateAndConnect();
+  await resetServerState();
+  return api;
+}
+
+// ============================================================================
+// Direct MCP HTTP helpers (bypass the VSIX StoreManager)
+// ============================================================================
+
+import { initMcpSession } from '../../src/services/mcpProtocol';
+
+const SSE_ACCEPT: string = 'application/json, text/event-stream';
+const CONTENT_TYPE_JSON: string = 'application/json';
+const SESSION_ID_HEADER: string = 'mcp-session-id';
+const DATA_LINE_PREFIX: string = 'data: ';
+
+export const MCP_ENDPOINT: string = '/mcp';
+
+/** Open a raw MCP session against any endpoint (init + initialized handshake). */
+export async function initDirectMcpSession(
+  baseUrl: string,
+  endpoint: string,
+  clientName: string,
+): Promise<string> {
+  return await initMcpSession(baseUrl, endpoint, clientName);
+}
+
+/** Extract the first tool-result text from a Streamable HTTP / JSON response. */
+function parseToolCallText(text: string): string {
+  const lines: readonly string[] = text.split('\n').filter(
+    (l: string): boolean => { return l.startsWith(DATA_LINE_PREFIX); },
+  );
+  if (lines.length > 0) {
+    const data: string = lines.map((l: string): string => { return l.substring(DATA_LINE_PREFIX.length).trim(); }).join('');
+    try {
+      const parsed = JSON.parse(data);
+      const content = parsed?.result?.content;
+      if (Array.isArray(content) && content.length > 0 && typeof content[0]?.text === 'string') {
+        return content[0].text;
+      }
+    } catch { /* fall through */ }
+  }
+  try {
+    const parsed = JSON.parse(text);
+    const content = parsed?.result?.content;
+    if (Array.isArray(content) && content.length > 0 && typeof content[0]?.text === 'string') {
+      return content[0].text;
+    }
+  } catch { /* fall through */ }
+  return text;
+}
+
+/** Direct tools/call over raw HTTP — bypasses VSIX callTool and its refreshStatus(). */
+export async function directToolCall(
+  baseUrl: string,
+  sessionId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const body = JSON.stringify({
+    id: Date.now(),
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: { arguments: args, name: toolName },
+  });
+  const response = await fetch(`${baseUrl}${MCP_ENDPOINT}`, {
+    body,
+    headers: {
+      'accept': SSE_ACCEPT,
+      'content-type': CONTENT_TYPE_JSON,
+      [SESSION_ID_HEADER]: sessionId,
+    },
+    method: 'POST',
+  });
+  const text = await response.text();
+  return parseToolCallText(text);
+}
+
 export async function waitForConnection(timeout = EVENT_TIMEOUT_MS): Promise<void> {
   console.log('[TEST HELPER] Waiting for connection...');
   const api = getTestAPI();
@@ -160,11 +261,30 @@ export async function waitForMessageInTree(
   throw new Error(`Timeout: Message to appear: ${content}`);
 }
 
+/** Acquire a lock via the test API and wait for it to appear in the tree. */
+export async function acquireLockAndWait(
+  api: TestAPI,
+  agentName: string,
+  agentKey: string,
+  filePath: string,
+  reason: string,
+): Promise<void> {
+  await api.callTool('lock', {
+    action: 'acquire',
+    agent_key: agentKey,
+    agent_name: agentName,
+    file_path: filePath,
+    reason,
+  });
+  await waitForLockInTree(api, filePath);
+}
+
 // ============================================================================
 // Server state reset & database cleanup
 // ============================================================================
 
-const TEST_PORT = process.env.TMC_PORT ?? '4040';
+/** Port of the suite's server; scripts/testServer.js always sets TMC_PORT. */
+export const TEST_PORT = process.env.TMC_PORT ?? '4040';
 const TEST_BASE_URL = `http://localhost:${TEST_PORT}`;
 
 export async function resetServerState(): Promise<void> {
@@ -274,6 +394,12 @@ export async function callToolString(
   return api.callTool(name, args);
 }
 
+/** Register an agent via the MCP tool and return its key. */
+export async function registerAgent(api: TestAPI, name: string): Promise<string> {
+  const result = await callToolString(api, 'register', { name });
+  return extractKeyFromResult(result);
+}
+
 export function extractKeyFromResult(result: string): string {
   const match = /"agent_key"\s*:\s*"([^"]+)"/.exec(result);
   if (!match) {
@@ -285,6 +411,17 @@ export function extractKeyFromResult(result: string): string {
 // ============================================================================
 // TreeItemSnapshot helpers
 // ============================================================================
+
+/** Narrow a found tree item to non-null, throwing when missing. */
+export function requireTreeItem(
+  item: TreeItemSnapshot | null | undefined,
+  label: string,
+): TreeItemSnapshot {
+  if (typeof item === 'undefined' || item === null) {
+    throw new Error(`Tree item not found: ${label}`);
+  }
+  return item;
+}
 
 export function getLabel(item: TreeItemSnapshot): string {
   return item.label ?? '';

@@ -14,22 +14,21 @@
 // assertions catch it immediately — no more orphaned rows in the UI.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForAgentInTree,
-  waitForAgentGone,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForMessageInTree,
-  waitForCondition,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  assertOk,
   assertEqual,
+  assertOk,
+  callToolString,
   dumpTree,
+  ensureServerReady,
+  extractKeyFromResult,
+  getTestAPI,
+  resetServerState,
+  safeDisconnect,
+  waitForAgentGone,
+  waitForAgentInTree,
+  waitForCondition,
+  waitForLockGone,
+  waitForLockInTree,
+  waitForMessageInTree,
 } from './testHelpers';
 
 interface RegisteredAgent {
@@ -47,6 +46,32 @@ const register = async (label: string): Promise<RegisteredAgent> => {
   return { key, name };
 };
 
+
+/** Destructuring default that aborts the test if an agent is unexpectedly missing. */
+const missingAgent = (label: string): RegisteredAgent => {
+  throw new Error(`Registered agent missing: ${label}`);
+};
+
+/** Register several agents and wait until every one appears in the tree. */
+const registerAgents = async (names: readonly string[]): Promise<readonly RegisteredAgent[]> => {
+  const agents: RegisteredAgent[] = [];
+  for (const label of names) {
+    agents.push(await register(label));
+  }
+  const api = getTestAPI();
+  for (const agent of agents) {
+    await waitForAgentInTree(api, agent.name);
+  }
+  return agents;
+};
+
+/** Wait until every content snippet appears as a message in the tree. */
+const waitForMessagesInTree = async (contents: readonly string[]): Promise<void> => {
+  const api = getTestAPI();
+  for (const content of contents) {
+    await waitForMessageInTree(api, content);
+  }
+};
 const acquireLock = async (agent: RegisteredAgent, filePath: string): Promise<void> => {
   const api = getTestAPI();
   const raw = await callToolString(api, 'lock', {
@@ -110,13 +135,7 @@ const planExistsFor = (agentName: string): boolean => {
 
 suite('Delete Agent — Referential Integrity (cascade proof)', () => {
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    const api = await ensureServerReady();
     await api.refreshStatus();
   });
 
@@ -131,15 +150,9 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
 
     // Build a small graph: alice (doomed) interacts with bob, carol, dave.
-    const alice = await register('cascade-alice');
-    const bob = await register('cascade-bob');
-    const carol = await register('cascade-carol');
-    const dave = await register('cascade-dave');
-
-    await waitForAgentInTree(api, alice.name);
-    await waitForAgentInTree(api, bob.name);
-    await waitForAgentInTree(api, carol.name);
-    await waitForAgentInTree(api, dave.name);
+    const [alice = missingAgent('alice'), bob = missingAgent('bob'),
+      carol = missingAgent('carol'), dave = missingAgent('dave')] =
+      await registerAgents(['cascade-alice', 'cascade-bob', 'cascade-carol', 'cascade-dave']);
 
     // Alice grabs two locks; dave grabs one (must survive alice's delete).
     await acquireLock(alice, '/src/alice/one.ts');
@@ -245,23 +258,18 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await api.refreshStatus();
     await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
 
-    const sender = await register('orphan-sender');
-    const doomed = await register('orphan-doomed-recipient');
-    const witness = await register('orphan-witness');
-
-    await waitForAgentInTree(api, sender.name);
-    await waitForAgentInTree(api, doomed.name);
-    await waitForAgentInTree(api, witness.name);
+    const [sender = missingAgent('sender'), doomed = missingAgent('doomed'),
+      witness = missingAgent('witness')] =
+      await registerAgents(['orphan-sender', 'orphan-doomed-recipient', 'orphan-witness']);
 
     await sendMessage(sender, doomed.name, 'orphan-msg-1');
     await sendMessage(sender, doomed.name, 'orphan-msg-2');
     await sendMessage(sender, doomed.name, 'orphan-msg-3');
     await sendMessage(sender, witness.name, 'orphan-witness-keepme');
 
-    await waitForMessageInTree(api, 'orphan-msg-1');
-    await waitForMessageInTree(api, 'orphan-msg-2');
-    await waitForMessageInTree(api, 'orphan-msg-3');
-    await waitForMessageInTree(api, 'orphan-witness-keepme');
+    await waitForMessagesInTree([
+      'orphan-msg-1', 'orphan-msg-2', 'orphan-msg-3', 'orphan-witness-keepme',
+    ]);
     await waitForCondition(() => api.getMessageCount() === 4, 'all 4 messages to land in the store');
 
     // BEFORE
@@ -299,13 +307,8 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
 
     // Stand up a small population with locks, plans, direct + broadcast msgs.
-    const a = await register('all-delete-a');
-    const b = await register('all-delete-b');
-    const c = await register('all-delete-c');
-
-    await waitForAgentInTree(api, a.name);
-    await waitForAgentInTree(api, b.name);
-    await waitForAgentInTree(api, c.name);
+    const [a = missingAgent('a'), b = missingAgent('b'), c = missingAgent('c')] =
+      await registerAgents(['all-delete-a', 'all-delete-b', 'all-delete-c']);
 
     await acquireLock(a, '/all/a1.ts');
     await acquireLock(a, '/all/a2.ts');

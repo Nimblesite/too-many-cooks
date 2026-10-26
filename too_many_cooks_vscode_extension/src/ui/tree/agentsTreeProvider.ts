@@ -4,32 +4,18 @@ import * as vscode from 'vscode';
 import type { AgentDetails, FileLock, Message } from '../../state/types';
 import { AgentTreeItem } from './agentTreeItem';
 import type { StoreManager } from '../../services/storeManager';
+import { StoreTreeProviderBase } from './storeTreeProviderBase';
 import { selectAgentDetails } from '../../state/selectors';
 
  
 const MS_PER_SECOND: number = 1000;
 
-export class AgentsTreeProvider implements vscode.TreeDataProvider<AgentTreeItem> {
-  private readonly changeEmitter: vscode.EventEmitter<AgentTreeItem | null> =
-    new vscode.EventEmitter<AgentTreeItem | null>();
-
-  public readonly onDidChangeTreeData: vscode.Event<AgentTreeItem | null> =
-    this.changeEmitter.event;
-
-  private readonly unsubscribe: () => void;
-
-  public constructor(private readonly storeManager: Readonly<StoreManager>) {
-    this.unsubscribe = storeManager.subscribe((): void => {
-      this.changeEmitter.fire(null);
-    });
+export class AgentsTreeProvider extends StoreTreeProviderBase<AgentTreeItem> {
+  public constructor(storeManager: Readonly<StoreManager>) {
+    super(storeManager);
   }
 
-   
-  public getTreeItem(element: AgentTreeItem): vscode.TreeItem {
-    return element;
-  }
-
-   
+ 
   public getChildren(element?: AgentTreeItem): AgentTreeItem[] {
     const { state }: Readonly<StoreManager> = this.storeManager;
     const details: readonly AgentDetails[] = selectAgentDetails(state);
@@ -53,11 +39,6 @@ export class AgentsTreeProvider implements vscode.TreeDataProvider<AgentTreeItem
     }
 
     return [];
-  }
-
-  public dispose(): void {
-    this.unsubscribe();
-    this.changeEmitter.dispose();
   }
 }
 
@@ -170,9 +151,7 @@ function createAgentChildren(detail: Readonly<AgentDetails>): AgentTreeItem[] {
     children.push(createLockChild(lock, detail.agent.agentName, now));
   }
 
-  addMessageSummaryChild(children, detail);
-
-  return children;
+  return appendMessageSummaryChild(children, detail);
 }
 
 function createPlanChild(detail: Readonly<AgentDetails>): AgentTreeItem {
@@ -213,13 +192,15 @@ function createLockChild(
   return item;
 }
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-function addMessageSummaryChild(children: AgentTreeItem[], detail: Readonly<AgentDetails>): void {
+function appendMessageSummaryChild(
+  children: readonly AgentTreeItem[],
+  detail: Readonly<AgentDetails>,
+): AgentTreeItem[] {
   const unread: number = detail.receivedMessages.filter(
     (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
   ).length;
   if (detail.sentMessages.length === 0 && detail.receivedMessages.length === 0) {
-    return;
+    return [...children];
   }
   const sent: number = detail.sentMessages.length;
   const recv: number = detail.receivedMessages.length;
@@ -236,5 +217,5 @@ function addMessageSummaryChild(children: AgentTreeItem[], detail: Readonly<Agen
   });
   item.description = `${String(sent)} sent, ${String(recv)} received${unreadStr}`;
   item.iconPath = new vscode.ThemeIcon('mail');
-  children.push(item);
+  return [...children, item];
 }

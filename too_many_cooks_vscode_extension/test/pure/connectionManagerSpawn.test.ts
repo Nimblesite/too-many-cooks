@@ -15,17 +15,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { buildLocalLaunchSpec, buildLocalSpawnConfig, createConnectionManager } from '../../src/services/connectionManager';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
+import { createLogCollector } from './testSupport';
 
 const NONEXISTENT_BIN: string = '/nonexistent/tmc-server-does-not-exist-zzz';
 const NONEXISTENT_LAUNCH: LocalLaunchSpec = { args: [], command: NONEXISTENT_BIN };
 const TEST_PORT: number = 4099;
 const GENERIC_TIMEOUT_FRAGMENT: string = 'did not start within';
 const EXPECTED_PACKAGE: string = 'too-many-cooks@latest';
-
-const createLogCollector = (): { readonly logs: string[]; readonly log: (msg: string) => void } => {
-  const logs: string[] = [];
-  return { logs, log: (msg: string): void => { logs.push(msg); } };
-};
 
 describe('ConnectionManager local server launch (ENOENT fix)', () => {
   it('launches via `npx` pinned to the latest published package so no global install is needed', () => {
@@ -61,7 +57,7 @@ describe('ConnectionManager local server spawn failure (#17)', () => {
           `spawn failure must not be masked by the generic startup timeout: ${err.message}`,
         );
         assert.ok(
-          err.message.includes(NONEXISTENT_BIN) || /ENOENT|could not be started/i.test(err.message),
+          err.message.includes(NONEXISTENT_BIN) || /ENOENT|could not be started/iu.test(err.message),
           `error must describe the spawn failure: ${err.message}`,
         );
         return true;

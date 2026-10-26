@@ -98,6 +98,11 @@ export const createMcpServerForDb: (
   return success(server);
 };
 
+/** Zod field for the optional agent-key override shared by several tools. */
+const agentKeyField = z.string().optional().describe(
+  "Agent key for authentication (optional, uses session if omitted)",
+);
+
 /** Zod schema for register tool input. */
 const registerZodSchema: z.ZodRawShape = {
   name: z.string().optional().describe(
@@ -116,8 +121,7 @@ const lockZodSchema: z.ZodRawShape = {
     .describe("File path to lock (required except for list)"),
   reason: z.string().optional()
     .describe("Why you need this lock (optional, for acquire)"),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
+  agent_key: agentKeyField,
 };
 
 /** Zod schema for message tool input. */
@@ -132,8 +136,7 @@ const messageZodSchema: z.ZodRawShape = {
     .describe("Message ID (for mark_read)"),
   unread_only: z.boolean().optional()
     .describe("Only return unread messages (default: true)"),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
+  agent_key: agentKeyField,
 };
 
 /** Zod schema for plan tool input. */
@@ -144,14 +147,12 @@ const planZodSchema: z.ZodRawShape = {
     .describe("Your goal (for update). MUST be 100 chars or less."),
   current_task: z.string().max(100).optional()
     .describe("What you are doing now (for update). MUST be 100 chars or less."),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
+  agent_key: agentKeyField,
 };
 
 /** Zod schema for status tool input. */
 const statusZodSchema: z.ZodRawShape = {
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
+  agent_key: agentKeyField,
 };
 
 /**
@@ -164,6 +165,23 @@ const wrapHandler: (handler: ToolCallback) => (args: Record<string, unknown>, ex
   async (args: Record<string, unknown>, extra: unknown): Promise<CallToolResult> => {
     return await handler(args, extra);
   };
+
+/** Register a single tool with a Zod schema and wrapped handler. */
+const registerOne: (
+  server: McpServer,
+  name: string,
+  description: string,
+  inputSchema: z.ZodRawShape,
+  handler: ToolCallback,
+) => void = (
+  server: McpServer,
+  name: string,
+  description: string,
+  inputSchema: z.ZodRawShape,
+  handler: ToolCallback,
+): void => {
+  server.registerTool(name, { description, inputSchema }, wrapHandler(handler));
+};
 
 /** Register all tools on the MCP server. */
 const registerTools: (
@@ -183,31 +201,11 @@ const registerTools: (
   getSession: () => SessionIdentity | null,
   setSession: (name: string, key: string) => void,
 ): void => {
-  server.registerTool(
-    "register",
-    { description: registerToolConfig.description, inputSchema: registerZodSchema },
-    wrapHandler(createRegisterHandler(db, emitter, log, setSession)),
-  );
-  server.registerTool(
-    "lock",
-    { description: lockToolConfig.description, inputSchema: lockZodSchema },
-    wrapHandler(createLockHandler(db, config, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "message",
-    { description: messageToolConfig.description, inputSchema: messageZodSchema },
-    wrapHandler(createMessageHandler(db, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "plan",
-    { description: planToolConfig.description, inputSchema: planZodSchema },
-    wrapHandler(createPlanHandler(db, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "status",
-    { description: statusToolConfig.description, inputSchema: statusZodSchema },
-    wrapHandler(createStatusHandler(db, log, getSession)),
-  );
+  registerOne(server, "register", registerToolConfig.description, registerZodSchema, createRegisterHandler(db, emitter, log, setSession));
+  registerOne(server, "lock", lockToolConfig.description, lockZodSchema, createLockHandler(db, config, emitter, log, getSession));
+  registerOne(server, "message", messageToolConfig.description, messageZodSchema, createMessageHandler(db, emitter, log, getSession));
+  registerOne(server, "plan", planToolConfig.description, planZodSchema, createPlanHandler(db, emitter, log, getSession));
+  registerOne(server, "status", statusToolConfig.description, statusZodSchema, createStatusHandler(db, log, getSession));
 };
 
 /** Creates a logger that writes to console.error. */

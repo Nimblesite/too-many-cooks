@@ -4,59 +4,36 @@
 /// agent must only see its own unread inbox (own + unread) — never read messages,
 /// never another agent's direct messages.
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
 import {
   type TooManyCooksDb,
-  createDataConfig,
-  createLoggerWithContext,
-  createLoggingContext,
   createStatusHandler,
 } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { bindTestDb } from "./support/db_fixture.js";
+import {
+  createTestLogger,
+  firstTextBlock,
+  type MessagesOverview,
+  statusMessagesOverview,
+} from "./support/handlers.js";
+import {
+  getNumberField,
+  getRecordArrayField,
+  getRecordField,
+  parseJsonRecord,
+} from "./support/json.js";
 
 const TEST_DB_PATH = ".test_status_bounded_payload.db";
 const SEEDED_MESSAGES = 100;
 const PAYLOAD_CEILING_CHARS = 8000;
 const RECENT_HEADER_CEILING = 25;
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
-
-type MessagesOverview = {
-  readonly total: number;
-  readonly unread: number;
-  readonly recent: ReadonlyArray<Record<string, unknown>>;
-};
-
 describe("status tool bounded payload (#41/#42)", () => {
-  let db: TooManyCooksDb | undefined;
-
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok db"); }
-    db = result.value;
-  });
-
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  const testDb = bindTestDb(TEST_DB_PATH);
 
   it("bounds payload, drops bodies, and reports counts even with a large message history", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     const conn: TooManyCooksDb = db;
     const sender = await conn.register("bounded-sender");
     const reader = await conn.register("bounded-reader");
@@ -75,25 +52,25 @@ describe("status tool bounded payload (#41/#42)", () => {
     const result = await handler({ agent_key: reader.value.agentKey }, {});
     assert.strictEqual(result.isError, false, "status must not error");
 
-    const rawText: string = result.content[0].text;
+    const rawText = firstTextBlock(result);
     assert.ok(
       rawText.length < PAYLOAD_CEILING_CHARS,
       `status payload must stay under ${String(PAYLOAD_CEILING_CHARS)} chars regardless of history, got ${String(rawText.length)}`,
     );
 
-    const parsed = JSON.parse(rawText) as { readonly messages: MessagesOverview };
-    const messages: MessagesOverview = parsed.messages;
+    const messages = getRecordField(parseJsonRecord(rawText), "messages");
     assert.strictEqual(typeof messages, "object", "messages must be an overview object, not a flat array");
     assert.strictEqual(Array.isArray(messages), false, "messages must NOT be a flat array of every row");
-    assert.strictEqual(messages.total, SEEDED_MESSAGES, "messages.total must report the full count");
-    assert.strictEqual(messages.unread, SEEDED_MESSAGES, "every seeded message is unread for the reader");
+    assert.strictEqual(getNumberField(messages, "total"), SEEDED_MESSAGES, "messages.total must report the full count");
+    assert.strictEqual(getNumberField(messages, "unread"), SEEDED_MESSAGES, "every seeded message is unread for the reader");
+    const recent = getRecordArrayField(messages, "recent");
     assert.ok(
-      messages.recent.length <= RECENT_HEADER_CEILING,
-      `recent header slice must be bounded, got ${String(messages.recent.length)}`,
+      recent.length <= RECENT_HEADER_CEILING,
+      `recent header slice must be bounded, got ${String(recent.length)}`,
     );
-    assert.ok(messages.recent.length > 0, "recent must contain at least one header");
+    assert.ok(recent.length > 0, "recent must contain at least one header");
 
-    for (const header of messages.recent) {
+    for (const header of recent) {
       assert.strictEqual(
         "content" in header,
         false,
@@ -104,7 +81,7 @@ describe("status tool bounded payload (#41/#42)", () => {
   });
 
   it("recent excludes already-read messages and other agents' direct messages", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const db = testDb.db();
     const conn: TooManyCooksDb = db;
     const alice = await conn.register("bounded-alice");
     const bob = await conn.register("bounded-bob");
@@ -124,11 +101,11 @@ describe("status tool bounded payload (#41/#42)", () => {
     const handler = createStatusHandler(conn, createTestLogger());
     const result = await handler({ agent_key: carol.value.agentKey }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as { readonly messages: MessagesOverview };
+    const messages: MessagesOverview = statusMessagesOverview(result);
 
-    assert.strictEqual(parsed.messages.unread, 0, "Carol has no unread messages after reading hers");
+    assert.strictEqual(messages.unread, 0, "Carol has no unread messages after reading hers");
     assert.strictEqual(
-      parsed.messages.recent.length,
+      messages.recent.length,
       0,
       "Carol's recent must be empty: her only message is read, Bob's is not hers",
     );

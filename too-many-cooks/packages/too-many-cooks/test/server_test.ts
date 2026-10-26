@@ -2,11 +2,8 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import {
-  createLoggerWithContext,
-  createLoggingContext,
-} from "too-many-cooks-core";
 import { createTooManyCooksServer } from "../src/server.js";
+import { createTestLogger } from "./support/handlers.js";
 
 describe("createTooManyCooksServer", () => {
   it("creates server with default config", () => {
@@ -21,7 +18,7 @@ describe("createTooManyCooksServer", () => {
       maxMessageLength: 100,
       maxPlanLength: 50,
     };
-    const logger = createLoggerWithContext(createLoggingContext());
+    const logger = createTestLogger();
     const result = createTooManyCooksServer(config, logger);
     assert.strictEqual(result.ok, true);
   });

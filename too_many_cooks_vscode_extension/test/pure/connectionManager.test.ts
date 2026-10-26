@@ -12,16 +12,11 @@ import assert from 'node:assert';
 import { createConnectionManager } from '../../src/services/connectionManager';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import type { CloudTarget } from '../../src/services/connectionTypes';
+import { assertMatches, createLogCollector } from './testSupport';
 
 /** A launch spec whose command can never resolve, so startLocal fails fast via
  *  an ENOENT 'error' event instead of npx reaching the network during tests. */
 const NONEXISTENT_LAUNCH: LocalLaunchSpec = { args: [], command: '/nonexistent/tmc-server-does-not-exist-zzz' };
-
-/** Collect log messages. */
-const createLogCollector = (): { readonly logs: string[]; readonly log: (msg: string) => void } => {
-  const logs: string[] = [];
-  return { logs, log: (msg: string): void => { logs.push(msg); } };
-};
 
 /** Cloud target pointing to an unreachable URL. */
 const UNREACHABLE_CLOUD_TARGET: CloudTarget = {
@@ -152,13 +147,15 @@ describe('ConnectionManager', () => {
 
   describe('cloud target validation', () => {
     it('CloudTarget has all required fields', () => {
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.mode, 'cloud');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.apiUrl, 'http://127.0.0.1:1');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.apiKey, 'test-key');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.tenantId, 'test-tenant');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.workspaceId, 'test-workspace');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.passphrase, 'test-pass');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.transport, 'stdio');
+      assertMatches(UNREACHABLE_CLOUD_TARGET, {
+        mode: 'cloud',
+        apiUrl: 'http://127.0.0.1:1',
+        apiKey: 'test-key',
+        tenantId: 'test-tenant',
+        workspaceId: 'test-workspace',
+        passphrase: 'test-pass',
+        transport: 'stdio',
+      });
     });
   });
 });

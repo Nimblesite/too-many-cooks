@@ -9,13 +9,8 @@ import {
   agentPlanToJson,
   fileLockToJson,
 } from "../types.js";
-import {
-  type CallToolResult,
-  type SessionGetter,
-  type ToolCallback,
-  textContent,
-} from "../mcp-types.js";
-import { type IdentityResult, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
+import { jsonResult, type IdentityResult, makeErrorResult, resolveIdentity } from "./tool_utils.js";
 
 /// [STATUS-BOUNDED] Issues #41/#42: cap on the recent-header slice embedded in a
 /// status overview. The payload is bounded by this constant regardless of how
@@ -103,10 +98,5 @@ export const createStatusHandler: (
 
     log.debug("Status queried");
 
-    return {
-      content: [
-        textContent(JSON.stringify({ agents, locks, plans, messages })),
-      ],
-      isError: false,
-    };
+    return jsonResult({ agents, locks, plans, messages });
   }};

@@ -26,6 +26,9 @@ const EXPECTED_KEY_VERSION = 1;
 /** Expected derived key length in bytes (256 bits). */
 const EXPECTED_KEY_LENGTH = 32;
 
+/** Byte-value modulus for arithmetic byte corruption (no bitwise ops). */
+const BYTE_MODULUS = 256;
+
 test("deriveWorkspaceKey produces deterministic 256-bit key", () => {
   const wk1 = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
   const wk2 = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
@@ -140,8 +143,8 @@ test("corrupted ciphertext returns decryption error", () => {
   const lastIndex = corrupted.length - 1;
   const lastByte = corrupted[lastIndex];
   if (lastByte !== undefined) {
-    // eslint-disable-next-line no-bitwise -- XOR is legitimately needed for crypto corruption test
-    corrupted[lastIndex] = lastByte ^ 0xff;
+    // Any change to the final ciphertext byte breaks the auth tag.
+    corrupted[lastIndex] = (lastByte + 1) % BYTE_MODULUS;
   }
   const result = decrypt(corrupted.toString("base64"), [wk]);
   assert.equal(result.ok, false);

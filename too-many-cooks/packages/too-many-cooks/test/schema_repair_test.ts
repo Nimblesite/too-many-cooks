@@ -8,31 +8,21 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import { existsSync, unlinkSync } from "node:fs";
 import Database from "better-sqlite3";
 
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
+import { pragmaColumnNames } from "./support/sqlite_rows.js";
 
 const TEST_DB_PATH: string = ".test_schema_repair.db";
 const TABLE_LOCKS: string = "locks";
 const COLUMN_REASON: string = "reason";
 
-type ColumnInfo = { readonly name: string };
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (existsSync(path)) { unlinkSync(path); }
-  } catch {
-    // ignore
-  }
-};
-
 const tableColumnNames = (dbPath: string, table: string): readonly string[] => {
   const db: Database.Database = new Database(dbPath);
   try {
-    const rows: readonly ColumnInfo[] = db.pragma(`table_info(${table})`) as readonly ColumnInfo[];
-    return rows.map((r: ColumnInfo): string => r.name);
+    return pragmaColumnNames(db.pragma(`table_info(${table})`));
   } finally {
     db.close();
   }

@@ -60,9 +60,15 @@ const sendToServer: (
   }
 };
 
+/** Type guard for a plain object record. */
+const isRecord: (value: unknown) => value is Record<string, unknown> = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 /** Helper to safely extract body as Record. */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-const extractBody: (req: Request) => Record<string, unknown> = (req: Request): Record<string, unknown> => {return req.body};
+const extractBody: (req: Request) => Record<string, unknown> = (req: Request): Record<string, unknown> => {
+  const body: unknown = req.body;
+  return isRecord(body) ? body : {};
+};
 
 /** Create an admin event hub for Streamable HTTP push. */
 export const createAdminEventHub: () => AdminEventHub = (): AdminEventHub => {
@@ -81,13 +87,14 @@ export const createAdminEventHub: () => AdminEventHub = (): AdminEventHub => {
       timestamp: Date.now(),
       payload,
     };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    Promise.all(
-      [...servers.entries()].map(
-        // eslint-disable-next-line require-await
-        async (entry: [string, McpServer]): Promise<void> => {return sendToServer(entry, data, servers, transports)},
-      ),
+    const pushes: ReadonlyArray<Promise<void>> = [...servers.entries()].map(
+      async (entry: [string, McpServer]): Promise<void> => {
+        await sendToServer(entry, data, servers, transports);
+      },
     );
+    Promise.all(pushes).catch((error: unknown): void => {
+      console.error(`[TMC] [PUSH] ${event} delivery failed: ${String(error)}`);
+    });
   };
 
   return { transports, servers, pushEvent };
@@ -108,6 +115,24 @@ const stringField: (
 ): string | undefined => {
   const value: unknown = body[field];
   return typeof value === "string" ? value : undefined;
+};
+
+/** Send a database error as an HTTP error response. */
+const sendDbError: (res: Response, code: number, error: DbError) => void = (res: Response, code: number, error: DbError): void => {
+  sendError(res, code, JSON.stringify(dbErrorToJson(error)));
+};
+
+/** Extract a required string field, sending a 400 response when absent. */
+const requireStringField: (res: Response, body: Record<string, unknown>, field: string) => string | undefined = (
+  res: Response,
+  body: Record<string, unknown>,
+  field: string,
+): string | undefined => {
+  const value: string | undefined = stringField(body, field);
+  if (value === undefined) {
+    sendError(res, 400, `${field} required`);
+  }
+  return value;
 };
 
 /** Register GET /admin/status route. */
@@ -148,17 +173,14 @@ const registerDeleteLockRoute: (
 ): void => {
 
   app.post("/admin/delete-lock", async (req: Request, res: Response) => {
-    const filePath: string | undefined = stringField(extractBody(req), "filePath");
-    if (filePath === undefined) {
-      sendError(res, 400, "filePath required");
-      return;
-    }
+    const filePath: string | undefined = requireStringField(res, extractBody(req), "filePath");
+    if (filePath === undefined) { return; }
     const result: Result<void, DbError> = await db.adminDeleteLock(filePath);
     if (result.ok) {
       hub.pushEvent("lock_released", { file_path: filePath });
       res.send(JSON.stringify({ deleted: true }));
     } else {
-      sendError(res, 400, JSON.stringify(dbErrorToJson(result.error)));
+      sendDbError(res, 400, result.error);
     }
   });
 };
@@ -175,17 +197,14 @@ const registerDeleteAgentRoute: (
 ): void => {
 
   app.post("/admin/delete-agent", async (req: Request, res: Response) => {
-    const agentName: string | undefined = stringField(extractBody(req), "agentName");
-    if (agentName === undefined) {
-      sendError(res, 400, "agentName required");
-      return;
-    }
+    const agentName: string | undefined = requireStringField(res, extractBody(req), "agentName");
+    if (agentName === undefined) { return; }
     const result: Result<void, DbError> = await db.adminDeleteAgent(agentName);
     if (result.ok) {
       hub.pushEvent("agent_deleted", { agent_name: agentName });
       res.send(JSON.stringify({ deleted: true }));
     } else {
-      sendError(res, 400, JSON.stringify(dbErrorToJson(result.error)));
+      sendDbError(res, 400, result.error);
     }
   });
 };
@@ -200,16 +219,13 @@ const registerResetKeyRoute: (
 ): void => {
 
   app.post("/admin/reset-key", async (req: Request, res: Response) => {
-    const agentName: string | undefined = stringField(extractBody(req), "agentName");
-    if (agentName === undefined) {
-      sendError(res, 400, "agentName required");
-      return;
-    }
+    const agentName: string | undefined = requireStringField(res, extractBody(req), "agentName");
+    if (agentName === undefined) { return; }
     const result: Result<AgentRegistration, DbError> = await db.adminResetKey(agentName);
     if (result.ok) {
       res.send(JSON.stringify(agentRegistrationToJson(result.value)));
     } else {
-      sendError(res, 400, JSON.stringify(dbErrorToJson(result.error)));
+      sendDbError(res, 400, result.error);
     }
   });
 };
@@ -243,7 +259,7 @@ const registerSendMessageRoute: (
       });
       res.send(JSON.stringify({ sent: true, message_id: result.value }));
     } else {
-      sendError(res, 400, JSON.stringify(dbErrorToJson(result.error)));
+      sendDbError(res, 400, result.error);
     }
   });
 };
@@ -265,7 +281,7 @@ const registerResetRoute: (
       hub.pushEvent("state_reset", {});
       res.send(JSON.stringify({ reset: true }));
     } else {
-      sendError(res, 500, JSON.stringify(dbErrorToJson(result.error)));
+      sendDbError(res, 500, result.error);
     }
   });
 };

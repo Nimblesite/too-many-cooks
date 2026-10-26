@@ -22,13 +22,15 @@ const TEST_PASSPHRASE = 'test-passphrase';
 const EXPECTED_HTTP_URL = `http://localhost:${TEST_PORT}/mcp`;
 
 const logs: string[] = [];
-const log = (msg: string): void => { logs.push(msg); };
+
+function log(msg: string): void { logs.push(msg); }
 
 let tempDir: string;
 let manager: McpConfigManager;
 
-const readJson = (path: string): Record<string, unknown> =>
-  JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+function readJson(path: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+}
 
 describe('McpConfigManager', () => {
   beforeEach(() => {
@@ -47,28 +49,19 @@ describe('McpConfigManager', () => {
       assert.strictEqual(agents.length, 0);
     });
 
-    it('detects claude-code when .claude directory exists', () => {
-      mkdirSync(join(tempDir, '.claude'));
-      const agents = manager.detectAgents();
-      assert.deepStrictEqual(agents, ['claude-code']);
-    });
+    const markerCases: ReadonlyArray<readonly [string, AgentType]> = [
+      ['.claude', 'claude-code'],
+      ['.cursor', 'cursor'],
+      ['.cline', 'cline'],
+      ['.codex', 'codex'],
+    ];
 
-    it('detects cursor when .cursor directory exists', () => {
-      mkdirSync(join(tempDir, '.cursor'));
-      const agents = manager.detectAgents();
-      assert.deepStrictEqual(agents, ['cursor']);
-    });
-
-    it('detects cline when .cline directory exists', () => {
-      mkdirSync(join(tempDir, '.cline'));
-      const agents = manager.detectAgents();
-      assert.deepStrictEqual(agents, ['cline']);
-    });
-
-    it('detects codex when .codex directory exists', () => {
-      mkdirSync(join(tempDir, '.codex'));
-      const agents = manager.detectAgents();
-      assert.deepStrictEqual(agents, ['codex']);
+    markerCases.forEach(([marker, expectedAgent]: readonly [string, AgentType]): void => {
+      it(`detects ${expectedAgent} when ${marker} directory exists`, () => {
+        mkdirSync(join(tempDir, marker));
+        const agents = manager.detectAgents();
+        assert.deepStrictEqual(agents, [expectedAgent]);
+      });
     });
 
     it('detects multiple agents', () => {

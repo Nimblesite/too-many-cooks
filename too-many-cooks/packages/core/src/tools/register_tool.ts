@@ -9,14 +9,14 @@ import {
 import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import type { AgentRegistration, DbError } from "../types.js";
-import { agentRegistrationToJson, dbErrorToJson } from "../types.js";
+import { agentRegistrationToJson } from "../types.js";
 import {
   type CallToolResult,
   type SessionSetter,
   type ToolCallback,
   textContent,
 } from "../mcp-types.js";
-import { errorContent } from "./tool_utils.js";
+import { errorContent, makeErrorResult } from "./tool_utils.js";
 
 /** Input schema for register tool. */
 export const REGISTER_INPUT_SCHEMA: {
@@ -84,12 +84,7 @@ const handleReconnect: (
   const lookupResult: Result<string, DbError> = await db.lookupByKey(keyArg);
   if (!lookupResult.ok) {
     log.warn(`Reconnect failed: ${lookupResult.error.code}`);
-    return {
-      content: [
-        textContent(JSON.stringify(dbErrorToJson(lookupResult.error))),
-      ],
-      isError: true,
-    };
+    return makeErrorResult(lookupResult.error);
   }
   setSession(lookupResult.value, keyArg);
   await db.activate(lookupResult.value);
@@ -133,22 +128,14 @@ const handleFirstRegistration: (
     const resetResult: Result<AgentRegistration, DbError> = await db.adminResetKey(nameArg);
     if (!resetResult.ok) {
       log.warn(`Re-registration failed: ${resetResult.error.code}`);
-      return {
-        content: [
-          textContent(JSON.stringify(dbErrorToJson(resetResult.error))),
-        ],
-        isError: true,
-      };
+      return makeErrorResult(resetResult.error);
     }
     reg = resetResult;
   }
 
   if (!reg.ok) {
     log.warn(`Registration failed: ${reg.error.code}`);
-    return {
-      content: [textContent(JSON.stringify(dbErrorToJson(reg.error)))],
-      isError: true,
-    };
+    return makeErrorResult(reg.error);
   }
 
   setSession(reg.value.agentName, reg.value.agentKey);

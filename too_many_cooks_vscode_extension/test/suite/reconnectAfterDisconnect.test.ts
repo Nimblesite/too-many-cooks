@@ -6,24 +6,17 @@
 // Every action should attempt to reconnect if the server is available.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  resetServerState,
   assertOk,
+  callToolString,
+  ensureServerReady,
+  waitForConnection,
+  getTestAPI,
+  safeDisconnect,
 } from './testHelpers';
 
 suite('Reconnection - auto-reconnect after disconnect', () => {
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
   });
 
   suiteTeardown(async () => {

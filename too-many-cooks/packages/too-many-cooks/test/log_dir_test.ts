@@ -6,40 +6,30 @@
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import { killServer, spawnServer, waitForServer } from "./support/server_process.js";
 
 const PORT = 4041;
 const BASE_URL = `http://localhost:${String(PORT)}`;
 const ACCEPT = "application/json, text/event-stream";
+const POLL_ATTEMPTS = 50;
+const PATH_FALLBACK = "/usr/local/bin:/usr/bin:/bin";
 
 const spawnServerWithWorkspace = (workspace: string): ChildProcess =>
-  spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "inherit"],
-    env: {
-      PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-      TMC_WORKSPACE: workspace,
-      TMC_PORT: String(PORT),
-    },
-  });
+  spawnServer({
+    port: PORT,
+    workspace,
+    env: { PATH: process.env.PATH ?? PATH_FALLBACK },
+  }).proc;
 
 const killProcess = (proc: ChildProcess): void => {
-  proc.kill();
+  killServer(proc);
 };
 
-const waitForServer = async (): Promise<void> => {
-  for (let i = 0; i < 50; i++) {
-    try {
-      const r = await fetch(`${BASE_URL}/admin/status`);
-      if (r.ok) {return;}
-    } catch {
-      // not ready yet
-    }
-    if (i === 49) {throw new Error("Server failed to start");}
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+const waitForServerReady = async (): Promise<void> => {
+  await waitForServer(BASE_URL, POLL_ATTEMPTS);
 };
 
 describe("Log directory creation", () => {
@@ -50,7 +40,7 @@ describe("Log directory creation", () => {
     // Create a fresh temp workspace with NO logs/ subdirectory.
     tmpWorkspace = mkdtempSync("/tmp/tmc-log-test-");
     serverProcess = spawnServerWithWorkspace(tmpWorkspace);
-    await waitForServer();
+    await waitForServerReady();
   });
 
   after(() => {

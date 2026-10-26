@@ -3,20 +3,22 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForMessageInTree,
-  safeDisconnect,
-  getTestAPI,
+  assertEqual,
+  assertOk,
   callToolString,
   extractKeyFromResult,
-  restoreDialogMocks,
-  resetServerState,
-  getLabel,
-  getDescription,
   getChildren,
-  assertOk,
-  assertEqual,
+  getDescription,
+  getLabel,
+  getTestAPI,
+  reconnectFresh,
+  registerAgent,
+  requireTreeItem,
+  resetServerState,
+  restoreDialogMocks,
+  safeDisconnect,
+  waitForExtensionActivation,
+  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -58,16 +60,10 @@ suite('UI Bug Fixes', () => {
   let agentKey = '';
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
+    const api = await reconnectFresh();
     await resetServerState();
 
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    agentKey = await registerAgent(api, agentName);
   });
 
   suiteTeardown(async () => {
@@ -90,14 +86,14 @@ suite('UI Bug Fixes', () => {
     const msgItem = api.findMessageInTree('Test message');
     assertOk(msgItem, 'Message must appear in tree');
 
-    const children = getChildren(msgItem!);
+    const children = getChildren(requireTreeItem(msgItem, 'msgItem must exist'));
     assertEqual(children, undefined, 'BUG FIX: Message items must NOT have children');
 
-    const label = getLabel(msgItem!);
+    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(label.includes(agentName), `Label should include sender: ${label}`);
     assertOk(label.includes('\u2192'), `Label should have arrow separator: ${label}`);
 
-    const description = getDescription(msgItem!);
+    const description = getDescription(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(description.includes('Test message'), `Description should be message content: ${description}`);
   });
 
@@ -106,7 +102,7 @@ suite('UI Bug Fixes', () => {
     const msgItem = api.findMessageInTree('Test message');
     assertOk(msgItem, 'Message must exist from previous test');
 
-    const label = getLabel(msgItem!);
+    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(label.includes('\u2192'), `Label should match format "from → to | time [unread]", got: ${label}`);
   });
 
@@ -170,10 +166,10 @@ suite('UI Bug Fixes', () => {
     const msgItem = api.findMessageInTree('Broadcast test');
     assertOk(msgItem, 'Broadcast message MUST appear in tree');
 
-    const label = getLabel(msgItem!);
+    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(label.includes('\u2192 all'), `Broadcast messages should show "→ all" in label, got: ${label}`);
 
-    const description = getDescription(msgItem!);
+    const description = getDescription(requireTreeItem(msgItem, 'msgItem must exist'));
     assertOk(description.includes('Broadcast test'), `Description should contain message content, got: ${description}`);
   });
 });

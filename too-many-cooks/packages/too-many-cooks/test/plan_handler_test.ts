@@ -2,41 +2,16 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
   createPlanHandler,
 } from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
+import { createTestEmitter, createTestLogger, parseToolJson } from "./support/handlers.js";
+import { getArrayField, getRecordField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_plan_handler.db";
-
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
 
 describe("plan handler", () => {
   let db: TooManyCooksDb | undefined;
@@ -44,22 +19,16 @@ describe("plan handler", () => {
   let agentKey = "";
 
   beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
+    const fixture = freshTestDb(TEST_DB_PATH);
+    db = fixture.db;
 
-    const regResult = await db.register("plan-agent");
-    if (!regResult.ok) { throw new Error("expected ok"); }
-    agentName = regResult.value.agentName;
-    agentKey = regResult.value.agentKey;
+    const agent = await registerAgent(db, "plan-agent");
+    agentName = agent.agentName;
+    agentKey = agent.agentKey;
   });
 
   afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
+    teardownTestDb(db, TEST_DB_PATH);
   });
 
   const makeSession = (): (() => SessionIdentity) =>
@@ -70,7 +39,7 @@ describe("plan handler", () => {
     const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
     const result = await handler({ action: "update", goal: "Fix bugs", current_task: "Reading code" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.updated, true);
   });
 
@@ -80,8 +49,8 @@ describe("plan handler", () => {
     await handler({ action: "update", goal: "Ship feature", current_task: "Writing tests" }, {});
     const result = await handler({ action: "get" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    const plan = parsed.plan as Record<string, unknown>;
+    const parsed = parseToolJson(result);
+    const plan = getRecordField(parsed, "plan");
     assert.strictEqual(plan.goal, "Ship feature");
     assert.strictEqual(plan.current_task, "Writing tests");
   });
@@ -91,7 +60,7 @@ describe("plan handler", () => {
     const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
     const result = await handler({ action: "get" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.plan, null);
   });
 
@@ -101,20 +70,19 @@ describe("plan handler", () => {
     await handler({ action: "update", goal: "Goal A", current_task: "Task A" }, {});
 
     // Register second agent and set plan
-    const reg2 = await db.register("plan-agent-2");
-    if (!reg2.ok) { throw new Error("expected ok"); }
+    const agent2 = await registerAgent(db, "plan-agent-2");
     const getSession2 = (): SessionIdentity => ({
-      agentName: reg2.value.agentName,
-      agentKey: reg2.value.agentKey,
+      agentName: agent2.agentName,
+      agentKey: agent2.agentKey,
     });
     const handler2 = createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession2);
     await handler2({ action: "update", goal: "Goal B", current_task: "Task B" }, {});
 
     const result = await handler({ action: "list" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(Array.isArray(parsed.plans), true);
-    assert.strictEqual((parsed.plans as unknown[]).length, 2);
+    assert.strictEqual(getArrayField(parsed, "plans").length, 2);
   });
 
   it("fails when action is missing", async () => {

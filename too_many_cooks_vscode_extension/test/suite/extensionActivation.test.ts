@@ -3,15 +3,15 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  restoreDialogMocks,
-  assertOk,
+  activateAndConnect,
   assertEqual,
+  assertOk,
+  callToolString,
+  getTestAPI,
+  registerAgent,
+  restoreDialogMocks,
+  safeDisconnect,
+  waitForExtensionActivation,
 } from './testHelpers';
 
 const EXTENSION_ID = 'Nimblesite.too-many-cooks';
@@ -109,14 +109,8 @@ suite('Database Feature Verification', () => {
   let agentKey = '';
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
+    const api = await activateAndConnect();
+    agentKey = await registerAgent(api, agentName);
   });
 
   suiteTeardown(async () => {

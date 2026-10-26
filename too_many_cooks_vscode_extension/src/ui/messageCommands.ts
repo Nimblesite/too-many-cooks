@@ -3,6 +3,7 @@
 // Multi-select context-menu invocations copy the whole selection.
 
 import * as vscode from 'vscode';
+import { collectDistinct, pickSelection } from './treeSelection';
 import type { DialogService } from '../services/dialogService';
 import type { Message } from '../state/types';
 import { getDialogService } from '../services/dialogService';
@@ -64,35 +65,19 @@ function collectMessages(
   item: unknown,
   selection: readonly unknown[] | undefined,
 ): readonly Message[] {
-  const items: readonly unknown[] = pickItems(item, selection);
-  const out: Message[] = [];
-  for (const candidate of items) {
-    const msg: Message | null = extractMessage(candidate);
-    if (msg !== null) { out.push(msg); }
+  const extracted: ReadonlyArray<Message | null> = pickSelection(item, selection).map(extractMessage);
+  const messages: Message[] = [];
+  for (const msg of extracted) {
+    if (msg !== null) { messages.push(msg); }
   }
-  return out;
+  return messages;
 }
 
 function collectAgentNames(
   item: unknown,
   selection: readonly unknown[] | undefined,
 ): readonly string[] {
-  const items: readonly unknown[] = pickItems(item, selection);
-  const out: string[] = [];
-  for (const candidate of items) {
-    const name: string | null = extractAgentName(candidate);
-    if (name !== null && !out.includes(name)) { out.push(name); }
-  }
-  return out;
-}
-
-function pickItems(
-  item: unknown,
-  selection: readonly unknown[] | undefined,
-): readonly unknown[] {
-  if (typeof selection !== 'undefined' && selection.length > 0) { return selection; }
-  if (typeof item === 'undefined') { return []; }
-  return [item];
+  return collectDistinct(pickSelection(item, selection), extractAgentName);
 }
 
 function formatTarget(toAgent: string): string {

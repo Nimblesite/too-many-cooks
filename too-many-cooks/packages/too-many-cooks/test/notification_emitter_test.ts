@@ -61,7 +61,9 @@ describe("NotificationEmitter with callbacks", () => {
 
     assert.strictEqual(adminEvents.length, 1);
     assert.strictEqual(targetedEvents.length, 1);
-    assert.strictEqual(targetedEvents[0].toAgent, "agent-2");
+    const targeted = targetedEvents[0];
+    assert.ok(targeted !== undefined, "targeted event must exist");
+    assert.strictEqual(targeted.toAgent, "agent-2");
   });
 
   it("works with no callbacks (all undefined)", () => {

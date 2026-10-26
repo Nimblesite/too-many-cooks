@@ -3,41 +3,16 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
 import {
   type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
   createMessageHandler,
 } from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createDb } from "../src/db-sqlite.js";
+import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
+import { createTestEmitter, createTestLogger, parseToolJson } from "./support/handlers.js";
+import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_broadcast_mark_read.db";
-
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
 
 describe("broadcast mark_read bug (issue #7)", () => {
   let db: TooManyCooksDb | undefined;
@@ -49,32 +24,24 @@ describe("broadcast mark_read bug (issue #7)", () => {
   let thirdAgentKey = "";
 
   beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
+    const fixture = freshTestDb(TEST_DB_PATH);
+    db = fixture.db;
 
-    const reg1 = await db.register("broadcast-sender");
-    if (!reg1.ok) { throw new Error("expected ok"); }
-    senderName = reg1.value.agentName;
-    senderKey = reg1.value.agentKey;
+    const sender = await registerAgent(db, "broadcast-sender");
+    senderName = sender.agentName;
+    senderKey = sender.agentKey;
 
-    const reg2 = await db.register("broadcast-receiver");
-    if (!reg2.ok) { throw new Error("expected ok"); }
-    receiverName = reg2.value.agentName;
-    receiverKey = reg2.value.agentKey;
+    const receiver = await registerAgent(db, "broadcast-receiver");
+    receiverName = receiver.agentName;
+    receiverKey = receiver.agentKey;
 
-    const reg3 = await db.register("broadcast-third");
-    if (!reg3.ok) { throw new Error("expected ok"); }
-    thirdAgentName = reg3.value.agentName;
-    thirdAgentKey = reg3.value.agentKey;
+    const third = await registerAgent(db, "broadcast-third");
+    thirdAgentName = third.agentName;
+    thirdAgentKey = third.agentKey;
   });
 
   afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
+    teardownTestDb(db, TEST_DB_PATH);
   });
 
   const makeSenderSession = (): (() => SessionIdentity) =>
@@ -93,21 +60,21 @@ describe("broadcast mark_read bug (issue #7)", () => {
     const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "broadcast announcement" }, {});
     assert.strictEqual(sendResult.isError, false);
-    const sendParsed = JSON.parse(sendResult.content[0].text) as Record<string, unknown>;
-    const broadcastId = sendParsed.message_id as string;
+    const sendParsed = parseToolJson(sendResult);
+    const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver fetches messages — should see the broadcast
     const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
     assert.strictEqual(getResult1.isError, false);
-    const getParsed1 = JSON.parse(getResult1.content[0].text) as Record<string, unknown>;
-    const messages1 = getParsed1.messages as Record<string, unknown>[];
+    const getParsed1 = parseToolJson(getResult1);
+    const messages1 = getRecordArrayField(getParsed1, "messages");
     assert.ok(messages1.some((m) => m.id === broadcastId), "broadcast should appear in get");
 
     // Receiver marks the broadcast as read — THIS IS THE BUG: returns NOT_FOUND
     const markResult = await receiverHandler({ action: "mark_read", message_id: broadcastId }, {});
     assert.strictEqual(markResult.isError, false, "mark_read on broadcast must succeed, not return NOT_FOUND");
-    const markParsed = JSON.parse(markResult.content[0].text) as Record<string, unknown>;
+    const markParsed = parseToolJson(markResult);
     assert.strictEqual(markParsed.marked, true);
   });
 
@@ -117,14 +84,14 @@ describe("broadcast mark_read bug (issue #7)", () => {
     // Sender broadcasts
     const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "ephemeral broadcast" }, {});
-    const sendParsed = JSON.parse(sendResult.content[0].text) as Record<string, unknown>;
-    const broadcastId = sendParsed.message_id as string;
+    const sendParsed = parseToolJson(sendResult);
+    const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver gets messages (first fetch)
     const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
-    const parsed1 = JSON.parse(getResult1.content[0].text) as Record<string, unknown>;
-    const msgs1 = parsed1.messages as Record<string, unknown>[];
+    const parsed1 = parseToolJson(getResult1);
+    const msgs1 = getRecordArrayField(parsed1, "messages");
     assert.ok(msgs1.some((m) => m.id === broadcastId), "broadcast visible on first get");
 
     // Receiver marks broadcast as read
@@ -132,8 +99,8 @@ describe("broadcast mark_read bug (issue #7)", () => {
 
     // Receiver gets messages again with unread_only (default) — broadcast must NOT reappear
     const getResult2 = await receiverHandler({ action: "get" }, {});
-    const parsed2 = JSON.parse(getResult2.content[0].text) as Record<string, unknown>;
-    const msgs2 = parsed2.messages as Record<string, unknown>[];
+    const parsed2 = parseToolJson(getResult2);
+    const msgs2 = getRecordArrayField(parsed2, "messages");
     assert.ok(
       !msgs2.some((m) => m.id === broadcastId),
       "broadcast must not reappear after mark_read",
@@ -146,8 +113,8 @@ describe("broadcast mark_read bug (issue #7)", () => {
     // Sender broadcasts
     const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "multi-reader broadcast" }, {});
-    const sendParsed = JSON.parse(sendResult.content[0].text) as Record<string, unknown>;
-    const broadcastId = sendParsed.message_id as string;
+    const sendParsed = parseToolJson(sendResult);
+    const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver marks it as read
     const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
@@ -157,8 +124,8 @@ describe("broadcast mark_read bug (issue #7)", () => {
     // Third agent should STILL see it as unread
     const thirdHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeThirdSession());
     const getResult = await thirdHandler({ action: "get" }, {});
-    const parsed = JSON.parse(getResult.content[0].text) as Record<string, unknown>;
-    const msgs = parsed.messages as Record<string, unknown>[];
+    const parsed = parseToolJson(getResult);
+    const msgs = getRecordArrayField(parsed, "messages");
     assert.ok(
       msgs.some((m) => m.id === broadcastId),
       "broadcast must still be visible to agents who haven't read it",
@@ -175,14 +142,14 @@ describe("broadcast mark_read bug (issue #7)", () => {
     // Receiver fetches messages (auto-marks as read)
     const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
-    const parsed1 = JSON.parse(getResult1.content[0].text) as Record<string, unknown>;
-    const msgs1 = parsed1.messages as Record<string, unknown>[];
+    const parsed1 = parseToolJson(getResult1);
+    const msgs1 = getRecordArrayField(parsed1, "messages");
     assert.strictEqual(msgs1.length, 1, "first get should return the broadcast");
 
     // Second get with unread_only should return nothing
     const getResult2 = await receiverHandler({ action: "get" }, {});
-    const parsed2 = JSON.parse(getResult2.content[0].text) as Record<string, unknown>;
-    const msgs2 = parsed2.messages as Record<string, unknown>[];
+    const parsed2 = parseToolJson(getResult2);
+    const msgs2 = getRecordArrayField(parsed2, "messages");
     assert.strictEqual(msgs2.length, 0, "second get should return no messages after auto-mark-read");
   });
 });

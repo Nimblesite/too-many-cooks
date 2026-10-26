@@ -9,11 +9,12 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
 
 import type { Result } from "too-many-cooks-core";
 import { applyMigrations } from "../src/migrate.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
 
 const TEST_DB_PATH: string = ".test_migrate_no_path_shim.db";
 
@@ -28,14 +29,6 @@ const REQUIRED_TABLES: readonly string[] = [
   "message_reads",
   "plans",
 ];
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (existsSync(path)) { unlinkSync(path); }
-  } catch {
-    // ignore
-  }
-};
 
 const tableNames = (dbPath: string): readonly string[] => {
   const db: Database.Database = new Database(dbPath, { readonly: true });

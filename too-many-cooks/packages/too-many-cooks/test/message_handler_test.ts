@@ -2,41 +2,17 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
   createMessageHandler,
 } from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
+import { createTestEmitter, createTestLogger, parseToolJson } from "./support/handlers.js";
+import { assertDefined } from "./support/assertions.js";
+import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_message_handler.db";
-
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
 
 describe("message handler", () => {
   let db: TooManyCooksDb | undefined;
@@ -46,27 +22,20 @@ describe("message handler", () => {
   let agent2Key = "";
 
   beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
+    const fixture = freshTestDb(TEST_DB_PATH);
+    db = fixture.db;
 
-    const reg1 = await db.register("msg-agent-1");
-    if (!reg1.ok) { throw new Error("expected ok"); }
-    agentName = reg1.value.agentName;
-    agentKey = reg1.value.agentKey;
+    const agent1 = await registerAgent(db, "msg-agent-1");
+    agentName = agent1.agentName;
+    agentKey = agent1.agentKey;
 
-    const reg2 = await db.register("msg-agent-2");
-    if (!reg2.ok) { throw new Error("expected ok"); }
-    agent2Name = reg2.value.agentName;
-    agent2Key = reg2.value.agentKey;
+    const agent2 = await registerAgent(db, "msg-agent-2");
+    agent2Name = agent2.agentName;
+    agent2Key = agent2.agentKey;
   });
 
   afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
+    teardownTestDb(db, TEST_DB_PATH);
   });
 
   const makeSession = (): (() => SessionIdentity) =>
@@ -80,7 +49,7 @@ describe("message handler", () => {
     const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
     const result = await handler({ action: "send", to_agent: agent2Name, content: "hello" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.sent, true);
     assert.strictEqual(typeof parsed.message_id, "string");
   });
@@ -95,11 +64,13 @@ describe("message handler", () => {
     const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
     const result = await handler2({ action: "get" }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(Array.isArray(parsed.messages), true);
-    const messages = parsed.messages as Record<string, unknown>[];
+    const messages = getRecordArrayField(parsed, "messages");
     assert.ok(messages.length > 0);
-    assert.strictEqual(messages[0].content, "test msg");
+    const first = messages[0];
+    assertDefined(first, "first inbox message");
+    assert.strictEqual(first.content, "test msg");
   });
 
   it("get with unread_only false returns all", async () => {
@@ -110,7 +81,7 @@ describe("message handler", () => {
     const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
     const result = await handler2({ action: "get", unread_only: false }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(Array.isArray(parsed.messages), true);
   });
 
@@ -119,14 +90,14 @@ describe("message handler", () => {
     // Send message
     const handler1 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
     const sendResult = await handler1({ action: "send", to_agent: agent2Name, content: "to mark" }, {});
-    const sendParsed = JSON.parse(sendResult.content[0].text) as Record<string, unknown>;
-    const messageId = sendParsed.message_id as string;
+    const sendParsed = parseToolJson(sendResult);
+    const messageId = getStringField(sendParsed, "message_id");
 
     // Mark read
     const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
     const result = await handler2({ action: "mark_read", message_id: messageId }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.marked, true);
   });
 
@@ -179,7 +150,7 @@ describe("message handler", () => {
     const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), getSession);
     const result = await handler({ action: "send", to_agent: agent2Name, content: "via key", agent_key: agentKey }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.sent, true);
   });
 });

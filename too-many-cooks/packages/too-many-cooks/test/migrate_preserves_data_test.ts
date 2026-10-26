@@ -5,23 +5,15 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import { existsSync, unlinkSync } from "node:fs";
 
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
 
 const TEST_DB_PATH: string = ".test_migrate_preserves_data.db";
 const SENDER: string = "keeper-sender";
 const RECIPIENT: string = "keeper-recipient";
 const CONTENT: string = "this row must survive a re-migration";
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (existsSync(path)) { unlinkSync(path); }
-  } catch {
-    // ignore
-  }
-};
 
 describe("re-migrating a populated DB preserves data", () => {
   afterEach(() => {

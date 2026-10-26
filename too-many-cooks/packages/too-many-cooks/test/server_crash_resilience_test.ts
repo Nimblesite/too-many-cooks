@@ -11,19 +11,21 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { rmSync, readFileSync, readdirSync } from "node:fs";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import {
+  ADMIN_STATUS_PATH,
+  buildBaseUrl,
+  spawnServer,
+  waitForServer,
+} from "./support/server_process.js";
 
 // ============================================================
 // Constants
 // ============================================================
 
 const PORT_SIGTERM_TEST = 4054;
-const MAX_POLL_ATTEMPTS = 30;
-const POLL_INTERVAL_MS = 200;
-const ADMIN_STATUS_PATH = "/admin/status";
 const TMP_PREFIX = "/tmp/tmc-crash-test-";
 const STATUS_OK = 200;
 const EXIT_SETTLE_MS = 1000;
@@ -32,50 +34,19 @@ const EXIT_SETTLE_MS = 1000;
 // Helpers
 // ============================================================
 
-const buildBaseUrl = (port: number): string =>
-  `http://localhost:${String(port)}`;
-
 const spawnOnPort = (port: number): {
   readonly proc: ChildProcess;
   readonly workspace: string;
-  readonly stderr: string[];
-} => {
-  const workspace = mkdtempSync(TMP_PREFIX);
-  const stderr: string[] = [];
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      TMC_PORT: String(port),
-      TMC_WORKSPACE: workspace,
-    },
-  });
-  proc.stderr?.on("data", (chunk: Buffer): void => {
-    stderr.push(chunk.toString());
-  });
-  return { proc, workspace, stderr };
+  readonly stderr: readonly string[];
+} => spawnServer({ port, tmpPrefix: TMP_PREFIX, captureStderr: true });
+
+const fetchStatus = async (port: number): Promise<number> => {
+  const response = await fetch(`${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`);
+  return response.status;
 };
 
 const pollUntilReady = async (port: number): Promise<void> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) { return; }
-    } catch {
-      // Not ready yet
-    }
-    if (i === MAX_POLL_ATTEMPTS - 1) {
-      throw new Error(`Server on port ${String(port)} failed to start`);
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-};
-
-const fetchStatus = async (port: number): Promise<number> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  const response = await fetch(url);
-  return response.status;
+  await waitForServer(buildBaseUrl(port));
 };
 
 // ============================================================
@@ -85,7 +56,7 @@ const fetchStatus = async (port: number): Promise<number> => {
 describe("server handles SIGTERM gracefully (not silent death)", () => {
   let proc: ChildProcess;
   let workspace: string;
-  let stderr: string[];
+  let stderr: readonly string[] = [];
 
   after(() => {
     proc.kill("SIGKILL");

@@ -13,6 +13,7 @@ import assert from 'node:assert';
 import type { AgentPlan, FileLock, Message } from '../../src/state/types';
 import type { StatusDecryptor } from '../../src/services/storeManager';
 import type { CloudTarget, LocalTarget } from '../../src/services/connectionTypes';
+import { makeFileLock, makeMessage, makePlan } from './testSupport';
 
 /** Edge function URL (local Supabase). */
 const EDGE_FN_URL = 'http://127.0.0.1:54321/functions/v1/tmc-api';
@@ -39,10 +40,10 @@ const DEFAULT_PORT = 4040;
 const TEST_RUN_ID = `cstest-${Date.now()}`;
 
 /** Call edge function. */
-const edgeCall = async (
+async function edgeCall(
   method: string,
   body: Record<string, unknown>,
-): Promise<Record<string, unknown>> => {
+): Promise<Record<string, unknown>> {
   const resp = await fetch(`${EDGE_FN_URL}/${method}`, {
     method: 'POST',
     headers: {
@@ -55,10 +56,10 @@ const edgeCall = async (
   });
   const json: unknown = await resp.json();
   return typeof json === 'object' && json !== null ? json as Record<string, unknown> : {};
-};
+}
 
 /** Check if edge function is available AND test workspace exists. */
-const edgeFnAvailable = async (): Promise<boolean> => {
+async function edgeFnAvailable(): Promise<boolean> {
   try {
     // Test register — proves both API connectivity and workspace exists
     const testName = `avail-check-${Date.now()}`;
@@ -72,7 +73,7 @@ const edgeFnAvailable = async (): Promise<boolean> => {
   } catch {
     return false;
   }
-};
+}
 
 /** Log skip message when edge functions unavailable. */
 const SKIP_MSG = '[SKIP] Edge functions or test workspace not available';
@@ -122,17 +123,17 @@ describe('Cloud Connection Switcher E2E', () => {
   });
 
   it('StatusDecryptor decrypts all encrypted fields and preserves plaintext fields', () => {
-    const encMsg: Message = {
+    const encMsg: Message = makeMessage({
       id: 'msg-1', fromAgent: 'a', toAgent: 'b',
-      content: 'ENCRYPTED', createdAt: 1000, readAt: null,
-    };
-    const encPlan: AgentPlan = {
+      content: 'ENCRYPTED', createdAt: 1000,
+    });
+    const encPlan: AgentPlan = makePlan({
       agentName: 'p', goal: 'ENC_GOAL', currentTask: 'ENC_TASK', updatedAt: 2000,
-    };
-    const encLock: FileLock = {
+    });
+    const encLock: FileLock = makeFileLock({
       filePath: '/f.ts', agentName: 'l', acquiredAt: 3000,
-      expiresAt: 4000, reason: 'ENC_REASON', version: 1,
-    };
+      expiresAt: 4000, reason: 'ENC_REASON',
+    });
 
     const decryptor: StatusDecryptor = {
       decryptLocks: (locks) => ({

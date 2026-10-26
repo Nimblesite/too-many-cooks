@@ -10,77 +10,23 @@ const MCP_HEADERS = {
   'content-type': 'application/json',
 };
 
+import { initDirectMcpSession, MCP_ENDPOINT } from './testHelpers';
+
 // ============================================================================
 // Helpers - minimal, no VSIX dependency
 // ============================================================================
 
+const ADMIN_CLIENT_NAME = 'streaming-unit-test';
+const MCP_CLIENT_NAME = 'streaming-unit-test-mcp';
+
 async function initAdminSessionDirect(): Promise<string> {
-  const body = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: 'streaming-unit-test', version: '1.0.0' },
-      protocolVersion: '2025-03-26',
-    },
-  });
-  const response = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-    body,
-    headers: MCP_HEADERS,
-    method: 'POST',
-  });
-  const sessionId = response.headers.get('mcp-session-id');
-  if (!sessionId) {
-    const text = await response.text();
-    throw new Error(`No admin session ID. Status: ${response.status}, Body: ${text}`);
-  }
-  // Send initialized notification
-  const notifyBody = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'notifications/initialized',
-    params: {},
-  });
-  const notifyResp = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-    body: notifyBody,
-    headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
-    method: 'POST',
-  });
-  console.log(`[UNIT] Admin session initialized: ${sessionId}, notify status: ${notifyResp.status}`);
+  const sessionId = await initDirectMcpSession(BASE_URL, ADMIN_EVENTS_PATH, ADMIN_CLIENT_NAME);
+  console.log(`[UNIT] Admin session initialized: ${sessionId}`);
   return sessionId;
 }
 
 async function initMcpSessionDirect(): Promise<string> {
-  const body = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: 'streaming-unit-test-mcp', version: '1.0.0' },
-      protocolVersion: '2025-03-26',
-    },
-  });
-  const response = await fetch(`${BASE_URL}/mcp`, {
-    body,
-    headers: MCP_HEADERS,
-    method: 'POST',
-  });
-  const sessionId = response.headers.get('mcp-session-id');
-  if (!sessionId) {
-    throw new Error(`No MCP session ID. Status: ${response.status}`);
-  }
-  const notifyBody = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'notifications/initialized',
-    params: {},
-  });
-  await fetch(`${BASE_URL}/mcp`, {
-    body: notifyBody,
-    headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
-    method: 'POST',
-  });
-  return sessionId;
+  return await initDirectMcpSession(BASE_URL, MCP_ENDPOINT, MCP_CLIENT_NAME);
 }
 
 async function registerAgentDirect(mcpSessionId: string, name: string): Promise<string> {
