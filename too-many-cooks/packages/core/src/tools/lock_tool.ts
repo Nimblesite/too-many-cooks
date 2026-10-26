@@ -1,5 +1,7 @@
 /// Lock tool - file lock management.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import {
@@ -13,32 +15,19 @@ import type { Result } from "../result.js";
 import type { DbError, FileLock, LockResult } from "../types.js";
 import { fileLockToJson, lockResultToJson } from "../types.js";
 import { type CallToolResult, type SessionGetter, type ToolCallback, textContent } from "../mcp-types.js";
-import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { agentKeyField, errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
-/** Input schema for lock tool. */
-export const LOCK_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: Record<string, unknown>;
-  readonly required: readonly string[];
-} = {
-  type: "object",
-  properties: {
-    action: {
-      type: "string",
-      enum: ["acquire", "release", "force_release", "renew", "query", "list"],
-      description: "Lock action to perform",
-    },
-    file_path: {
-      type: "string",
-      description: "File path to lock (required except for list)",
-    },
-    reason: {
-      type: "string",
-      description: "Why you need this lock (optional, for acquire)",
-    },
-  },
-  required: ["action"],
-} as const;
+/** Lock tool input — the ONE source of the wire schema. */
+export const LOCK_INPUT_SHAPE: z.ZodRawShape = {
+  action: z.enum(["acquire", "release", "force_release", "renew", "query", "list"])
+    .describe("Lock action to perform"),
+  file_path: z.string().optional().describe("File path to lock (required except for list)"),
+  reason: z.string().optional().describe("Why you need this lock (optional, for acquire)"),
+  agent_key: agentKeyField,
+};
+
+/** JSON Schema of the lock input (derived from the zod shape). */
+export const LOCK_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(LOCK_INPUT_SHAPE);
 
 /** Tool config for lock. */
 export const LOCK_TOOL_CONFIG = toolConfig(

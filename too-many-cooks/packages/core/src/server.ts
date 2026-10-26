@@ -4,7 +4,7 @@
 /// Takes a TooManyCooksDb (any backend) and wires up all MCP tools.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import type { z } from "zod";
 
 import type { TooManyCooksDataConfig } from "./config.js";
 import type { TooManyCooksDb } from "./db-interface.js";
@@ -20,11 +20,11 @@ import type { EventPushFn, EventPushToAgentFn } from "./notifications.js";
 import { createNotificationEmitter } from "./notifications.js";
 import type { Result } from "./result.js";
 import { success } from "./result.js";
-import { createLockHandler, LOCK_TOOL_CONFIG as lockToolConfig } from "./tools/lock_tool.js";
-import { createMessageHandler, MESSAGE_TOOL_CONFIG as messageToolConfig } from "./tools/message_tool.js";
-import { createPlanHandler, PLAN_TOOL_CONFIG as planToolConfig } from "./tools/plan_tool.js";
-import { createRegisterHandler, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
-import { createStatusHandler, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
+import { createLockHandler, LOCK_INPUT_SHAPE, LOCK_TOOL_CONFIG as lockToolConfig } from "./tools/lock_tool.js";
+import { createMessageHandler, messageInputShape, messageToolDescription } from "./tools/message_tool.js";
+import { createPlanHandler, planInputShape, planToolDescription } from "./tools/plan_tool.js";
+import { createRegisterHandler, REGISTER_INPUT_SHAPE, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
+import { createStatusHandler, STATUS_INPUT_SHAPE, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
 import type { CallToolResult, SessionIdentity, ToolCallback } from "./mcp-types.js";
 
 /** Server name constant. */
@@ -98,63 +98,6 @@ export const createMcpServerForDb: (
   return success(server);
 };
 
-/** Zod field for the optional agent-key override shared by several tools. */
-const agentKeyField = z.string().optional().describe(
-  "Agent key for authentication (optional, uses session if omitted)",
-);
-
-/** Zod schema for register tool input. */
-const registerZodSchema: z.ZodRawShape = {
-  name: z.string().optional().describe(
-    "Your unique agent name, 1-50 chars. For FIRST registration only. Do NOT send with key.",
-  ),
-  key: z.string().optional().describe(
-    "Your secret key from a previous registration. For RECONNECT only. Do NOT send with name.",
-  ),
-};
-
-/** Zod schema for lock tool input. */
-const lockZodSchema: z.ZodRawShape = {
-  action: z.enum(["acquire", "release", "force_release", "renew", "query", "list"])
-    .describe("Lock action to perform"),
-  file_path: z.string().optional()
-    .describe("File path to lock (required except for list)"),
-  reason: z.string().optional()
-    .describe("Why you need this lock (optional, for acquire)"),
-  agent_key: agentKeyField,
-};
-
-/** Zod schema for message tool input. */
-const messageZodSchema: z.ZodRawShape = {
-  action: z.enum(["send", "get", "mark_read"])
-    .describe("Message action to perform"),
-  to_agent: z.string().optional()
-    .describe("Recipient name or * for broadcast (for send)"),
-  content: z.string().max(200).optional()
-    .describe("Message content (for send). MUST be 200 chars or less."),
-  message_id: z.string().optional()
-    .describe("Message ID (for mark_read)"),
-  unread_only: z.boolean().optional()
-    .describe("Only return unread messages (default: true)"),
-  agent_key: agentKeyField,
-};
-
-/** Zod schema for plan tool input. */
-const planZodSchema: z.ZodRawShape = {
-  action: z.enum(["update", "get", "list"])
-    .describe("Plan action to perform"),
-  goal: z.string().max(100).optional()
-    .describe("Your goal (for update). MUST be 100 chars or less."),
-  current_task: z.string().max(100).optional()
-    .describe("What you are doing now (for update). MUST be 100 chars or less."),
-  agent_key: agentKeyField,
-};
-
-/** Zod schema for status tool input. */
-const statusZodSchema: z.ZodRawShape = {
-  agent_key: agentKeyField,
-};
-
 /**
  * Wrap a local ToolCallback so it satisfies the MCP SDK's typed callback
  * signature without using type assertions.
@@ -201,11 +144,12 @@ const registerTools: (
   getSession: () => SessionIdentity | null,
   setSession: (name: string, key: string) => void,
 ): void => {
-  registerOne(server, "register", registerToolConfig.description, registerZodSchema, createRegisterHandler(db, emitter, log, setSession));
-  registerOne(server, "lock", lockToolConfig.description, lockZodSchema, createLockHandler(db, config, emitter, log, getSession));
-  registerOne(server, "message", messageToolConfig.description, messageZodSchema, createMessageHandler(db, emitter, log, getSession));
-  registerOne(server, "plan", planToolConfig.description, planZodSchema, createPlanHandler(db, emitter, log, getSession));
-  registerOne(server, "status", statusToolConfig.description, statusZodSchema, createStatusHandler(db, log, getSession));
+  // [MCP-TOOL-LIMITS] message/plan schemas and descriptions carry the CONFIGURED limits.
+  registerOne(server, "register", registerToolConfig.description, REGISTER_INPUT_SHAPE, createRegisterHandler(db, emitter, log, setSession));
+  registerOne(server, "lock", lockToolConfig.description, LOCK_INPUT_SHAPE, createLockHandler(db, config, emitter, log, getSession));
+  registerOne(server, "message", messageToolDescription(config.maxMessageLength), messageInputShape(config.maxMessageLength), createMessageHandler(db, emitter, log, getSession));
+  registerOne(server, "plan", planToolDescription(config.maxPlanLength), planInputShape(config.maxPlanLength), createPlanHandler(db, emitter, log, getSession));
+  registerOne(server, "status", statusToolConfig.description, STATUS_INPUT_SHAPE, createStatusHandler(db, log, getSession));
 };
 
 /** Creates a logger that writes to console.error. */

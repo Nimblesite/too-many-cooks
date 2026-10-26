@@ -1,5 +1,7 @@
 /// Plan tool - agent plan management.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import { EVENT_PLAN_UPDATED } from "../notifications.js";
@@ -8,44 +10,34 @@ import type { Result } from "../result.js";
 import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
-import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { DEFAULT_MAX_PLAN_LENGTH } from "../config.js";
+import { agentKeyField, errorContent, jsonResult, limitedText, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
-/** Input schema for plan tool. */
-export const PLAN_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: Record<string, unknown>;
-  readonly required: readonly string[];
-} = {
-  type: "object",
-  properties: {
-    action: {
-      type: "string",
-      enum: ["update", "get", "list"],
-      description: "Plan action to perform",
-    },
-    goal: {
-      type: "string",
-      maxLength: 100,
-      description: "Your goal (for update). MUST be 100 chars or less.",
-    },
-    current_task: {
-      type: "string",
-      maxLength: 100,
-      description:
-        "What you are doing now (for update). MUST be 100 chars or less.",
-    },
-  },
-  required: ["action"],
-} as const;
+/** Plan tool input — the ONE source of the wire schema. [MCP-TOOL-LIMITS] */
+export const planInputShape = (maxFieldLength: number): z.ZodRawShape => ({
+  action: z.enum(["update", "get", "list"]).describe("Plan action to perform"),
+  goal: limitedText("goal", maxFieldLength, "Your goal (for update)."),
+  current_task: limitedText("current_task", maxFieldLength, "What you are doing now (for update)."),
+  agent_key: agentKeyField,
+});
 
-/** Tool config for plan. */
+/** Plan tool description — leads with the hard limit agents keep missing. */
+export const planToolDescription = (maxFieldLength: number): string =>
+  `HARD LIMIT: goal and current_task must each be ${String(maxFieldLength)} characters or fewer. ` +
+  "Longer values are REJECTED, never truncated. " +
+  "Manage your plan. You must register first (except list). " +
+  "REQUIRED: action (update|get|list). " +
+  "For update: goal, current_task. " +
+  'Example: {"action":"update","goal":"Fix bug",' +
+  ' "current_task":"Reading code"}';
+
+/** JSON Schema of the plan input at the default limit (derived from the zod shape). */
+export const PLAN_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(planInputShape(DEFAULT_MAX_PLAN_LENGTH));
+
+/** Tool config for plan (default limit; the server uses the configured one). */
 export const PLAN_TOOL_CONFIG = toolConfig(
   "Plan",
-  "Manage your plan. You must register first (except list). " +
-    "REQUIRED: action (update|get|list). " +
-    "For update: goal, current_task. " +
-    'Example: {"action":"update","goal":"Fix bug",' +
-    ' "current_task":"Reading code"}',
+  planToolDescription(DEFAULT_MAX_PLAN_LENGTH),
   PLAN_INPUT_SCHEMA
 );
 

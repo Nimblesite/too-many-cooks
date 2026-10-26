@@ -5,6 +5,8 @@
 ### Fixed
 - **Database creation no longer depends on `npx prisma` at runtime.** Starting the server (including the VSIX's `npx too-many-cooks@latest` launch) could fail before the DB existed — most visibly `spawnSync npx ENOENT` on Windows. The schema is now applied by a bundled, SHA256-verified [DataProviderMigrate](https://dataprovider.tech/docs/migrations/) binary spawned by absolute path, with no PATH lookup and no network (`[DB-MIGRATE]`).
 
+- **Message and plan length limits are now unmissable and actually configurable** (`[MCP-TOOL-LIMITS]`). The `message` and `plan` tool descriptions open with the hard limit (`HARD LIMIT: content must be 200 characters or fewer…`), the wire schema's `maxLength` comes from the configured `maxMessageLength`/`maxPlanLength` instead of hard-coded 200/100, and an over-long value is rejected with its actual length and the limit (`content is 312 characters; the limit is 200. Shorten it and resend.`) instead of a generic validation error.
+
 ### Changed
 - **Prisma replaced by DataProvider migrations.** `packages/too-many-cooks/schema/tmc-schema.yaml` is the single source of truth. On startup the CLI diffs the live DB against it, creates a fresh DB, repairs drift in place (missing columns/tables/indexes, changed FK actions) and leaves data untouched when nothing changed. The npm package ships the CLI for darwin-arm64, darwin-x64, linux-x64 and win32-x64.
 - **TypeScript 7** compiles and type-checks everything (single version). Linting moved from ESLint/typescript-eslint to `oxlint --type-aware` (oxlint-tsgolint) with a shared root `.oxlintrc.json`.

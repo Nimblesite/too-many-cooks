@@ -1,5 +1,7 @@
 /// Register tool - agent registration and reconnection.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import {
@@ -16,32 +18,20 @@ import {
   type ToolCallback,
   textContent,
 } from "../mcp-types.js";
-import { errorContent, makeErrorResult, toolConfig } from "./tool_utils.js";
+import { errorContent, makeErrorResult, toJsonSchema, toolConfig } from "./tool_utils.js";
 
-/** Input schema for register tool. */
-export const REGISTER_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: {
-    readonly name: { readonly type: "string"; readonly description: string };
-    readonly key: { readonly type: "string"; readonly description: string };
-  };
-} = {
-  type: "object",
-  properties: {
-    name: {
-      type: "string",
-      description:
-        "Your unique agent name, 1-50 chars. " +
-        "For FIRST registration only. Do NOT send with key.",
-    },
-    key: {
-      type: "string",
-      description:
-        "Your secret key from a previous registration. " +
-        "For RECONNECT only. Do NOT send with name.",
-    },
-  },
-} as const;
+/** Register tool input — the ONE source of the wire schema. */
+export const REGISTER_INPUT_SHAPE: z.ZodRawShape = {
+  name: z.string().optional().describe(
+    "Your unique agent name, 1-50 chars. For FIRST registration only. Do NOT send with key.",
+  ),
+  key: z.string().optional().describe(
+    "Your secret key from a previous registration. For RECONNECT only. Do NOT send with name.",
+  ),
+};
+
+/** JSON Schema of the register input (derived from the zod shape). */
+export const REGISTER_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(REGISTER_INPUT_SHAPE);
 
 /** Tool config for register. */
 export const REGISTER_TOOL_CONFIG = toolConfig(

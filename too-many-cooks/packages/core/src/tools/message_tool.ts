@@ -1,5 +1,7 @@
 /// Message tool - inter-agent messaging.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import { EVENT_MESSAGE_SENT } from "../notifications.js";
@@ -8,49 +10,35 @@ import type { Result } from "../result.js";
 import type { DbError, Message } from "../types.js";
 import { messageToJson } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
-import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { DEFAULT_MAX_MESSAGE_LENGTH } from "../config.js";
+import { agentKeyField, errorContent, jsonResult, limitedText, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
-/** Input schema for message tool. */
-export const MESSAGE_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: Record<string, unknown>;
-  readonly required: readonly string[];
-} = {
-  type: "object",
-  properties: {
-    action: {
-      type: "string",
-      enum: ["send", "get", "mark_read"],
-      description: "Message action to perform",
-    },
-    to_agent: {
-      type: "string",
-      description: "Recipient name or * for broadcast (for send)",
-    },
-    content: {
-      type: "string",
-      maxLength: 200,
-      description: "Message content (for send). MUST be 200 chars or less.",
-    },
-    message_id: {
-      type: "string",
-      description: "Message ID (for mark_read)",
-    },
-    unread_only: {
-      type: "boolean",
-      description: "Only return unread messages (default: true)",
-    },
-  },
-  required: ["action"],
-} as const;
+/** Message tool input — the ONE source of the wire schema. [MCP-TOOL-LIMITS] */
+export const messageInputShape = (maxContentLength: number): z.ZodRawShape => ({
+  action: z.enum(["send", "get", "mark_read"]).describe("Message action to perform"),
+  to_agent: z.string().optional().describe("Recipient name or * for broadcast (for send)"),
+  content: limitedText("content", maxContentLength, "Message content (for send)."),
+  message_id: z.string().optional().describe("Message ID (for mark_read)"),
+  unread_only: z.boolean().optional().describe("Only return unread messages (default: true)"),
+  agent_key: agentKeyField,
+});
 
-/** Tool config for message. */
+/** Message tool description — leads with the hard limit agents keep missing. */
+export const messageToolDescription = (maxContentLength: number): string =>
+  `HARD LIMIT: content must be ${String(maxContentLength)} characters or fewer. ` +
+  "Longer messages are REJECTED, never truncated. Keep it short; put detail in a file and send its path. " +
+  "Send/receive messages. You must register first. " +
+  "REQUIRED: action (send|get|mark_read). " +
+  "For send: to_agent, content. For mark_read: message_id. " +
+  'Example send: {"action":"send","to_agent":"other","content":"hello"}';
+
+/** JSON Schema of the message input at the default limit (derived from the zod shape). */
+export const MESSAGE_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(messageInputShape(DEFAULT_MAX_MESSAGE_LENGTH));
+
+/** Tool config for message (default limit; the server uses the configured one). */
 export const MESSAGE_TOOL_CONFIG = toolConfig(
   "Message",
-  "Send/receive messages. You must register first. " +
-    "REQUIRED: action (send|get|mark_read). " +
-    "For send: to_agent, content. For mark_read: message_id. " +
-    'Example send: {"action":"send","to_agent":"other","content":"hello"}',
+  messageToolDescription(DEFAULT_MAX_MESSAGE_LENGTH),
   MESSAGE_INPUT_SCHEMA
 );
 

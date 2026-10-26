@@ -1,5 +1,7 @@
 /// Shared utilities for tool handlers.
 
+import { z } from "zod";
+
 import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import { type DbError, dbErrorToJson } from "../types.js";
@@ -127,3 +129,28 @@ export const withResolvedAgent = async <T>(
   if (identity.isError) {return identity.result;}
   return await fn(identity.agentName, identity.agentKey);
 };
+
+// ---------------------------------------------------------------------------
+// Input schemas [MCP-TOOL-LIMITS]
+// ---------------------------------------------------------------------------
+
+/** Optional agent-key override shared by every tool that acts as an agent. */
+export const agentKeyField: z.ZodOptional<z.ZodString> = z.string().optional().describe(
+  "Agent key for authentication (optional, uses session if omitted)",
+);
+
+/** Rejection text for an over-long field: states the actual length AND the limit. */
+const tooLongMessage = (field: string, input: unknown, max: number): string =>
+  `${field} is ${String(typeof input === "string" ? input.length : 0)} characters; ` +
+  `the limit is ${String(max)}. Shorten it and resend.`;
+
+/** Optional text field with a hard character limit, enforced on the wire. */
+export const limitedText = (field: string, max: number, purpose: string): z.ZodOptional<z.ZodString> =>
+  z.string()
+    .max(max, { error: (issue: { readonly input?: unknown }): string => tooLongMessage(field, issue.input, max) })
+    .optional()
+    .describe(`${purpose} HARD LIMIT: ${String(max)} characters.`);
+
+/** JSON Schema of a tool's zod input shape — derived, never hand-written. */
+export const toJsonSchema = (shape: z.ZodRawShape): Record<string, unknown> =>
+  z.toJSONSchema(z.object(shape));
