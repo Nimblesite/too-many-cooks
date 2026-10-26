@@ -61,7 +61,7 @@ const requireFixture = (
   fixture: TestDbFixture | undefined,
   dbPath: string,
 ): TestDbFixture => {
-  if (fixture === undefined) { throw new Error(`no db bound for ${dbPath}`); }
+  assert.ok(fixture !== undefined, `no db bound for ${dbPath}`);
   return fixture;
 };
 
