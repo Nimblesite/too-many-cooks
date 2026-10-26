@@ -40,6 +40,10 @@ import { pragmaColumnNames, rowName } from "./support/sqlite_rows.js";
 /** Directory of the package under test (the one we pack and install). */
 const PACKAGE_DIR: string = resolve(import.meta.dirname, "..");
 
+/** too-many-cooks-core: released alongside the server at the same stamped
+ *  version, so it is packed and installed from THIS tree, never the registry. */
+const CORE_DIR: string = resolve(PACKAGE_DIR, "..", "core");
+
 /** Prefix for the throwaway install dir under the OS temp directory. */
 const INSTALL_PREFIX: string = "tmc-pubpkg-";
 
@@ -105,6 +109,7 @@ const FORBIDDEN_TARBALL_PATHS: readonly string[] = ["prisma.config.ts", "schema.
 
 type Fixture = {
   readonly tarballPath: string;
+  readonly coreTarballPath: string;
   readonly installDir: string;
 };
 
@@ -114,12 +119,12 @@ let fixture: Fixture | undefined;
 // Helpers
 // ============================================================================
 
-const packTarball = (): string => {
+const packTarball = (packageDir: string): string => {
   // `npm pack --json` writes the metadata to stdout; the tarball is in cwd.
   const out: string = execFileSync(
     "npm",
-    ["pack", "--silent", "--pack-destination", PACKAGE_DIR],
-    { cwd: PACKAGE_DIR, encoding: "utf8" },
+    ["pack", "--silent", "--pack-destination", packageDir],
+    { cwd: packageDir, encoding: "utf8" },
   ).trim();
   // npm pack prints the filename relative to --pack-destination on the last
   // non-empty line. Resolve to an absolute path.
@@ -127,10 +132,10 @@ const packTarball = (): string => {
   if (file === undefined) {
     throw new Error("npm pack produced no output");
   }
-  return resolve(PACKAGE_DIR, file);
+  return resolve(packageDir, file);
 };
 
-const installTarball = (tarball: string): string => {
+const installTarballs = (tarballs: readonly string[]): string => {
   const dir: string = mkdtempSync(join(tmpdir(), INSTALL_PREFIX));
   // Isolated npm cache so the resolver MUST go to the registry. With the
   // shared system cache, `--prefer-offline` (or even default behaviour after
@@ -148,7 +153,7 @@ const installTarball = (tarball: string): string => {
       "--no-fund",
       "--prefer-online",
       `--cache=${cacheDir}`,
-      tarball,
+      ...tarballs,
     ],
     { cwd: dir, stdio: "pipe" },
   );
@@ -255,15 +260,17 @@ const requireFixture = (): Fixture => {
 
 describe("published package: tarball + install + boot", () => {
   before((): void => {
-    const tarballPath: string = packTarball();
-    const installDir: string = installTarball(tarballPath);
-    fixture = { tarballPath, installDir };
+    const coreTarballPath: string = packTarball(CORE_DIR);
+    const tarballPath: string = packTarball(PACKAGE_DIR);
+    const installDir: string = installTarballs([coreTarballPath, tarballPath]);
+    fixture = { tarballPath, coreTarballPath, installDir };
   });
 
   after((): void => {
     if (fixture === undefined) { return; }
     rmSync(fixture.installDir, { recursive: true, force: true });
     rmSync(fixture.tarballPath, { force: true });
+    rmSync(fixture.coreTarballPath, { force: true });
     fixture = undefined;
   });
 
