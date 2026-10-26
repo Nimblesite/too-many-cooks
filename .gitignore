@@ -76,3 +76,5 @@ logs/
 
 
 .deslop-cache/
+
+.deslop/
