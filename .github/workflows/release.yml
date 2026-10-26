@@ -87,17 +87,10 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "NPM_TAG=$NPM_TAG" >> "$GITHUB_OUTPUT"
 
-      # First-class package.json mutation via `npm version` / `npm pkg set` — no
-      # ad hoc sed on a structured file. [SWR-VERSION-BUILD-STAMPING]
+      # Same stamper release_version_stamp_test.ts exercises with a test version.
+      # [SWR-VERSION-BUILD-STAMPING]
       - name: Stamp versions for publishing
-        run: |
-          set -euo pipefail
-          VERSION=${{ steps.version.outputs.VERSION }}
-          cd too-many-cooks/packages/core
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          cd ../too-many-cooks
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          npm pkg set "dependencies.too-many-cooks-core=^$VERSION"
+        run: bash scripts/stamp-version.sh "${{ steps.version.outputs.VERSION }}"
 
       - name: Publish too-many-cooks-core to npm
         working-directory: too-many-cooks/packages/core
@@ -159,7 +152,7 @@ jobs:
         working-directory: too_many_cooks_vscode_extension
         run: |
           set -euo pipefail
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+          bash ../scripts/stamp-version.sh "${{ steps.version.outputs.VERSION }}"
           npx --yes @vscode/vsce@3.9.2 package --out "too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix"
 
       - name: Upload VSIX artifact

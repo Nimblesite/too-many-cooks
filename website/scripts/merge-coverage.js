@@ -23,8 +23,9 @@ const files = fs.readdirSync(coverageDir)
   .filter(f => f.startsWith('coverage-') && f.endsWith('.json'));
 
 if (files.length === 0) {
-  console.log('No coverage files found');
-  process.exit(0);
+  // No data means the tests did not instrument anything — fail, never pass silently.
+  console.error('No coverage files found');
+  process.exit(1);
 }
 
 // Merge V8 coverage data
@@ -126,12 +127,13 @@ fs.writeFileSync(istanbulFile, JSON.stringify(istanbulCoverage, null, 2));
 console.log('\nGenerating coverage reports...\n');
 
 try {
-  execSync(`npx nyc report --reporter=html --reporter=lcov --reporter=text --temp-dir="${nycOutputDir}" --report-dir="${coverageDir}" --include="src/assets/js/**/*.js"`, {
+  execSync(`npx nyc report --reporter=html --reporter=lcov --reporter=text --reporter=json-summary --temp-dir="${nycOutputDir}" --report-dir="${coverageDir}" --include="src/assets/js/**/*.js"`, {
     cwd: websiteDir,
     stdio: 'inherit',
   });
 } catch (err) {
   console.error('Failed to generate reports:', err.message);
+  process.exit(1);
 }
 
 // Clean up individual coverage files

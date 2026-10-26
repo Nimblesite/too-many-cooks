@@ -53,6 +53,8 @@ test:
 	cd $(MCP_DIR) && npm run build -w packages/core && npm run test:coverage -w packages/too-many-cooks
 	@echo "==> Testing VS Code extension (E2E + coverage)..."
 	cd $(EXT_DIR) && npm run test:coverage:integration
+	@echo "==> Testing website (Playwright + coverage)..."
+	cd $(WEB_DIR) && npm run test:coverage
 	@$(MAKE) _coverage_check
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
@@ -61,6 +63,7 @@ lint:
 	cd $(MCP_DIR) && npm run lint
 	@echo "==> Linting VS Code extension..."
 	cd $(EXT_DIR) && npm run lint
+	@$(MAKE) _no_suppressions
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
@@ -88,7 +91,7 @@ setup:
 	@echo "==> Installing VS Code extension dependencies..."
 	cd $(EXT_DIR) && npm ci
 	@echo "==> Installing website dependencies..."
-	cd $(WEB_DIR) && npm ci
+	cd $(WEB_DIR) && npm ci && npx playwright install --with-deps chromium
 	@echo "==> Setup complete. Run 'make ci' to validate."
 
 ## help: List all available targets
@@ -107,11 +110,20 @@ help:
 	@echo "  rebuild-install-vsix - Clean rebuild + reinstall the extension locally"
 	@echo "  website-dev          - Run the website locally"
 
+# Internal: lint suppressions are banned (AGENTS.md). oxlint honours eslint/oxlint
+# disable comments, so without this guard a suppression silently passes lint.
+SUPPRESSION_DIRS := $(MCP_DIR)/packages $(EXT_DIR)/src $(EXT_DIR)/test $(WEB_DIR)/src $(WEB_DIR)/tests $(WEB_DIR)/scripts
+_no_suppressions:
+	@if grep -rnE "(eslint|oxlint)-disable|@ts-(ignore|expect-error|nocheck)" $(SUPPRESSION_DIRS) \
+	  --include=*.ts --include=*.js --include=*.mjs --include=*.cjs --exclude-dir=node_modules --exclude-dir=build --exclude-dir=out --exclude-dir=coverage --exclude-dir=coverage-integration; then \
+	  echo "FAIL: lint suppressions are banned — fix the code instead"; exit 1; \
+	fi; echo "OK: no lint suppressions"
+
 # Internal: coverage threshold enforcement reading coverage-thresholds.json.
 # Not a public target; never invoked outside `_test`.
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
-	for entry in "too-many-cooks:$(MCP_DIR)/packages/too-many-cooks/coverage" "too_many_cooks_vscode_extension:$(EXT_DIR)/coverage-integration"; do \
+	for entry in "too-many-cooks:$(MCP_DIR)/packages/too-many-cooks/coverage" "too_many_cooks_vscode_extension:$(EXT_DIR)/coverage-integration" "website:$(WEB_DIR)/coverage"; do \
 	  name=$${entry%%:*}; dir=$${entry#*:}; summary="$$dir/coverage-summary.json"; \
 	  THRESHOLD=$$(jq -r --arg n "$$name" '.projects[$$n].threshold // .default_threshold' "$(COVERAGE_THRESHOLDS_FILE)"); \
 	  if [ ! -f "$$summary" ]; then echo "FAIL: $$summary missing — coverage was not computed for $$name"; exit 1; fi; \

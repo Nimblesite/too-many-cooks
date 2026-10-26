@@ -11,7 +11,12 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const PORT = process.env.TMC_PORT || '4040';
+// Dedicated E2E port — never 4040, where a developer's live TMC server (holding
+// real agents and locks) listens; the suite resets and deletes agents.
+const E2E_PORT = '4747';
+const PORT = process.env.TMC_PORT || E2E_PORT;
+// runTests.js forwards TMC_PORT to the extension host and test helpers.
+process.env.TMC_PORT = PORT;
 const STATUS_URL = `http://localhost:${PORT}/admin/status`;
 const SERVER_ENTRY = path.resolve(
   __dirname, '..', '..', 'too-many-cooks', 'packages', 'too-many-cooks', 'build', 'bin', 'server.js',
@@ -43,7 +48,7 @@ async function waitUntilUp(child) {
 async function ensureServer(log) {
   if (await isUp()) {
     log('INFO', `Reusing MCP server already running on port ${PORT}`);
-    return { stop: () => undefined };
+    return { stop: async () => undefined };
   }
   if (!fs.existsSync(SERVER_ENTRY)) {
     throw new Error(`MCP server not built: ${SERVER_ENTRY} (run 'npm run build' in too-many-cooks)`);
@@ -56,8 +61,14 @@ async function ensureServer(log) {
   await waitUntilUp(child);
   log('INFO', `Started MCP server (pid ${child.pid}) on port ${PORT}, workspace ${workspace}`);
   return {
-    stop: () => {
+    // Wait for the server to exit before deleting its workspace: its shutdown
+    // log line writes into <workspace>/.too_many_cooks/logs.
+    stop: async () => {
+      const exited = child.exitCode !== null
+        ? Promise.resolve()
+        : new Promise((resolve) => child.once('exit', resolve));
       child.kill();
+      await exited;
       fs.rmSync(workspace, { recursive: true, force: true });
     },
   };

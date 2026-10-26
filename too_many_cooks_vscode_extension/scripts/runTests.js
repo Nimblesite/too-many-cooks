@@ -4,6 +4,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { runTests, downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -56,16 +57,15 @@ function waitForTestCompletion(timeout = 300000) {
   });
 }
 
-const { execSync } = require('child_process');
 const { ensureServer } = require('./testServer');
 
-/** Try to find the system `code` CLI. Returns the path or null. */
-function findSystemCode() {
-  try {
-    const codePath = execSync('which code', { encoding: 'utf8' }).trim();
-    return codePath || null;
-  } catch {
-    return null;
+// Launched from a VS Code terminal / extension host, the env carries
+// ELECTRON_RUN_AS_NODE=1 and the parent's VSCODE_* IPC vars. Inherited, they
+// make the test instance run as plain Node ("Cannot find module 'vscode'") or
+// talk to the parent window. Scrub them so the run is the same everywhere.
+for (const key of Object.keys(process.env)) {
+  if (key === 'ELECTRON_RUN_AS_NODE' || key.startsWith('VSCODE_')) {
+    if (key !== 'VSCODE_EXECUTABLE_PATH') { delete process.env[key]; }
   }
 }
 
@@ -77,13 +77,13 @@ async function main() {
   logToFile('INFO', 'Extension development path:', extensionDevelopmentPath);
   logToFile('INFO', 'Extension tests path:', extensionTestsPath);
 
-  let server = { stop: () => undefined };
+  let server = { stop: async () => undefined };
   try {
     server = await ensureServer(logToFile);
-    // Prefer system `code` CLI (resolves extension host correctly on macOS).
-    // Fall back to downloaded Electron binary for CI/headless environments.
-    const systemCode = findSystemCode();
-    const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || systemCode || await downloadAndUnzipVSCode();
+    // Always the isolated, cached test build (same as CI). Never the system
+    // `code` CLI: with VS Code already open it hands off to the running
+    // instance and exits at once, so no tests run.
+    const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || await downloadAndUnzipVSCode();
 
     logToFile('INFO', 'VSCode executable path:', vscodeExecutablePath);
     logToFile('INFO', 'Platform:', process.platform);
@@ -98,6 +98,9 @@ async function main() {
         extensionDevelopmentPath,
         '--disable-gpu',
         '--no-sandbox',
+        // Short path: VS Code's IPC socket lives in the user-data dir and macOS
+        // caps socket paths at 103 chars (.vscode-test/user-data is too deep).
+        `--user-data-dir=${fs.mkdtempSync(path.join(os.tmpdir(), 'tmc-vsc-'))}`,
       ],
       extensionTestsEnv: {
         VERBOSE_LOGGING: 'true',
@@ -122,12 +125,12 @@ async function main() {
       process.stdout.write('=== END TEST LOG ===\n\n');
     } catch { /* ignore */ }
 
-    server.stop();
+    await server.stop();
     logStream.end();
     process.exit(failures > 0 ? 1 : 0);
   } catch (err) {
     logToFile('ERR', 'Failed:', String(err));
-    server.stop();
+    await server.stop();
     logStream.end();
     process.exit(1);
   }

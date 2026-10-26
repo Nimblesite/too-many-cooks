@@ -14,7 +14,7 @@
     "watch:readmes": "fswatch -o ../packages/*/README.md | xargs -n1 -I{} node scripts/copy-readmes.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:coverage": "playwright test && node scripts/merge-coverage.js",
+    "test:coverage": "rm -rf coverage && playwright test && node scripts/merge-coverage.js",
     "update:theme": "npm update eleventy-plugin-techdoc"
   },
   "devDependencies": {
