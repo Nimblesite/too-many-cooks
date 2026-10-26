@@ -1,6 +1,6 @@
 {
   "name": "too-many-cooks-website",
-  "version": "1.0.0",
+  "version": "0.0.0-dev",
   "description": "Documentation website for Too Many Cooks - Multi-agent coordination MCP server",
   "type": "module",
   "scripts": {

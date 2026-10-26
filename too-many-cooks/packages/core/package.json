@@ -1,6 +1,6 @@
 {
   "name": "too-many-cooks-core",
-  "version": "0.5.0",
+  "version": "0.0.0-dev",
   "description": "Core types, tools, and interfaces for Too Many Cooks multi-agent coordination",
   "type": "module",
   "main": "build/index.js",

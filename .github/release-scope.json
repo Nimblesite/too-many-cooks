@@ -2,6 +2,8 @@
   "binary": [
     "too-many-cooks/**",
     "scripts/stamp-version.sh",
+    "scripts/shipwright.schema.json",
+    "shipwright.json",
     "scripts/fetch-dataprovider.mjs",
     "scripts/dataprovider-version",
     ".oxlintrc.json",

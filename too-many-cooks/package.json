@@ -1,6 +1,6 @@
 {
   "name": "too-many-cooks",
-  "version": "0.5.0",
+  "version": "0.0.0-dev",
   "description": "Multi-agent Git coordination MCP server - enables multiple AI agents to safely edit a git repository simultaneously with file locking, messaging, and plan visibility",
   "private": true,
   "type": "module",
@@ -35,6 +35,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@nimblesite/shipwright-validate-manifest": "^0.11.0",
     "@types/node": "^26.6.5",
     "oxlint": "^1.89.0",
     "oxlint-tsgolint": "^7.0.2005",

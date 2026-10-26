@@ -30,6 +30,7 @@ const TEST_VERSION: string = "9.8.7-versiontest.1";
 const SERVER_NAME: string = "too-many-cooks";
 const TMP_PREFIX: string = "tmc-version-";
 const PACKAGE_JSON: string = "package.json";
+const MANIFEST: string = "shipwright.json";
 const PORT: number = 4095;
 const WAIT_ATTEMPTS: number = 100;
 const WAIT_INTERVAL_MS: number = 100;
@@ -61,6 +62,7 @@ const buildFakeRoot = (fakeRoot: string): void => {
     symlinkSync(join(REPO_ROOT, SERVER_DIR, dir), join(fakeRoot, SERVER_DIR, dir));
   }
   symlinkSync(join(REPO_ROOT, WORKSPACE_NODE_MODULES), join(fakeRoot, WORKSPACE_NODE_MODULES));
+  copyFileSync(join(REPO_ROOT, MANIFEST), join(fakeRoot, MANIFEST));
 };
 
 /** Run the stamped server entry with CLI args and return stdout. */

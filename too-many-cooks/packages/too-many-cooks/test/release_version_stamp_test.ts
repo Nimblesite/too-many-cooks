@@ -1,7 +1,8 @@
-/// [CI-RELEASE] The release workflow stamps the tag's version with
-/// scripts/stamp-version.sh. This test runs that same script with a test
-/// version against a throwaway copy of every published package.json, so a
-/// broken stamper fails `make test` instead of a tagged release.
+/// [CI-RELEASE] [SWR-VERSION-BUILD-STAMPING] The release workflow stamps the
+/// tag's version with scripts/stamp-version.sh. This test runs that same script
+/// with a test version against a throwaway copy of every published package.json
+/// and shipwright.json, so a broken stamper fails `make test` instead of a
+/// tagged release.
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert";
@@ -18,6 +19,9 @@ const TEST_VERSION: string = "9.8.7-stamptest.1";
 const TMP_PREFIX: string = "tmc-stamp-";
 const PACKAGE_JSON: string = "package.json";
 const CORE_DEP: string = "too-many-cooks-core";
+const MANIFEST: string = "shipwright.json";
+/** Source versions are never release versions; only the release runner stamps. */
+const SOURCE_VERSION: string = "0.0.0-dev";
 
 /** Every package.json the release publishes, relative to the repo root. */
 const PACKAGE_DIRS: readonly string[] = [
@@ -44,6 +48,13 @@ const coreDependency = (deps: unknown): unknown =>
     ? Object.entries(deps).find(([name]: [string, unknown]): boolean => name === CORE_DEP)?.[1]
     : undefined;
 
+/** shipwright.json `product.version` under `root`. */
+const manifestVersion = (root: string): unknown => {
+  const parsed: unknown = JSON.parse(readFileSync(join(root, MANIFEST), "utf8"));
+  const product: unknown = typeof parsed === "object" && parsed !== null && "product" in parsed ? parsed.product : undefined;
+  return typeof product === "object" && product !== null && "version" in product ? product.version : undefined;
+};
+
 describe("release version stamping (scripts/stamp-version.sh)", () => {
   const fakeRoot: string = mkdtempSync(join(tmpdir(), TMP_PREFIX));
   let output: string = "";
@@ -53,6 +64,7 @@ describe("release version stamping (scripts/stamp-version.sh)", () => {
       mkdirSync(join(fakeRoot, rel), { recursive: true });
       copyFileSync(join(REPO_ROOT, rel, PACKAGE_JSON), join(fakeRoot, rel, PACKAGE_JSON));
     }
+    copyFileSync(join(REPO_ROOT, MANIFEST), join(fakeRoot, MANIFEST));
     output = execFileSync("bash", [STAMP_SCRIPT, TEST_VERSION, fakeRoot], { encoding: "utf8" });
   });
 
@@ -73,6 +85,17 @@ describe("release version stamping (scripts/stamp-version.sh)", () => {
 
   it("pins the server's core dependency to the stamped version", () => {
     assert.strictEqual(coreDependency(readPackage(fakeRoot, SERVER_DIR).dependencies), `^${TEST_VERSION}`);
+  });
+
+  it("stamps the shipwright.json product version", () => {
+    assert.strictEqual(manifestVersion(fakeRoot), TEST_VERSION);
+  });
+
+  it("source versions are all 0.0.0-dev", () => {
+    for (const rel of PACKAGE_DIRS) {
+      assert.strictEqual(readPackage(REPO_ROOT, rel).version, SOURCE_VERSION, `${rel} must stay ${SOURCE_VERSION}`);
+    }
+    assert.strictEqual(manifestVersion(REPO_ROOT), SOURCE_VERSION);
   });
 
   it("never touches the real package.json files", () => {

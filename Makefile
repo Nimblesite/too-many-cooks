@@ -32,6 +32,7 @@ COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
 MCP_DIR := too-many-cooks
 EXT_DIR := too_many_cooks_vscode_extension
 WEB_DIR := website
+SHIPWRIGHT_REV := 369a32556f44c8db581b5886bc47756d3ad660a4
 
 # =============================================================================
 # Standard Targets
@@ -59,6 +60,8 @@ test:
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
+	@echo "==> Validating shipwright.json ([SWR-GATE-CI]; schema vendored from Shipwright@$(SHIPWRIGHT_REV))..."
+	$(MCP_DIR)/node_modules/.bin/shipwright-validate-manifest --schema scripts/shipwright.schema.json shipwright.json
 	@echo "==> Linting MCP server..."
 	cd $(MCP_DIR) && npm run lint
 	@echo "==> Linting VS Code extension..."

@@ -1,6 +1,6 @@
 {
   "name": "too-many-cooks",
-  "version": "0.5.0",
+  "version": "0.0.0-dev",
   "description": "Too Many Cooks MCP server — SQLite (local) or encrypted cloud backend",
   "type": "module",
   "main": "build/src/index.js",

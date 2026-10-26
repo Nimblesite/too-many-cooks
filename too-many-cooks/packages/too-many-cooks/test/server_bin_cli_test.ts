@@ -26,9 +26,9 @@ const PORT_SHUTDOWN = 4091;
 const PORT_CONFLICT = 4092;
 const PORT_BAD_ENV = 4098;
 const TMP_PREFIX = "/tmp/tmc-cli-cov-";
-const VERSION_LINE = "too-many-cooks 0.5.0";
+const VERSION_LINE = "too-many-cooks 0.0.0-dev";
 const VERSION_JSON_LINE =
-  '{"manifestVersion":1,"name":"too-many-cooks","version":"0.5.0","kind":"mcp","language":"typescript","product":"too-many-cooks"}';
+  '{"manifestVersion":1,"name":"too-many-cooks","version":"0.0.0-dev","kind":"mcp","language":"typescript","product":"too-many-cooks"}';
 const MISSING_ENV_ERROR = "Missing required env var: TMC_WORKSPACE_ID";
 const PORT_IN_USE_MARKER = "Port already in use";
 const SHUTDOWN_MARKER = "Server shutting down";

@@ -30,7 +30,7 @@ const MAX_MESSAGE_LENGTH = 200;
 const MAX_PLAN_LENGTH = 100;
 const CLIENT_NAME = "version-contract-test";
 const CLIENT_VERSION = "1.0.0";
-const EXPECTED_PACKAGE_VERSION = "0.5.0";
+const EXPECTED_PACKAGE_VERSION = "0.0.0-dev";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const packageJsonPath = join(testDir, "..", "package.json");
