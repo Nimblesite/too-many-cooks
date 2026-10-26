@@ -20,20 +20,13 @@ import type { EventPushFn, EventPushToAgentFn } from "./notifications.js";
 import { createNotificationEmitter } from "./notifications.js";
 import type { Result } from "./result.js";
 import { success } from "./result.js";
+import { type ServerInfo, serverInfoFor } from "./server_info.js";
 import { createLockHandler, LOCK_INPUT_SHAPE, LOCK_TOOL_CONFIG as lockToolConfig } from "./tools/lock_tool.js";
 import { createMessageHandler, messageInputShape, messageToolDescription } from "./tools/message_tool.js";
 import { createPlanHandler, planInputShape, planToolDescription } from "./tools/plan_tool.js";
 import { createRegisterHandler, REGISTER_INPUT_SHAPE, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
 import { createStatusHandler, STATUS_INPUT_SHAPE, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
 import type { CallToolResult, SessionIdentity, ToolCallback } from "./mcp-types.js";
-
-/** Server name constant. */
-const SERVER_NAME: string = "too-many-cooks";
-
-/** Server version constant. Must match the package.json `version` of
- * `packages/too-many-cooks` so the deploy-toolkit version check and the
- * MCP `serverInfo.version` response agree on a single truth. */
-const SERVER_VERSION: string = "0.5.0";
 
 /** Log prefix for console output. */
 const LOG_PREFIX: string = "[TMC]";
@@ -54,6 +47,8 @@ export const createMcpServerForDb: (
     agentPush?: EventPushFn;
     agentPushToAgent?: EventPushToAgentFn;
     onSessionSet?: (agentName: string, agentKey: string) => void;
+    /** Defaults to this package's own (release-stamped) package.json. */
+    serverInfo?: ServerInfo;
   },
 ) => Result<McpServer, string> = (
   db: TooManyCooksDb,
@@ -64,14 +59,19 @@ export const createMcpServerForDb: (
     agentPush?: EventPushFn;
     agentPushToAgent?: EventPushToAgentFn;
     onSessionSet?: (agentName: string, agentKey: string) => void;
+    /** Defaults to this package's own (release-stamped) package.json. */
+    serverInfo?: ServerInfo;
   },
 ): Result<McpServer, string> => {
   const adminPush: EventPushFn | undefined = options?.adminPush;
   const agentPush: EventPushFn | undefined = options?.agentPush;
   const agentPushToAgent: EventPushToAgentFn | undefined = options?.agentPushToAgent;
   const onSessionSet: ((agentName: string, agentKey: string) => void) | undefined = options?.onSessionSet;
+  const info: Result<ServerInfo, string> =
+    options?.serverInfo === undefined ? serverInfoFor(import.meta.url) : success(options.serverInfo);
+  if (!info.ok) {return info;}
   const server: McpServer = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
+    info.value,
     { capabilities: { tools: { listChanged: true }, logging: {} } },
   );
   log.debug("MCP server created");

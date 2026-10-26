@@ -7,6 +7,8 @@
 
 - **Message and plan length limits are now unmissable and actually configurable** (`[MCP-TOOL-LIMITS]`). The `message` and `plan` tool descriptions open with the hard limit (`HARD LIMIT: content must be 200 characters or fewer…`), the wire schema's `maxLength` comes from the configured `maxMessageLength`/`maxPlanLength` instead of hard-coded 200/100, and an over-long value is rejected with its actual length and the limit (`content is 312 characters; the limit is 200. Shorten it and resend.`) instead of a generic validation error.
 
+- **The server reports its real version** (`[SWR-VERSION-HANDSHAKE]`). `--version`, `--version --json` and the agent MCP `serverInfo.version` were hard-coded to `0.5.0` and the admin session to `0.1.0`, so published 0.15.1 claimed to be 0.5.0. Every surface now reads the release-stamped `package.json` via `@nimblesite/shipwright-mcp`.
+
 ### Changed
 - **Prisma replaced by DataProvider migrations.** `packages/too-many-cooks/schema/tmc-schema.yaml` is the single source of truth. On startup the CLI diffs the live DB against it, creates a fresh DB, repairs drift in place (missing columns/tables/indexes, changed FK actions) and leaves data untouched when nothing changed. The npm package ships the CLI for darwin-arm64, darwin-x64, linux-x64 and win32-x64.
 - **TypeScript 7** compiles and type-checks everything (single version). Linting moved from ESLint/typescript-eslint to `oxlint --type-aware` (oxlint-tsgolint) with a shared root `.oxlintrc.json`.

@@ -19,3 +19,4 @@ export * from "./tools/tool_utils.js";
 export * from "./admin_routes.js";
 export { createMcpServerForDb, createConsoleLogger, type ServerBundle } from "./server.js";
 export * from "./db-contract-tests.js";
+export * from "./server_info.js";

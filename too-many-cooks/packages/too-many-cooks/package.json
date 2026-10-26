@@ -30,8 +30,9 @@
     "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
   },
   "dependencies": {
-    "too-many-cooks-core": "*",
-    "better-sqlite3": "^13.0.3"
+    "@nimblesite/shipwright-mcp": "^0.11.0",
+    "better-sqlite3": "^13.0.3",
+    "too-many-cooks-core": "*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

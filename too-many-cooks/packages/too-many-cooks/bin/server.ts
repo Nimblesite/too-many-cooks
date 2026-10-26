@@ -11,38 +11,14 @@
 /// - [SERVER-STATE-ISOLATION] all state lives in `${workspace}/.too_many_cooks/`
 /// - [SERVER-EPIPE] a dead stdio pipe can never loop into the logger
 ///
-/// Implements the deploy-toolkit `--version` contract before anything else.
-
-{
-  const argv: string[] = process.argv.slice(2);
-  const wantsVersion: boolean = argv.includes("--version") || argv.includes("-V");
-  if (wantsVersion) {
-    const name: string = "too-many-cooks";
-    // Kept in sync with packages/too-many-cooks/package.json `version` and
-    // packages/core/src/server.ts SERVER_VERSION by the release pipeline.
-    const version: string = "0.5.0";
-    if (argv.includes("--json")) {
-      process.stdout.write(
-        `${JSON.stringify({
-          manifestVersion: 1,
-          name,
-          version,
-          kind: "mcp",
-          language: "typescript",
-          product: "too-many-cooks",
-        })}\n`,
-      );
-    } else {
-      process.stdout.write(`${name} ${version}\n`);
-    }
-    process.exit(0);
-  }
-}
+/// [SWR-VERSION-CLI-OUTPUT] `--version` / `--version --json` and both MCP
+/// handshakes report the version stamped into this package's package.json.
 
 import crypto from "node:crypto";
 import type { Server } from "node:http";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { handleVersionArgs } from "@nimblesite/shipwright-mcp";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -50,6 +26,7 @@ import {
   type AgentEventHub,
   type Logger,
   type Result,
+  type ServerInfo,
   type TooManyCooksDb,
   createAdminEventHub,
   createAgentEventHub,
@@ -58,6 +35,7 @@ import {
   getServerPort,
   getWorkspaceFolder,
   registerAdminRoutes,
+  serverInfoFor,
 } from "too-many-cooks-core";
 
 import { createBackend } from "../src/backend.js";
@@ -105,7 +83,21 @@ const installProcessHandlers: (log: Logger) => void = (log: Logger): void => {
   });
 };
 
+/// Print the version and exit when asked — before any logger or lock file exists.
+const exitOnVersionFlag: (info: ServerInfo) => void = (info: ServerInfo): void => {
+  const out: ReturnType<typeof handleVersionArgs> = handleVersionArgs(process.argv.slice(2), {
+    ...info, kind: "mcp", language: "typescript", product: info.name,
+  });
+  if (!out.ok || out.value === undefined) {throw new Error(out.error);}
+  if (!out.value.handled) {return;}
+  process.stdout.write(out.value.stdout);
+  process.exit(0);
+};
+
 const main: () => Promise<void> = async (): Promise<void> => {
+  const info: Result<ServerInfo, string> = serverInfoFor(import.meta.url);
+  if (!info.ok) {throw new Error(info.error);}
+  exitOnVersionFlag(info.value);
   const log: Logger = createLogger();
   installProcessHandlers(log);
   log.info("Server starting...");
@@ -115,7 +107,7 @@ const main: () => Promise<void> = async (): Promise<void> => {
   guardSingleInstance(lockPath, workspace, port, log);
   process.on("exit", (): void => { releaseServerLock(lockPath); });
   try {
-    await startServer(log, port);
+    await startServer(log, port, info.value);
   } catch (e) {
     log.fatal("Fatal error", { error: String(e) });
     throw e;
@@ -165,7 +157,11 @@ const handleListenError: (err: Error, port: number, log: Logger) => void = (
   process.exit(1);
 };
 
-const startServer: (log: Logger, port: number) => Promise<void> = async (log: Logger, port: number): Promise<void> => {
+const startServer: (log: Logger, port: number, serverInfo: ServerInfo) => Promise<void> = async (
+  log: Logger,
+  port: number,
+  serverInfo: ServerInfo,
+): Promise<void> => {
   log.info("Creating server...");
 
   const cfg: typeof defaultConfig = defaultConfig;
@@ -184,12 +180,12 @@ const startServer: (log: Logger, port: number) => Promise<void> = async (log: Lo
   registerAdminRoutes(app, db, adminHub);
 
   // Admin Streamable HTTP routes (/admin/events)
-  app.post("/admin/events", asyncHandler(adminPostHandler(adminHub, log), log));
+  app.post("/admin/events", asyncHandler(adminPostHandler(adminHub, log, serverInfo), log));
   app.get("/admin/events", asyncHandler(adminGetDeleteHandler(adminHub), log));
   app.delete("/admin/events", asyncHandler(adminGetDeleteHandler(adminHub), log));
 
   // MCP Streamable HTTP routes
-  const mcpCtx: McpSessionContext = { transports, db, cfg, log, adminHub, agentHub };
+  const mcpCtx: McpSessionContext = { transports, db, cfg, log, adminHub, agentHub, serverInfo };
   app.post("/mcp", asyncHandler(mcpPostHandler(mcpCtx), log));
   app.get("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
   app.delete("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
@@ -239,6 +235,7 @@ type McpSessionContext = {
   readonly log: Logger;
   readonly adminHub: AdminEventHub;
   readonly agentHub: AgentEventHub;
+  readonly serverInfo: ServerInfo;
 };
 
 /** Wire up transport close handler for agent sessions. */
@@ -286,6 +283,7 @@ const initializeMcpSession: (
     adminPush: ctx.adminHub.pushEvent,
     agentPush: ctx.agentHub.pushEvent,
     agentPushToAgent: ctx.agentHub.pushToAgent,
+    serverInfo: ctx.serverInfo,
     onSessionSet: (agentName: string): void => {
       const sid: string | undefined = transport.sessionId;
       if (sid !== undefined) {
@@ -365,11 +363,13 @@ const initializeAdminSession: (
   res: Response,
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ) => Promise<void> = async (
   req: Request,
   res: Response,
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ): Promise<void> => {
   const body: unknown = extractBody(req);
   const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
@@ -390,7 +390,7 @@ const initializeAdminSession: (
   };
 
   const server: McpServer = new McpServer(
-    { name: "too-many-cooks", version: "0.1.0" },
+    serverInfo,
     { capabilities: { logging: {} } },
   );
   assertMcpTransport(transport);
@@ -407,9 +407,11 @@ const initializeAdminSession: (
 const adminPostHandler: (
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ) => (req: Request, res: Response) => Promise<void> = (
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ): ((req: Request, res: Response) => Promise<void>) =>
   {return async (req: Request, res: Response): Promise<void> => {
     const sessionId: string | undefined = extractSessionId(req);
@@ -429,7 +431,7 @@ const adminPostHandler: (
     }
 
     if (isInitializeRequest(body)) {
-      await initializeAdminSession(req, res, hub, log);
+      await initializeAdminSession(req, res, hub, log, serverInfo);
       return;
     }
 

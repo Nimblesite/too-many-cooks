@@ -38,6 +38,8 @@ export type SpawnServerOptions = {
   readonly captureStderr?: boolean;
   /** Base env (defaults to the parent environment). */
   readonly env?: NodeJS.ProcessEnv;
+  /** Server entry script (defaults to the package's own build). */
+  readonly binary?: string;
 };
 
 const spawnProc = (
@@ -45,7 +47,7 @@ const spawnProc = (
   workspace: string,
 ): ChildProcess => {
   const baseEnv = opts.env ?? process.env;
-  return spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
+  return spawn("node", [...SERVER_NODE_ARGS, opts.binary ?? SERVER_BINARY], {
     stdio: ["pipe", "pipe", opts.captureStderr === true ? "pipe" : "inherit"],
     env: {
       ...baseEnv,

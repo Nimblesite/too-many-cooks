@@ -90,10 +90,10 @@ export class McpHttpClient {
     return this.sessionId;
   }
 
-  /** Runs `initialize`; optionally sends `notifications/initialized`. */
+  /** Runs `initialize` and returns its result; optionally sends `notifications/initialized`. */
   public async initSession(
     sendInitialized: boolean = true,
-  ): Promise<void> {
+  ): Promise<Record<string, unknown>> {
     const initResult = await this.request("initialize", {
       protocolVersion: this.protocolVersion,
       capabilities: {},
@@ -107,6 +107,7 @@ export class McpHttpClient {
     if (sendInitialized) {
       await this.post(this.notificationBody());
     }
+    return initResult;
   }
 
   /** Calls a tool and returns the first text content block. */
