@@ -26,11 +26,17 @@ export const downloadVerified = async (url, name, expected) => {
   return bytes;
 };
 
+/** Extractor for `name` on this host. GNU tar (Linux) cannot read .zip, so
+ *  zips use unzip there; Windows' bundled bsdtar reads both formats. */
+const extractor = (name) => (name.endsWith(".zip") && process.platform !== "win32"
+  ? ["unzip", ["-q", name]]
+  : ["tar", ["-xf", name]]);
+
 /** Extract an archive into a fresh temp dir and return the dir. */
 export const extract = (name, bytes, prefix) => {
   const work = mkdtempSync(join(tmpdir(), prefix));
   writeFileSync(join(work, name), bytes);
-  // bsdtar (macOS, Windows 10+, most Linux CI) extracts both .tar.gz and .zip.
-  execFileSync("tar", ["-xf", name], { cwd: work, stdio: "inherit" });
+  const [command, args] = extractor(name);
+  execFileSync(command, args, { cwd: work, stdio: "inherit" });
   return work;
 };
