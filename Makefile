@@ -69,8 +69,8 @@ test:
 lint:
 	@echo "==> Validating shipwright.json ([SWR-GATE-CI]; schema vendored from Shipwright@$(SHIPWRIGHT_REV))..."
 	$(MCP_DIR)/node_modules/.bin/shipwright-validate-manifest --schema scripts/shipwright.schema.json shipwright.json
-	@echo "==> Linting MCP server..."
-	cd $(MCP_DIR) && npm run lint
+	@echo "==> Linting MCP server (type-aware: needs core's .d.ts, so build core first)..."
+	cd $(MCP_DIR) && npm run build -w packages/core && npm run lint
 	@echo "==> Linting VS Code extension..."
 	cd $(EXT_DIR) && npm run lint
 	@$(MAKE) _no_suppressions
