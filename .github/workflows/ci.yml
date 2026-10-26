@@ -4,9 +4,16 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # release.yml calls this as its CI gate: the tagged SHA must pass lint + test +
+  # build before anything publishes. [SWR-REL-WORKFLOW]
+  workflow_call:
+
+# [SWR-SEC-TOKEN-PRIVILEGE] read-only by default; jobs escalate individually.
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -16,10 +23,12 @@ jobs:
     # TIMEOUT EXCEPTION: Full E2E suite spins up MCP server, VSIX, and Playwright; needs more than 10 min.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -37,7 +46,7 @@ jobs:
         run: make lint
 
       - name: Test (fail-fast + coverage gate)
-        uses: coactions/setup-xvfb@v1
+        uses: coactions/setup-xvfb@b6b4fcfb9f5a895edadc3bc76318fae0ac17c8b3 # v1.0.1
         with:
           run: make test
 
@@ -45,21 +54,52 @@ jobs:
         run: make build
 
   # Dependency review ([GITHUB-DEP-REVIEW]) — fails a PR that adds a dependency
-  # with known vulnerabilities. Lightweight, PR-only, no special token scopes.
+  # with known vulnerabilities. Lightweight, PR-only, read-only token (the
+  # failure is in the job log, no PR comment), so release.yml can call ci.yml
+  # without granting pull-requests: write.
   # CodeQL source scanning is SEPARATE in codeql.yml ([GITHUB-CODE-SCANNING]).
   # The two do NOT overlap with each other or with linting: dependency-review =
   # vulnerable packages, CodeQL = vulnerable code, lint = style/correctness.
   security:
     name: security
+    # Needs a PR diff; skipped when release.yml calls this on a tag.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write # dependency-review posts its PR summary
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
+          comment-summary-in-pr: never
+
+  # [SWR-SEC-VULN-GATE] Every lockfile scanned against OSV on every PR and on the
+  # tagged release SHA. Fails on any known vulnerability.
+  vuln-scan:
+    name: osv-scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --lockfile=too-many-cooks/package-lock.json
+            --lockfile=too_many_cooks_vscode_extension/package-lock.json
+            --lockfile=website/package-lock.json
+
+  # [SWR-GATE-ACTION-PINNING] [SWR-GATE-TOKEN-PRIVILEGE] zizmor over every workflow.
+  supply-chain:
+    name: Supply-chain lint
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-supply-chain.yml

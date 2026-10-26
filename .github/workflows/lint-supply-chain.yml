@@ -1,0 +1,67 @@
+# lint-supply-chain.yml — Shipwright-shipped reusable workflow.
+#
+# Machine-enforces the CI-hardening half of the Shipwright supply-chain
+# contract. Every product calls this from its CI so the gates apply uniformly:
+#
+#   [SWR-GATE-ACTION-PINNING]  every `uses:` / reusable-workflow ref is a
+#                              full 40-char commit SHA (not a mutable tag).
+#   [SWR-GATE-TOKEN-PRIVILEGE] no workflow grants more GITHUB_TOKEN scope than
+#                              it needs; no top-level `id-token`/`attestations`.
+#   template-injection         no untrusted `${{ github.event.* }}` interpolated
+#                              into a `run:` block.
+#
+# These are exactly the failure modes behind tj-actions/changed-files
+# (CVE-2025-30066) and reviewdog/action-setup (CVE-2025-30154). The engine is
+# zizmor — a dedicated GitHub Actions static analyzer — so the workflow YAML is
+# parsed by a real parser, never matched with ad-hoc regex on structured data.
+#
+# Vendored verbatim from Nimblesite/Shipwright@369a32556f44c8db581b5886bc47756d3ad660a4
+# (templates/gh-actions). Usage in a product repo (.github/workflows/ci.yml):
+#
+#   jobs:
+#     supply-chain:
+#       uses: Nimblesite/Shipwright/.github/workflows/lint-supply-chain.yml@<40-char-sha>  # v1
+#
+# See docs/specs/supply-chain-security.md and docs/specs/acceptance-gates.md.
+
+name: lint-supply-chain (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      min_severity:
+        description: "Minimum zizmor finding severity that fails the build (low|medium|high)."
+        type: string
+        required: false
+        default: "medium"
+      persona:
+        description: "zizmor persona (regular|pedantic|auditor)."
+        type: string
+        required: false
+        default: "pedantic"
+
+# Read-only: this gate inspects workflows, it never needs write.
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: zizmor static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      # zizmor-action runs zizmor over .github/workflows/** and fails on any
+      # finding at or above the configured severity. Pinned to a commit SHA,
+      # as this gate itself must obey [SWR-SEC-ACTION-PINNING].
+      - uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+        with:
+          persona: ${{ inputs.persona }}
+          min-severity: ${{ inputs.min_severity }}
+          # No GitHub advisory upload — keep this gate read-only and offline-safe.
+          online-audits: false
