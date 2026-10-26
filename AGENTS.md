@@ -54,7 +54,7 @@ Duplicate code is the #1 review rejection. Follow [deslop for AI](https://deslop
 
 ## Database — DataProvider Migrations ([DB-MIGRATE])
 - **Schema is defined ONLY in DataProvider YAML** (`too-many-cooks/packages/too-many-cooks/schema/tmc-schema.yaml`) and applied with the **`DataProviderMigrate` CLI** ([docs](https://dataprovider.tech/docs/migrations/)). The same YAML targets SQLite and PostgreSQL.
-- Use the standalone per-platform CLI binaries from [GitHub Releases](https://github.com/Nimblesite/DataProvider/releases), pinned in `scripts/dataprovider-version`. Never shell out to `npx`/network at runtime to create a DB.
+- Use the standalone per-platform CLI binaries from [GitHub Releases](https://github.com/Nimblesite/DataProvider/releases), pinned in `scripts/dataprovider-version`. Never shell out to `npx`/network at runtime to create a DB. **Using .NET is ILLEGAL** — no `dotnet` CLI, no installed runtime; ship the self-contained binary (guarded by `test/migrate_no_dotnet_test.ts`).
 - **Prisma is banned.** Raw DDL (`CREATE TABLE`, etc.) is ILLEGAL. All schema changes are YAML edits.
 - Enforce referential integrity (FKs); `onDelete: Cascade` is fine.
 - **No legacy DB support.** If the DB is stale or corrupted, DELETE it and recreate. No migration code for old schemas.
