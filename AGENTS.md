@@ -25,6 +25,7 @@ MCP server that coordinates AI agents editing the same codebase: file locks, pla
 - **Worktrees are forbidden.**
 
 ## Autonomous Operation ([AGENT-AUTONOMY])
+- **NEVER ask the user questions.** No clarifying questions, no option menus, no "should I…?", no confirmation prompts. Use your judgment, make the call, do it, and state what you decided in your final report.
 - **Act autonomously.** On ambiguity, choose the most reasonable default, record the assumption, continue to completion. No mid-task pauses for approval.
 - **Auto-memory is OFF** (`.claude/settings.json`). Persistent rules go through a reviewed PR to this file. ([AGENT-AUTOMEMORY])
 - **Subagents are ILLEGAL.** Delegate legwork to pi agents, in order of preference: Kimi 3.1 → GLM 5.3 → DeepSeek 4.1 (use their flash variants when speed matters). ([AGENT-DELEGATION])

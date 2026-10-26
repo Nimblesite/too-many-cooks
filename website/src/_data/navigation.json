@@ -5,6 +5,10 @@
       "url": "/docs/getting-started/"
     },
     {
+      "text": "Blog",
+      "url": "/blog/"
+    },
+    {
       "text": "GitHub",
       "url": "https://github.com/Nimblesite/too-many-cooks",
       "external": true

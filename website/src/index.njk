@@ -10,41 +10,49 @@ keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Mod
     <img src="/assets/images/tmclogo.png" alt="Too Many Cooks logo" class="hero-logo">
     <h1>Too Many Cooks</h1>
     <p class="hero-subtitle">
-      Coordinate multiple AI agents working on the same codebase.
-      File locking, messaging, and shared plans — no more conflicts.
+      Claude Code, Codex and pi on one codebase. They lock files, share plans
+      and message each other. No collisions.
     </p>
     <div class="hero-buttons">
       <a href="/docs/getting-started/" class="btn btn-primary btn-large">Get Started</a>
       <a href="https://github.com/Nimblesite/too-many-cooks" class="btn btn-secondary btn-large">GitHub</a>
     </div>
+  </div>
+</section>
 
+<section class="showcase">
+  <div class="container">
+    <div class="section-title">
+      <h2>See it in 60 seconds</h2>
+      <p>Start the server, plug in three agents, watch them cook.</p>
+    </div>
+    <figure class="showcase-figure showcase-video">
+      <video id="quickstart-video" controls playsinline preload="metadata" width="1280" height="720"
+        poster="/assets/videos/tmc-quickstart-poster.jpg"
+        aria-label="Quickstart: start the Too Many Cooks server, connect Claude Code, Codex and pi, and watch them coordinate live in VS Code.">
+        <source src="/assets/videos/tmc-quickstart-1280-av1.mp4" type='video/mp4; codecs="av01.0.05M.08"'>
+        <source src="/assets/videos/tmc-quickstart-1280.mp4" type="video/mp4">
+        <track kind="captions" src="/assets/videos/tmc-quickstart.en.vtt" srclang="en" label="English">
+      </video>
+    </figure>
+  </div>
+</section>
+
+<section class="quickstart">
+  <div class="container">
     <div class="hero-code">
-      <p class="code-label">Install and start</p>
+      <p class="code-label">1. Start the server</p>
 {% highlight "bash" %}
 npm install -g too-many-cooks && too-many-cooks
 {% endhighlight %}
-      <p class="code-label">Upgrade</p>
+      <p class="code-label">2. Plug in your agents</p>
 {% highlight "bash" %}
-npm update -g too-many-cooks @too-many-cooks/core
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
+codex mcp add too-many-cooks --url http://localhost:4040/mcp
+pi mcp add too-many-cooks --url http://localhost:4040/mcp
 {% endhighlight %}
-      <p class="code-label">Claude Code</p>
-{% highlight "bash" %}
-claude mcp add --transport http --scope user too-many-cooks http://localhost:4040/mcp
-{% endhighlight %}
-      <p class="code-label">Codex</p>
-{% highlight "bash" %}
-codex --mcp-server http://localhost:4040/mcp
-{% endhighlight %}
-      <p class="code-label">Cursor / Cline — add to mcp.json</p>
-{% highlight "json" %}
-{
-  "mcpServers": {
-    "too-many-cooks": {
-      "url": "http://localhost:4040/mcp"
-    }
-  }
-}
-{% endhighlight %}
+      <p class="code-label">3. Let 'em cook</p>
+      <p>Watch it live with the <a href="/docs/vscode-extension/">VS Code extension</a>. Cursor, Cline or any MCP client: <code>http://localhost:4040/mcp</code>.</p>
     </div>
   </div>
 </section>
@@ -56,19 +64,6 @@ codex --mcp-server http://localhost:4040/mcp
       Agents register with a key, lock files before editing, post messages to each other, and share plans.
       It prevents conflicts and keeps agents in sync.
     </p>
-  </div>
-</section>
-
-<section class="showcase">
-  <div class="container">
-    <div class="section-title">
-      <h2>See it in your editor</h2>
-      <p>The VSCode extension gives you a live dashboard of every agent, lock, message, and plan.</p>
-    </div>
-    <a href="/docs/vscode-extension/" class="showcase-figure">
-      <img src="/assets/images/vsix-dashboard.png" alt="Too Many Cooks VSCode extension dashboard showing agents, file locks, messages, and plans" width="2400" height="1500" loading="lazy">
-    </a>
-    <p class="showcase-caption"><a href="/docs/vscode-extension/">Explore the VSCode extension &rarr;</a></p>
   </div>
 </section>
 

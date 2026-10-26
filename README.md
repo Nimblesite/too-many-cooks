@@ -25,8 +25,9 @@ It listens on `http://localhost:4040`. Override the port with `TMC_PORT=5050 npx
 With the server running, point your agent at it:
 
 ```bash
-# Claude Code (Streamable HTTP transport)
 claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
+codex mcp add too-many-cooks --url http://localhost:4040/mcp
+pi mcp add too-many-cooks --url http://localhost:4040/mcp
 ```
 
 ## VSCode Extension

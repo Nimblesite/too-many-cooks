@@ -32,7 +32,7 @@ const techdocOptions = {
     }
   },
   features: {
-    blog: false,
+    blog: true,
     docs: true,
     darkMode: true,
     i18n: true,
@@ -62,18 +62,20 @@ export default function(eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ [techdocAssetsDir]: "techdoc" });
 
   const templatesDir = join(__dirname, "node_modules", "eleventy-plugin-techdoc", "templates");
-  eleventyConfig.addTemplate(
+  // The theme's own pages, served as if they lived in src/.
+  const themePages = [
     "sitemap.njk",
-    readFileSync(join(templatesDir, "pages/sitemap.njk"), "utf-8")
-  );
-  eleventyConfig.addTemplate(
     "robots.txt.njk",
-    readFileSync(join(templatesDir, "pages/robots.txt.njk"), "utf-8")
-  );
-  eleventyConfig.addTemplate(
     "llms.txt.njk",
-    readFileSync(join(templatesDir, "pages/llms.txt.njk"), "utf-8")
-  );
+    "blog/index.njk",
+    "blog/tags.njk",
+    "blog/tags-pages.njk",
+    "blog/categories.njk",
+    "blog/categories-pages.njk",
+  ];
+  for (const name of themePages) {
+    eleventyConfig.addTemplate(name, readFileSync(join(templatesDir, "pages", name), "utf-8"));
+  }
 
   eleventyConfig.addPassthroughCopy("src/assets");
   eleventyConfig.addPassthroughCopy("src/CNAME");

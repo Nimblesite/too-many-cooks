@@ -17,6 +17,8 @@ export const PATHS = {
   zhHome: '/zh/',
   zhGettingStarted: '/zh/docs/getting-started/',
   zhHowItWorks: '/zh/docs/how-it-works/',
+  blog: '/blog/',
+  blogPost: '/blog/0-16-the-server-just-starts/',
 };
 
 export const TOOL_DOC_PATHS = [
@@ -60,6 +62,13 @@ export const SELECTORS = {
   copyButton: '.copy-btn',
   headingWithAnchor: '.docs-content h2[id], .doc-content h2[id]',
   headingAnchor: '.heading-anchor',
+  quickstartVideo: '#quickstart-video',
+  videoSource: '#quickstart-video source',
+  videoCaptions: '#quickstart-video track[kind="captions"]',
+  quickstart: '.quickstart',
+  blogNavLink: 'nav a[href="/blog/"]',
+  blogPostLink: '.post-list a.post-title',
+  blogPostTitle: '.blog-post-header h1',
 };
 
 // Attributes and classes the site JavaScript toggles.
@@ -133,6 +142,7 @@ export const ALLOWED_LOCALES = [LOCALES.en, LOCALES.zh];
 export const TITLES = {
   home: /Too Many Cooks/i,
   gettingStarted: /Getting Started/i,
+  blogPost: /Too Many Cooks 0\.16/,
 };
 
 export const STATUS_OK = 200;
@@ -146,3 +156,19 @@ export const THRESHOLDS = {
   opacityVisible: 0.8,
   opacityHidden: 0.2,
 };
+
+// The homepage quickstart film [WEB-VIDEO]: tracked in Git LFS, so a checkout
+// without LFS serves ~130-byte pointer files instead of media.
+export const VIDEO = {
+  sourceCount: 2,
+  minMediaBytes: 10_000,
+  types: { mp4: 'video/mp4', jpeg: 'image/jpeg', vtt: 'text/vtt' },
+  captionsLang: 'en',
+};
+
+// One connect line per agent, as the homepage and docs show them.
+export const CONNECT_COMMANDS = [
+  'claude mcp add --transport http too-many-cooks http://localhost:4040/mcp',
+  'codex mcp add too-many-cooks --url http://localhost:4040/mcp',
+  'pi mcp add too-many-cooks --url http://localhost:4040/mcp',
+];
