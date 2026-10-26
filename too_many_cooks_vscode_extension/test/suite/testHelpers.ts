@@ -331,13 +331,17 @@ export function cleanDatabase(): void {
 // Dialog mocking via DialogService (not monkey-patching vscode.window)
 // ============================================================================
 
-import { setDialogService, resetDialogService } from '../../src/services/dialogService';
+import { getDialogService, resetDialogService, setDialogService } from '../../src/services/dialogService';
+import type { DialogService } from '../../src/services/dialogService';
 
 let mocksInstalled = false;
 
 const warningMessageResponses: (string | undefined)[] = [];
 const quickPickResponses: (string | undefined)[] = [];
 const inputBoxResponses: (string | undefined)[] = [];
+const shownErrorMessages: string[] = [];
+const shownInformationMessages: string[] = [];
+const shownWarningMessages: string[] = [];
 
 export function mockWarningMessage(response: string | undefined): void {
   warningMessageResponses.push(response);
@@ -355,12 +359,14 @@ export function installDialogMocks(): void {
   if (mocksInstalled) { return; }
 
   setDialogService({
-    showErrorMessage: async (_message: string): Promise<string | undefined> => {
-      console.log(`[MOCK] showErrorMessage: ${_message}`);
+    showErrorMessage: async (message: string): Promise<string | undefined> => {
+      shownErrorMessages.push(message);
+      console.log(`[MOCK] showErrorMessage: ${message}`);
       return undefined;
     },
-    showInformationMessage: async (_message: string): Promise<string | undefined> => {
-      console.log(`[MOCK] showInformationMessage: ${_message}`);
+    showInformationMessage: async (message: string): Promise<string | undefined> => {
+      shownInformationMessages.push(message);
+      console.log(`[MOCK] showInformationMessage: ${message}`);
       return undefined;
     },
     showInputBox: async (): Promise<string | undefined> => {
@@ -373,7 +379,8 @@ export function installDialogMocks(): void {
       console.log(`[MOCK] showQuickPick returning: ${val}`);
       return val;
     },
-    showWarningMessage: async (): Promise<string | undefined> => {
+    showWarningMessage: async (message: string): Promise<string | undefined> => {
+      shownWarningMessages.push(message);
       const val = warningMessageResponses.shift();
       console.log(`[MOCK] showWarningMessage returning: ${val}`);
       return val;
@@ -389,11 +396,95 @@ export function restoreDialogMocks(): void {
 
   resetDialogService();
 
+  shownErrorMessages.length = 0;
+  shownInformationMessages.length = 0;
+  shownWarningMessages.length = 0;
   warningMessageResponses.length = 0;
   quickPickResponses.length = 0;
   inputBoxResponses.length = 0;
   mocksInstalled = false;
   console.log('[TEST HELPER] Dialog mocks restored');
+}
+
+// ============================================================================
+// Shown-dialog assertions (recorded by the installed mocks)
+// ============================================================================
+
+export function getShownErrorMessages(): readonly string[] {
+  return [...shownErrorMessages];
+}
+
+export function getShownInformationMessages(): readonly string[] {
+  return [...shownInformationMessages];
+}
+
+export function getShownWarningMessages(): readonly string[] {
+  return [...shownWarningMessages];
+}
+
+export function clearShownDialogMessages(): void {
+  shownErrorMessages.length = 0;
+  shownInformationMessages.length = 0;
+  shownWarningMessages.length = 0;
+}
+
+function assertMessageListed(
+  messages: readonly string[],
+  fragment: string,
+  kind: string,
+): void {
+  if (!messages.some((msg: string): boolean => msg.includes(fragment))) {
+    throw new Error(
+      `Expected ${kind} containing "${fragment}", shown: ${JSON.stringify(messages)}`,
+    );
+  }
+}
+
+export function assertShownErrorMessage(fragment: string): void {
+  assertMessageListed(shownErrorMessages, fragment, 'error message');
+}
+
+export function assertShownInformationMessage(fragment: string): void {
+  assertMessageListed(shownInformationMessages, fragment, 'information message');
+}
+
+export function assertShownWarningMessage(fragment: string): void {
+  assertMessageListed(shownWarningMessages, fragment, 'warning message');
+}
+
+export function resetToDefaultDialogService(): void {
+  resetDialogService();
+}
+
+export function getActiveDialogService(): DialogService {
+  return getDialogService();
+}
+
+// ============================================================================
+// Failure-path connection helpers
+// ============================================================================
+
+const UNREACHABLE_PORT = 1;
+
+/** Disconnect and point the store manager at an unreachable local port. */
+export async function pointAtUnreachablePort(api: TestAPI): Promise<void> {
+  await api.disconnect();
+  api.getStoreManager().setTarget({
+    mode: 'local',
+    port: UNREACHABLE_PORT,
+    transport: 'http-streamable',
+  });
+}
+
+/** Point back at the test server and reconnect. */
+export async function reconnectToTestServer(api: TestAPI): Promise<void> {
+  api.getStoreManager().setTarget({
+    mode: 'local',
+    port: Number(TEST_PORT),
+    transport: 'http-streamable',
+  });
+  await api.connect();
+  await waitForConnection();
 }
 
 // ============================================================================
@@ -488,6 +579,25 @@ export function dumpTree(name: string, items: readonly TreeItemSnapshot[]): void
   }
   dump(items, 0);
   console.log('=== END ===\n');
+}
+
+// ============================================================================
+// Messages tree leaf access (bridge for the black-box messagesTreeLeaf suite)
+// ============================================================================
+
+import { MessagesTreeProvider } from '../../src/ui/tree/messagesTreeProvider';
+
+/** Root count plus first-item child count for the messages tree. */
+export function messagesTreeLeafStats(api: TestAPI): readonly [number, number] {
+  const provider: MessagesTreeProvider = new MessagesTreeProvider(api.getStoreManager());
+  const root = provider.getChildren();
+  const first = root[0];
+  const rootCount: number = root.length;
+  const firstChildCount: number = typeof first === 'undefined'
+    ? -1
+    : provider.getChildren(first).length;
+  provider.dispose();
+  return [rootCount, firstChildCount];
 }
 
 // Assertion helpers
