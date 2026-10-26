@@ -134,7 +134,7 @@ suite('UI Bug Fixes', () => {
       agent_key: receiverKey,
       unread_only: true,
     });
-    assertOk(/"messages"\s*:\s*\[/.test(fetched), 'Get messages should return messages array');
+    assertOk(/"messages"\s*:\s*\[/u.test(fetched), 'Get messages should return messages array');
     assertOk(fetched.includes('auto-marked'), 'Message should be in fetched results');
 
     const fetched2 = await callToolString(api, 'message', {

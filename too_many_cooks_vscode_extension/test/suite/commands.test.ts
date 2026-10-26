@@ -41,7 +41,7 @@ suite('Commands', () => {
     assertOk(commands.includes('tooManyCooks.showDashboard'), 'showDashboard command should be registered');
   });
 
-  test('disconnect command can be executed without error when not connected', async function () {
+  test('disconnect command can be executed without error when not connected', async function disconnectCommandWithoutError () {
     const TIMEOUT_MS = 15000;
     this.timeout(TIMEOUT_MS);
     const api = getTestAPI();

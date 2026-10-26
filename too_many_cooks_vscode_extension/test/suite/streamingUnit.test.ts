@@ -46,8 +46,8 @@ async function registerAgentDirect(mcpSessionId: string, name: string): Promise<
   return text;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
 }
 
 // ============================================================================
@@ -74,7 +74,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const sessionId = await initAdminSessionDirect();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => { controller.abort(); }, 3000);
 
     try {
       const response = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
@@ -123,7 +123,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // -------------------------------------------------------------------------
   // PIECE 3: Does the server PUSH events when state changes?
   // -------------------------------------------------------------------------
-  test('UNIT: Server pushes stream event when agent registered', async function () {
+  test('UNIT: Server pushes stream event when agent registered', async function serverPushesStreamEvent () {
     this.timeout(10000);
 
     const adminSessionId = await initAdminSessionDirect();
@@ -197,13 +197,13 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     controller.abort();
 
     // Wait for stream promise to settle
-    await streamPromise.catch(() => {});
+    await streamPromise.catch(() => undefined);
 
     console.log(`[UNIT] Total chunks received: ${receivedChunks.length}`);
     console.log(`[UNIT] Stream error: ${streamError ?? 'none'}`);
 
     if (streamError) {
-      throw new Error(`Stream error: ${streamError}`);
+      throw new Error(`Stream error: ${String(streamError)}`);
     }
 
     // Check if we got any stream data
@@ -231,7 +231,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   test('UNIT: readEventStream parses stream data lines and calls onEvent', async () => {
     // Simulate a stream using a ReadableStream
     let eventCount = 0;
-    const onEvent = (): void => { eventCount += 1; };
+    function onEvent(): void { eventCount += 1; }
 
     const streamPayload = [
       'event: message\n',
@@ -282,7 +282,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // PIECE 5: Does the VSIX admin event stream actually connect and receive?
   // (Uses the actual startAdminEventStream from source)
   // -------------------------------------------------------------------------
-  test('UNIT: startAdminEventStream receives events from server', async function () {
+  test('UNIT: startAdminEventStream receives events from server', async function startAdminEventStreamReceivesEvents () {
     this.timeout(10000);
 
     // Import the actual function from source
@@ -356,7 +356,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // -------------------------------------------------------------------------
   // PIECE 6: Full StoreManager pipeline - does store update via streaming?
   // -------------------------------------------------------------------------
-  test('UNIT: StoreManager store updates via admin event stream', async function () {
+  test('UNIT: StoreManager store updates via admin event stream', async function storeManagerReceivesStreamedEvents () {
     this.timeout(15000);
 
     const { StoreManager } = await import('../../src/services/storeManager');

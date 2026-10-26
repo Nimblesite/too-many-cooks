@@ -64,8 +64,8 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
+async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
 }
 
 /** Poll until the server stops responding (proves the spawned child was killed). */
@@ -103,7 +103,7 @@ suite('Start Local Server spawns a real server (E2E)', () => {
     assertOk(spec.args.includes('-y'), 'default must pass -y');
   });
 
-  test('startLocal spawns a real server, it serves HTTP, disconnect kills it', async function (): Promise<void> {
+  test('startLocal spawns a real server, it serves HTTP, disconnect kills it', async function startLocalSpawnsRealServer (): Promise<void> {
     this.timeout(TEST_TIMEOUT_MS);
 
     assertOk(fs.existsSync(SERVER_ENTRY), `built server must exist at ${SERVER_ENTRY} — build the MCP server first`);

@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import { AgentTreeItem } from '../../src/ui/tree/agentTreeItem';
 import { LockTreeItem } from '../../src/ui/tree/lockTreeItem';
-import { FileLock } from '../../src/state/types';
+import type { FileLock } from '../../src/state/types';
 import {
   acquireLockAndWait,
   assertEqual,

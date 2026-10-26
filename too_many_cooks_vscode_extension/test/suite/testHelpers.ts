@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { TestAPI, TreeItemSnapshot } from '../../src/testApi';
+import type { TestAPI, TreeItemSnapshot } from '../../src/testApi';
 
 const EXTENSION_ID = 'Nimblesite.too-many-cooks';
 const CI_TIMEOUT_MULTIPLIER = process.env.CI ? 10 : 1;
@@ -99,6 +99,7 @@ export async function ensureServerReady(): Promise<TestAPI> {
 // Direct MCP HTTP helpers (bypass the VSIX StoreManager)
 // ============================================================================
 
+import { isRecord } from '../../src/services/httpClient';
 import { initMcpSession } from '../../src/services/mcpProtocol';
 
 const SSE_ACCEPT: string = 'application/json, text/event-stream';
@@ -117,6 +118,30 @@ export async function initDirectMcpSession(
   return await initMcpSession(baseUrl, endpoint, clientName);
 }
 
+/** Extract the first result.content[0].text string from a JSON value, or null. */
+function extractResultText(value: unknown): string | null {
+  if (!isRecord(value)) { return null; }
+  const result = value['result'];
+  if (!isRecord(result)) { return null; }
+  const content = result['content'];
+  if (!Array.isArray(content)) { return null; }
+  const first: unknown = content[0];
+  if (!isRecord(first)) { return null; }
+  const text = first['text'];
+  return typeof text === 'string' ? text : null;
+}
+
+/** Parse a JSON string and return the first tool-result text, or null. */
+function parseJsonToolText(input: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    return null;
+  }
+  return extractResultText(parsed);
+}
+
 /** Extract the first tool-result text from a Streamable HTTP / JSON response. */
 function parseToolCallText(text: string): string {
   const lines: readonly string[] = text.split('\n').filter(
@@ -124,22 +149,11 @@ function parseToolCallText(text: string): string {
   );
   if (lines.length > 0) {
     const data: string = lines.map((l: string): string => { return l.substring(DATA_LINE_PREFIX.length).trim(); }).join('');
-    try {
-      const parsed = JSON.parse(data);
-      const content = parsed?.result?.content;
-      if (Array.isArray(content) && content.length > 0 && typeof content[0]?.text === 'string') {
-        return content[0].text;
-      }
-    } catch { /* fall through */ }
+    const fromData = parseJsonToolText(data);
+    if (fromData !== null) { return fromData; }
   }
-  try {
-    const parsed = JSON.parse(text);
-    const content = parsed?.result?.content;
-    if (Array.isArray(content) && content.length > 0 && typeof content[0]?.text === 'string') {
-      return content[0].text;
-    }
-  } catch { /* fall through */ }
-  return text;
+  const fromBody = parseJsonToolText(text);
+  return fromBody ?? text;
 }
 
 /** Direct tools/call over raw HTTP — bypasses VSIX callTool and its refreshStatus(). */
@@ -401,7 +415,7 @@ export async function registerAgent(api: TestAPI, name: string): Promise<string>
 }
 
 export function extractKeyFromResult(result: string): string {
-  const match = /"agent_key"\s*:\s*"([^"]+)"/.exec(result);
+  const match = /"agent_key"\s*:\s*"(?<key>[^"]+)"/u.exec(result);
   if (!match) {
     throw new Error(`Could not extract agent_key from result: ${result}`);
   }
@@ -458,8 +472,8 @@ export async function openTooManyCooksPanel(): Promise<void> {
   await vscode.commands.executeCommand('workbench.view.extension.tooManyCooks');
 }
 
-export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+export async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
 }
 
 export function dumpTree(name: string, items: readonly TreeItemSnapshot[]): void {
@@ -483,9 +497,9 @@ export function assertOk(value: unknown, message: string): void {
 
 export function assertEqual<T>(actual: T, expected: T, message?: string): void {
   if (actual !== expected) {
+    const suffix = message ? ` - ${message}` : '';
     throw new Error(
-      `Assertion failed: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}` +
-      (message ? ` - ${message}` : ''),
+      `Assertion failed: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}${suffix}`,
     );
   }
 }

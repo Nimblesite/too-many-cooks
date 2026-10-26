@@ -36,7 +36,7 @@ interface RegisteredAgent {
   readonly key: string;
 }
 
-const register = async (label: string): Promise<RegisteredAgent> => {
+async function register(label: string): Promise<RegisteredAgent> {
   const api = getTestAPI();
   const name = `${label}-${String(Date.now())}-${String(Math.floor(Math.random() * 100000))}`;
   const raw = await callToolString(api, 'register', { name });
@@ -44,16 +44,16 @@ const register = async (label: string): Promise<RegisteredAgent> => {
   const key = extractKeyFromResult(raw);
   assertOk(key.length > 0, `Register ${name} returned empty key`);
   return { key, name };
-};
+}
 
 
 /** Destructuring default that aborts the test if an agent is unexpectedly missing. */
-const missingAgent = (label: string): RegisteredAgent => {
+function missingAgent(label: string): RegisteredAgent {
   throw new Error(`Registered agent missing: ${label}`);
-};
+}
 
 /** Register several agents and wait until every one appears in the tree. */
-const registerAgents = async (names: readonly string[]): Promise<readonly RegisteredAgent[]> => {
+async function registerAgents(names: readonly string[]): Promise<readonly RegisteredAgent[]> {
   const agents: RegisteredAgent[] = [];
   for (const label of names) {
     agents.push(await register(label));
@@ -63,16 +63,16 @@ const registerAgents = async (names: readonly string[]): Promise<readonly Regist
     await waitForAgentInTree(api, agent.name);
   }
   return agents;
-};
+}
 
 /** Wait until every content snippet appears as a message in the tree. */
-const waitForMessagesInTree = async (contents: readonly string[]): Promise<void> => {
+async function waitForMessagesInTree(contents: readonly string[]): Promise<void> {
   const api = getTestAPI();
   for (const content of contents) {
     await waitForMessageInTree(api, content);
   }
-};
-const acquireLock = async (agent: RegisteredAgent, filePath: string): Promise<void> => {
+}
+async function acquireLock(agent: RegisteredAgent, filePath: string): Promise<void> {
   const api = getTestAPI();
   const raw = await callToolString(api, 'lock', {
     action: 'acquire',
@@ -82,13 +82,13 @@ const acquireLock = async (agent: RegisteredAgent, filePath: string): Promise<vo
     reason: `edit-${filePath}`,
   });
   assertOk(!raw.includes('"error"'), `Acquire ${filePath} by ${agent.name} failed: ${raw}`);
-};
+}
 
-const sendMessage = async (
+async function sendMessage(
   from: RegisteredAgent,
   toAgentName: string,
   content: string,
-): Promise<void> => {
+): Promise<void> {
   const api = getTestAPI();
   const raw = await callToolString(api, 'message', {
     action: 'send',
@@ -98,13 +98,13 @@ const sendMessage = async (
     to_agent: toAgentName,
   });
   assertOk(!raw.includes('"error"'), `Send "${content}" from ${from.name} to ${toAgentName} failed: ${raw}`);
-};
+}
 
-const updatePlan = async (
+async function updatePlan(
   agent: RegisteredAgent,
   goal: string,
   currentTask: string,
-): Promise<void> => {
+): Promise<void> {
   const api = getTestAPI();
   const raw = await callToolString(api, 'plan', {
     action: 'update',
@@ -114,24 +114,24 @@ const updatePlan = async (
     goal,
   });
   assertOk(!raw.includes('"error"'), `Plan for ${agent.name} failed: ${raw}`);
-};
+}
 
-const countMessagesInvolving = (agentName: string): number => {
+function countMessagesInvolving(agentName: string): number {
   const api = getTestAPI();
   return api.getMessages().filter(
     (m) => m.fromAgent === agentName || m.toAgent === agentName,
   ).length;
-};
+}
 
-const countLocksHeldBy = (agentName: string): number => {
+function countLocksHeldBy(agentName: string): number {
   const api = getTestAPI();
   return api.getLocks().filter((l) => l.agentName === agentName).length;
-};
+}
 
-const planExistsFor = (agentName: string): boolean => {
+function planExistsFor(agentName: string): boolean {
   const api = getTestAPI();
   return api.getPlans().some((p) => p.agentName === agentName);
-};
+}
 
 suite('Delete Agent — Referential Integrity (cascade proof)', () => {
   suiteSetup(async () => {

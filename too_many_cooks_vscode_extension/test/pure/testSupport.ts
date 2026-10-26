@@ -12,10 +12,10 @@ export function assertMatches<T extends object>(actual: T, expected: Readonly<Pa
 }
 
 /** Log capture sink handed to services under test. */
-export type LogCollector = {
+export interface LogCollector {
   readonly logs: string[];
   readonly log: (msg: string) => void;
-};
+}
 
 /** Collect log messages. */
 export function createLogCollector(): LogCollector {

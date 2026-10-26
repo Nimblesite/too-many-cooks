@@ -9,7 +9,7 @@ import { glob } from 'glob';
 const LOG_DIR: string = path.resolve(__dirname, '..', '..', '..', 'logs');
 const FALLBACK_LOG: string = path.join(
   LOG_DIR,
-  `test-suite-${new Date().toISOString().replace(/[:.]/g, '-')}.log`,
+  `test-suite-${new Date().toISOString().replace(/[:.]/gu, '-')}.log`,
 );
 
 function ensureLogDir(): void {
@@ -36,16 +36,26 @@ function writeLog(message: string): void {
 
 // Intercept process.stdout/stderr.write to capture ALL output
 // (including mocha's spec reporter, which bypasses console.log).
+/** Bind a stream write method and return a safe typed forwarder. */
+function bindWrite(write: unknown, receiver: NodeJS.WriteStream): (chunk: unknown, ...args: unknown[]) => boolean {
+  if (typeof write !== 'function') {
+    throw new Error('Stream write is not a function');
+  }
+  return (chunk: unknown, ...args: unknown[]): boolean => {
+    return Reflect.apply(write, receiver, [chunk, ...args]) === true;
+  };
+}
+
 function installOutputCapture(): void {
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const originalStdoutWrite = bindWrite(process.stdout.write.bind(process.stdout), process.stdout);
+  const originalStderrWrite = bindWrite(process.stderr.write.bind(process.stderr), process.stderr);
 
   process.stdout.write = (chunk: unknown, ...args: unknown[]): boolean => {
     if (logStream !== null) {
       const text: string = typeof chunk === 'string' ? chunk : String(chunk);
       logStream.write(text);
     }
-    return (originalStdoutWrite as Function)(chunk, ...args);
+    return originalStdoutWrite(chunk, ...args);
   };
 
   process.stderr.write = (chunk: unknown, ...args: unknown[]): boolean => {
@@ -53,7 +63,7 @@ function installOutputCapture(): void {
       const text: string = typeof chunk === 'string' ? chunk : String(chunk);
       logStream.write(`[ERR] ${text}`);
     }
-    return (originalStderrWrite as Function)(chunk, ...args);
+    return originalStderrWrite(chunk, ...args);
   };
 }
 
@@ -90,18 +100,18 @@ export async function run(): Promise<void> {
       // Synchronous write ensures the completion marker is on disk even if
       // the process exits before the stream flushes (CI race condition fix).
       try { fs.appendFileSync(logFile, `[${new Date().toISOString()}] [TEST-SUITE] ${completionMsg}\n`); } catch { /* best effort */ }
-      const settle = (): void => {
+      function settle(): void {
         if (failures > 0) {
           reject(new Error(`${failures} tests failed.`));
         } else {
           resolve();
         }
-      };
-      if (logStream !== null) {
+      }
+      if (logStream === null) {
+        settle();
+      } else {
         logStream.end(settle);
         logStream = null;
-      } else {
-        settle();
       }
     });
 
@@ -115,7 +125,7 @@ export async function run(): Promise<void> {
       writeLog(`  PASS: ${test.fullTitle()}`);
     });
 
-    runner.on('fail', (test, err) => {
+    runner.on('fail', (test, err: Error) => {
       writeLog(`  FAIL: ${test.fullTitle()}`);
       writeLog(`    Error: ${err.message}`);
       if (err.stack) {

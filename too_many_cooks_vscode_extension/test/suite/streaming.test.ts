@@ -38,12 +38,12 @@ const DIRECT_CLIENT_NAME = 'streaming-test-direct';
 suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   let directSession: string;
 
-  const acquireLockDirect = async (
+  async function acquireLockDirect(
     agentKey: string,
     agentName: string,
     filePath: string,
     reason: string,
-  ): Promise<void> => {
+  ): Promise<void> {
     await directToolCall(BASE_URL, directSession, 'lock', {
       action: 'acquire',
       agent_key: agentKey,
@@ -52,7 +52,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
       reason,
     });
     await waitForLockInTree(getTestAPI(), filePath);
-  };
+  }
   let agent1Key = '';
   let agent2Key = '';
   const testId = Date.now();
