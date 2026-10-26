@@ -1,358 +1,223 @@
 import { test, expect } from './coverage.setup.js';
+import {
+  CSS_PROPERTIES,
+  CSS_VALUES,
+  PATHS,
+  SELECTORS,
+  TEXT,
+  THRESHOLDS,
+  VIEWPORTS,
+  WAITS,
+} from './support/constants.js';
+import {
+  clickSidebarToggle,
+  closeMobileMenu,
+  elementExists,
+  expectMobileMenuClosed,
+  expectMobileMenuToggled,
+  expectSidebarOnPage,
+  expectSidebarToggleText,
+  expectSidebarToggled,
+  mobileMenu,
+  openMobileMenu,
+  openSidebar,
+  readMobileMenuState,
+  readStyle,
+  readZIndex,
+  sidebar,
+} from './support/layout.js';
+import {
+  expectDropdownVisible,
+  isLanguageTextHidden,
+  openLanguageDropdown,
+} from './support/language.js';
+import {
+  expectHidden,
+  expectNoHorizontalScroll,
+  expectVisible,
+  gotoDesktop,
+  gotoMobile,
+  setViewport,
+} from './support/page.js';
+
+const NO_HORIZONTAL_SCROLL_CASES = [
+  { title: 'no horizontal scroll on mobile docs page', path: PATHS.gettingStarted },
+  { title: 'no horizontal scroll on mobile homepage', path: PATHS.home },
+];
+
+const SIDEBAR_PAGES = [PATHS.gettingStarted, PATHS.howItWorks];
 
 test.describe('Mobile Menu', () => {
   test('mobile menu toggle opens and closes menu', async ({ page }) => {
-    // Set mobile viewport
-    await page.setViewportSize({ width: 375, height: 667 });
+    await gotoMobile(page, PATHS.home);
+    await expectVisible(mobileMenu(page).toggle);
 
-    await page.goto('/');
-
-    const mobileMenuToggle = page.locator('#mobile-menu-toggle');
-    const navLinks = page.locator('.nav-links');
-
-    // Ensure toggle is visible on mobile
-    await expect(mobileMenuToggle).toBeVisible();
-
-    // Click to open - explicitly wait for the callback to execute
-    await mobileMenuToggle.click();
-    await page.waitForTimeout(50);
-
-    // Verify the click handler executed (lines 90-91 of main.js)
-    await expect(navLinks).toHaveClass(/open/);
-    await expect(mobileMenuToggle).toHaveClass(/active/);
-
-    // Click to close
-    await mobileMenuToggle.click();
-    await page.waitForTimeout(50);
-    await expect(navLinks).not.toHaveClass(/open/);
-    await expect(mobileMenuToggle).not.toHaveClass(/active/);
+    // Click to open and close - the callback must execute.
+    await expectMobileMenuToggled(page, WAITS.handler);
   });
 
   test('mobile menu toggle callback adds classes correctly', async ({ page }) => {
-    // This test specifically targets lines 89-92 of main.js
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
+    await gotoMobile(page, PATHS.home);
 
-    // Verify elements exist
-    const toggleExists = await page.evaluate(() => !!document.getElementById('mobile-menu-toggle'));
-    const navLinksExists = await page.evaluate(() => !!document.querySelector('.nav-links'));
+    expect(await elementExists(page, SELECTORS.mobileMenuToggle)).toBe(true);
+    expect(await elementExists(page, SELECTORS.navLinks)).toBe(true);
 
-    expect(toggleExists).toBe(true);
-    expect(navLinksExists).toBe(true);
+    const initialState = await readMobileMenuState(page);
 
-    // Get initial state
-    const initialState = await page.evaluate(() => ({
-      navLinksOpen: document.querySelector('.nav-links')?.classList.contains('open') ?? false,
-      toggleActive: document.getElementById('mobile-menu-toggle')?.classList.contains('active') ?? false,
-    }));
+    await page.click(SELECTORS.mobileMenuToggle);
+    await page.waitForTimeout(WAITS.short);
 
-    // Click toggle
-    await page.click('#mobile-menu-toggle');
-    await page.waitForTimeout(100);
-
-    // Verify state changed
-    const afterClick = await page.evaluate(() => ({
-      navLinksOpen: document.querySelector('.nav-links')?.classList.contains('open') ?? false,
-      toggleActive: document.getElementById('mobile-menu-toggle')?.classList.contains('active') ?? false,
-    }));
-
+    const afterClick = await readMobileMenuState(page);
     expect(afterClick.navLinksOpen).toBe(!initialState.navLinksOpen);
     expect(afterClick.toggleActive).toBe(!initialState.toggleActive);
   });
 
   test('mobile menu closes when clicking outside', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
+    await gotoMobile(page, PATHS.home);
+    await expectVisible(mobileMenu(page).toggle);
 
-    await page.goto('/');
+    await openMobileMenu(page);
 
-    const mobileMenuToggle = page.locator('#mobile-menu-toggle');
-    const navLinks = page.locator('.nav-links');
+    // Click outside (on the body/main).
+    await page.locator(SELECTORS.main).click({ force: true });
 
-    if (await mobileMenuToggle.isVisible()) {
-      // Open menu
-      await mobileMenuToggle.click();
-      await expect(navLinks).toHaveClass(/open/);
-
-      // Click outside (on the body/main)
-      await page.locator('main').click({ force: true });
-
-      // Menu should close
-      await expect(navLinks).not.toHaveClass(/open/);
-      await expect(mobileMenuToggle).not.toHaveClass(/active/);
-    }
+    await expectMobileMenuClosed(page);
   });
 
   test('mobile menu toggle button exists on mobile homepage', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
+    await gotoMobile(page, PATHS.home);
+    await expectVisible(mobileMenu(page).toggle);
 
-    const mobileMenuToggle = page.locator('#mobile-menu-toggle');
-
-    // Toggle should be visible on mobile
-    await expect(mobileMenuToggle).toBeVisible();
-
-    // Click to open
-    await mobileMenuToggle.click();
-
-    // Nav links should be open
-    const navLinks = page.locator('.nav-links');
-    await expect(navLinks).toHaveClass(/open/);
-    await expect(mobileMenuToggle).toHaveClass(/active/);
-
-    // Click again to close
-    await mobileMenuToggle.click();
-    await expect(navLinks).not.toHaveClass(/open/);
-    await expect(mobileMenuToggle).not.toHaveClass(/active/);
+    await openMobileMenu(page);
+    await closeMobileMenu(page);
   });
 });
 
 test.describe('Docs Sidebar Mobile', () => {
   test('sidebar toggle button appears on mobile and toggles sidebar', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
+    await gotoMobile(page, PATHS.gettingStarted);
 
-    await page.goto('/docs/getting-started/');
+    await expectVisible(sidebar(page).toggle);
+    await expectSidebarToggleText(page, TEXT.sidebarClosed);
 
-    const sidebarToggle = page.locator('.sidebar-toggle');
-    const sidebar = page.locator('#docs-sidebar');
-
-    // Toggle should be visible on mobile
-    await expect(sidebarToggle).toBeVisible();
-    await expect(sidebarToggle).toHaveText('Menu');
-
-    // Click to open
-    await sidebarToggle.click();
-    await expect(sidebar).toHaveClass(/open/);
-    await expect(sidebarToggle).toHaveText('Close');
-
-    // Click to close
-    await sidebarToggle.click();
-    await expect(sidebar).not.toHaveClass(/open/);
-    await expect(sidebarToggle).toHaveText('Menu');
+    await expectSidebarToggled(page);
   });
 
   test('sidebar toggle hidden on desktop', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await gotoDesktop(page, PATHS.gettingStarted);
 
-    await page.goto('/docs/getting-started/');
-
-    const sidebarToggle = page.locator('.sidebar-toggle');
-
-    // Toggle should be hidden on desktop
-    await expect(sidebarToggle).toBeHidden();
+    await expectHidden(sidebar(page).toggle);
   });
 
   test('sidebar toggle responds to window resize', async ({ page }) => {
-    // Start at desktop
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/docs/getting-started/');
+    await gotoDesktop(page, PATHS.gettingStarted);
+    const { toggle } = sidebar(page);
 
-    const sidebarToggle = page.locator('.sidebar-toggle');
+    await expectHidden(toggle);
 
-    // Should be hidden on desktop
-    await expect(sidebarToggle).toBeHidden();
+    await setViewport(page, VIEWPORTS.mobile);
+    await expectVisible(toggle);
 
-    // Resize to mobile
-    await page.setViewportSize({ width: 375, height: 667 });
-
-    // Should become visible
-    await expect(sidebarToggle).toBeVisible();
-
-    // Resize back to desktop
-    await page.setViewportSize({ width: 1280, height: 800 });
-
-    // Should be hidden again
-    await expect(sidebarToggle).toBeHidden();
+    await setViewport(page, VIEWPORTS.desktop);
+    await expectHidden(toggle);
   });
 
   test('sidebar toggle text changes based on state', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/getting-started/');
+    await gotoMobile(page, PATHS.gettingStarted);
 
-    const sidebarToggle = page.locator('.sidebar-toggle');
-    const sidebar = page.locator('#docs-sidebar');
+    await expectSidebarToggleText(page, TEXT.sidebarClosed);
 
-    // Initial state should show "Menu"
-    await expect(sidebarToggle).toHaveText('Menu');
+    await expectSidebarToggled(page);
 
-    // Open sidebar
-    await sidebarToggle.click();
-    await expect(sidebar).toHaveClass(/open/);
-    await expect(sidebarToggle).toHaveText('Close');
-
-    // Close sidebar
-    await sidebarToggle.click();
-    await expect(sidebar).not.toHaveClass(/open/);
-    await expect(sidebarToggle).toHaveText('Menu');
-
-    // Reopen to verify toggle works multiple times
-    await sidebarToggle.click();
-    await expect(sidebarToggle).toHaveText('Close');
+    // Reopen to verify the toggle works multiple times.
+    await openSidebar(page);
+    await expectSidebarToggleText(page, TEXT.sidebarOpen);
   });
 
   test('sidebar toggle on multiple pages', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
+    await setViewport(page, VIEWPORTS.mobile);
 
-    // Test on core page
-    await page.goto('/docs/getting-started/');
-    let sidebarToggle = page.locator('.sidebar-toggle');
-    await expect(sidebarToggle).toBeVisible();
-    await expect(sidebarToggle).toHaveText('Menu');
+    for (const path of SIDEBAR_PAGES) {
+      await expectSidebarOnPage(page, path);
+    }
 
-    // Test on express page
-    await page.goto('/docs/how-it-works/');
-    sidebarToggle = page.locator('.sidebar-toggle');
-    await expect(sidebarToggle).toBeVisible();
-    await expect(sidebarToggle).toHaveText('Menu');
-
-    // Open and verify
-    await sidebarToggle.click();
-    await expect(sidebarToggle).toHaveText('Close');
+    // Open and verify.
+    await clickSidebarToggle(page);
+    await expectSidebarToggleText(page, TEXT.sidebarOpen);
   });
 });
 
 test.describe('Language Dropdown Mobile', () => {
   test('language dropdown displays above page content on mobile', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/getting-started/');
+    await gotoMobile(page, PATHS.gettingStarted);
 
-    const languageBtn = page.locator('.language-btn');
-    const languageDropdown = page.locator('.language-dropdown');
+    await openLanguageDropdown(page);
+    await expectDropdownVisible(page);
 
-    // Click to open dropdown
-    await languageBtn.click();
-    await page.waitForTimeout(50);
-
-    // Dropdown should be visible
-    await expect(languageDropdown).toBeVisible();
-
-    // Get dropdown bounding box
-    const dropdownBox = await languageDropdown.boundingBox();
+    const dropdownBox = await page.locator(SELECTORS.languageDropdown).boundingBox();
     expect(dropdownBox).not.toBeNull();
-
-    // Dropdown should have reasonable dimensions (not clipped)
-    expect(dropdownBox.height).toBeGreaterThan(50);
-    expect(dropdownBox.width).toBeGreaterThan(100);
+    expect(dropdownBox.height).toBeGreaterThan(THRESHOLDS.minDropdownHeight);
+    expect(dropdownBox.width).toBeGreaterThan(THRESHOLDS.minDropdownWidth);
   });
 
   test('language dropdown z-index is above page content', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
+    await gotoMobile(page, PATHS.home);
 
-    const languageBtn = page.locator('.language-btn');
+    await openLanguageDropdown(page);
 
-    // Open dropdown
-    await languageBtn.click();
-    await page.waitForTimeout(50);
-
-    // Check z-index of header and dropdown via computed styles
-    const zIndexes = await page.evaluate(() => {
-      const header = document.querySelector('.header');
-      const dropdown = document.querySelector('.language-dropdown');
-      return {
-        header: parseInt(getComputedStyle(header).zIndex) || 0,
-        dropdown: parseInt(getComputedStyle(dropdown).zIndex) || 0,
-      };
-    });
-
-    // Header should have high z-index
-    expect(zIndexes.header).toBeGreaterThanOrEqual(1000);
-    // Dropdown should also have high z-index
-    expect(zIndexes.dropdown).toBeGreaterThanOrEqual(1000);
+    expect(await readZIndex(page, SELECTORS.header)).toBeGreaterThanOrEqual(
+      THRESHOLDS.minZIndex
+    );
+    expect(await readZIndex(page, SELECTORS.languageDropdown)).toBeGreaterThanOrEqual(
+      THRESHOLDS.minZIndex
+    );
   });
 
   test('header container allows dropdown overflow', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
+    await gotoMobile(page, PATHS.home);
 
-    // Check overflow styles
-    const overflowStyles = await page.evaluate(() => {
-      const header = document.querySelector('.header');
-      const headerContainer = document.querySelector('.header .container');
-      const nav = document.querySelector('.nav');
-      return {
-        header: getComputedStyle(header).overflow,
-        headerContainer: headerContainer ? getComputedStyle(headerContainer).overflow : 'N/A',
-        nav: getComputedStyle(nav).overflow,
-      };
-    });
-
-    // All should allow overflow for dropdown to display
-    expect(overflowStyles.header).toBe('visible');
-    expect(overflowStyles.nav).toBe('visible');
+    expect(await readStyle(page, SELECTORS.header, CSS_PROPERTIES.overflow)).toBe(
+      CSS_VALUES.overflowVisible
+    );
+    expect(await readStyle(page, SELECTORS.nav, CSS_PROPERTIES.overflow)).toBe(
+      CSS_VALUES.overflowVisible
+    );
   });
 });
 
 test.describe('Mobile Layout', () => {
-  test('no horizontal scroll on mobile docs page', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/getting-started/');
+  for (const { title, path } of NO_HORIZONTAL_SCROLL_CASES) {
+    test(title, async ({ page }) => {
+      await gotoMobile(page, path);
 
-    const hasHorizontalScroll = await page.evaluate(() => {
-      return document.documentElement.scrollWidth > document.documentElement.clientWidth;
+      await expectNoHorizontalScroll(page);
     });
-
-    expect(hasHorizontalScroll).toBe(false);
-  });
-
-  test('no horizontal scroll on mobile homepage', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
-
-    const hasHorizontalScroll = await page.evaluate(() => {
-      return document.documentElement.scrollWidth > document.documentElement.clientWidth;
-    });
-
-    expect(hasHorizontalScroll).toBe(false);
-  });
+  }
 });
 
 test.describe('Mobile Responsive Breakpoints', () => {
   test('768px breakpoint applies correct styles', async ({ page }) => {
-    await page.setViewportSize({ width: 768, height: 1024 });
-    await page.goto('/');
+    await setViewport(page, VIEWPORTS.tablet);
+    await page.goto(PATHS.home);
 
-    // Check that mobile menu toggle is visible at 768px
-    const mobileMenuToggle = page.locator('#mobile-menu-toggle');
-    await expect(mobileMenuToggle).toBeVisible();
+    await expectVisible(mobileMenu(page).toggle);
 
-    // Check hero section has reduced padding
-    const heroPadding = await page.evaluate(() => {
-      const hero = document.querySelector('.hero');
-      if (!hero) return null;
-      return getComputedStyle(hero).paddingTop;
-    });
+    const heroPadding = await readStyle(page, SELECTORS.hero, CSS_PROPERTIES.paddingTop);
     expect(heroPadding).not.toBeNull();
   });
 
   test('480px breakpoint applies correct styles', async ({ page }) => {
-    await page.setViewportSize({ width: 480, height: 800 });
-    await page.goto('/');
+    await setViewport(page, VIEWPORTS.smallMobile);
+    await page.goto(PATHS.home);
 
-    // Container should have proper padding
-    const containerPadding = await page.evaluate(() => {
-      const container = document.querySelector('.container');
-      if (!container) return null;
-      return getComputedStyle(container).paddingLeft;
-    });
-
+    const containerPadding = await readStyle(page, SELECTORS.container, CSS_PROPERTIES.paddingLeft);
     expect(containerPadding).not.toBeNull();
-    // Should have at least 1rem (16px) padding
-    expect(parseInt(containerPadding)).toBeGreaterThanOrEqual(16);
+    expect(parseInt(containerPadding, 10)).toBeGreaterThanOrEqual(THRESHOLDS.minContainerPadding);
   });
 
   test('language button hides text on small mobile', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
+    await gotoMobile(page, PATHS.home);
 
-    // The language name text should be hidden on small screens
-    const langTextHidden = await page.evaluate(() => {
-      const langBtn = document.querySelector('.language-btn');
-      const textSpan = langBtn?.querySelector('span:not(.chevron)');
-      if (!textSpan) return true; // If no text span, consider it hidden
-      const style = getComputedStyle(textSpan);
-      return style.display === 'none';
-    });
-
-    expect(langTextHidden).toBe(true);
+    expect(await isLanguageTextHidden(page)).toBe(true);
   });
 });

@@ -1,37 +1,39 @@
 import { test, expect } from './coverage.setup.js';
+import { LANGS, PATHS, SELECTORS, TEXT } from './support/constants.js';
+import { expectHtmlLang } from './support/language.js';
+import { gotoExpectOk, gotoSettled } from './support/page.js';
+
+const CHINESE_PAGES = [
+  { title: 'Chinese homepage loads successfully', path: PATHS.zhHome },
+  { title: 'Chinese getting started page loads successfully', path: PATHS.zhGettingStarted },
+  { title: 'Chinese how it works page loads successfully', path: PATHS.zhHowItWorks },
+];
 
 test.describe('Chinese Translation Pages Exist', () => {
-  test('Chinese homepage loads successfully', async ({ page }) => {
-    const response = await page.goto('/zh/');
-    expect(response.status()).toBe(200);
-  });
-
-  test('Chinese getting started page loads successfully', async ({ page }) => {
-    const response = await page.goto('/zh/docs/getting-started/');
-    expect(response.status()).toBe(200);
-  });
-
-  test('Chinese how it works page loads successfully', async ({ page }) => {
-    const response = await page.goto('/zh/docs/how-it-works/');
-    expect(response.status()).toBe(200);
-  });
+  for (const { title, path } of CHINESE_PAGES) {
+    test(title, async ({ page }) => {
+      await gotoExpectOk(page, path);
+    });
+  }
 
   test('Chinese getting started page contains Chinese text', async ({ page }) => {
-    await page.goto('/zh/docs/getting-started/');
+    await gotoSettled(page, PATHS.zhGettingStarted);
+
     const bodyText = await page.evaluate(() => document.body.textContent);
-    expect(bodyText).toContain('中文');
+    expect(bodyText).toContain(TEXT.zhNativeName);
   });
 
   test('Chinese homepage has lang zh on html element', async ({ page }) => {
-    await page.goto('/zh/');
-    const lang = await page.evaluate(() => document.documentElement.getAttribute('lang'));
-    expect(lang).toBe('zh');
+    await gotoSettled(page, PATHS.zhHome);
+
+    await expectHtmlLang(page, LANGS.zh);
   });
 
   test('Chinese nav links use Chinese translations', async ({ page }) => {
-    await page.goto('/zh/');
-    const docsLink = page.locator('.nav-link').first();
+    await gotoSettled(page, PATHS.zhHome);
+
+    const docsLink = page.locator(SELECTORS.navLink).first();
     const text = await docsLink.textContent();
-    expect(text.trim()).toBe('文档');
+    expect(text.trim()).toBe(TEXT.zhDocsNavLink);
   });
 });

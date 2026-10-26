@@ -1,247 +1,170 @@
 import { test, expect } from './coverage.setup.js';
+import { PATHS, STORAGE_KEYS, THEMES, WAITS } from './support/constants.js';
+import {
+  clearStoredTheme,
+  emulateColorScheme,
+  expectStoredTheme,
+  expectTheme,
+  gotoWithClearedStorage,
+  gotoWithSystemScheme,
+  otherTheme,
+  readTheme,
+  reloadWithStoredTheme,
+  toggleTheme,
+  toggleThemeAndRead,
+} from './support/theme.js';
+
+const SYSTEM_SCHEMES = [
+  {
+    title: 'respects system dark mode preference when no saved theme',
+    scheme: THEMES.dark,
+  },
+  {
+    title: 'respects system light mode preference when no saved theme',
+    scheme: THEMES.light,
+  },
+];
+
+const SAVED_THEME_CASES = [
+  {
+    title: 'saved theme overrides system preference',
+    assertStoredTheme: false,
+  },
+  {
+    title: 'ignores system theme change when theme is saved',
+    assertStoredTheme: true,
+  },
+];
 
 test.describe('Theme Persistence', () => {
   test('dark theme persists after page reload', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
+    await page.goto(PATHS.gettingStarted);
 
-    // Get initial theme to determine expected result
-    const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const initialTheme = await readTheme(page);
+    await toggleTheme(page);
+    await page.waitForTimeout(WAITS.handler);
 
-    // Click dark mode toggle and wait for the callback to complete
-    await page.click('#theme-toggle');
+    const expectedTheme = otherTheme(initialTheme);
+    await expectTheme(page, expectedTheme);
 
-    // Wait a bit for the click handler to execute
-    await page.waitForTimeout(50);
-
-    // Verify theme changed
-    const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';
-    await expect(page.locator('html')).toHaveAttribute('data-theme', expectedTheme);
-
-    // Click again to ensure we're in dark mode for the persistence test
-    if (expectedTheme === 'light') {
-      await page.click('#theme-toggle');
-      await page.waitForTimeout(50);
+    // Click again to ensure we're in dark mode for the persistence test.
+    if (expectedTheme === THEMES.light) {
+      await toggleTheme(page);
+      await page.waitForTimeout(WAITS.handler);
     }
 
-    // Verify theme is dark
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expectTheme(page, THEMES.dark);
+    await expectStoredTheme(page, THEMES.dark);
 
-    // Verify localStorage
-    const theme = await page.evaluate(() => localStorage.getItem('theme'));
-    expect(theme).toBe('dark');
-
-    // Reload page
     await page.reload();
 
-    // Theme should still be dark
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-
-    // localStorage should still have dark
-    const themeAfterReload = await page.evaluate(() => localStorage.getItem('theme'));
-    expect(themeAfterReload).toBe('dark');
+    await expectTheme(page, THEMES.dark);
+    await expectStoredTheme(page, THEMES.dark);
   });
 
   test('light theme persists after page reload', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await gotoWithClearedStorage(page, PATHS.gettingStarted);
 
-    // Get current theme
-    const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
-
-    // If dark, click to make light
-    if (initialTheme === 'dark') {
-      await page.click('#theme-toggle');
+    const initialTheme = await readTheme(page);
+    if (initialTheme === THEMES.dark) {
+      await toggleTheme(page);
     }
 
-    // Verify theme is light
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expectTheme(page, THEMES.light);
 
-    // Reload page
     await page.reload();
 
-    // Theme should still be light
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expectTheme(page, THEMES.light);
   });
 
   test('theme toggle switches between dark and light', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await gotoWithClearedStorage(page, PATHS.gettingStarted);
 
-    const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const initialTheme = await readTheme(page);
 
-    // Click toggle
-    await page.click('#theme-toggle');
+    await toggleTheme(page);
+    await expectTheme(page, otherTheme(initialTheme));
 
-    // Theme should be opposite
-    const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';
-    await expect(page.locator('html')).toHaveAttribute('data-theme', expectedTheme);
-
-    // Click again
-    await page.click('#theme-toggle');
-
-    // Should be back to initial
-    await expect(page.locator('html')).toHaveAttribute('data-theme', initialTheme);
+    await toggleTheme(page);
+    await expectTheme(page, initialTheme);
   });
 });
 
 test.describe('Theme Toggle Callback', () => {
   test('theme toggle click callback changes theme and saves to localStorage', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
+    await page.goto(PATHS.gettingStarted);
+    await clearStoredTheme(page);
 
-    // Clear localStorage to start fresh
-    await page.evaluate(() => localStorage.removeItem('theme'));
+    const currentTheme = await readTheme(page);
 
-    // Get current theme
-    const currentTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
-
-    // Click the toggle
-    await page.click('#theme-toggle');
-
-    // Wait for callback to complete
-    await page.waitForTimeout(100);
-
-    // Verify theme attribute changed
-    const newTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    const newTheme = await toggleThemeAndRead(page);
     expect(newTheme).not.toBe(currentTheme);
+    await expectStoredTheme(page, newTheme);
 
-    // Verify localStorage was updated by the callback
-    const savedTheme = await page.evaluate(() => localStorage.getItem('theme'));
-    expect(savedTheme).toBe(newTheme);
+    await toggleThemeAndRead(page);
 
-    // Click again to verify toggle works both ways
-    await page.click('#theme-toggle');
-    await page.waitForTimeout(100);
-
-    // Should be back to original theme
-    const toggledBack = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
-    expect(toggledBack).toBe(currentTheme);
+    expect(await readTheme(page)).toBe(currentTheme);
   });
 });
 
 test.describe('System Theme Preference', () => {
-  test('respects system dark mode preference when no saved theme', async ({ page }) => {
-    // Emulate dark mode preference
-    await page.emulateMedia({ colorScheme: 'dark' });
+  for (const { title, scheme } of SYSTEM_SCHEMES) {
+    test(title, async ({ page }) => {
+      await gotoWithSystemScheme(page, PATHS.gettingStarted, scheme);
 
-    await page.goto('/docs/getting-started/');
+      await expectTheme(page, scheme);
+    });
+  }
 
-    // Clear any saved theme
-    await page.evaluate(() => localStorage.removeItem('theme'));
-    await page.reload();
+  for (const { title, assertStoredTheme } of SAVED_THEME_CASES) {
+    test(title, async ({ page }) => {
+      await emulateColorScheme(page, THEMES.dark);
+      await page.goto(PATHS.gettingStarted);
+      await reloadWithStoredTheme(page, THEMES.light);
 
-    // Should use system preference (dark)
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  });
-
-  test('respects system light mode preference when no saved theme', async ({ page }) => {
-    // Emulate light mode preference
-    await page.emulateMedia({ colorScheme: 'light' });
-
-    await page.goto('/docs/getting-started/');
-
-    // Clear any saved theme
-    await page.evaluate(() => localStorage.removeItem('theme'));
-    await page.reload();
-
-    // Should use system preference (light)
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  });
-
-  test('saved theme overrides system preference', async ({ page }) => {
-    // Emulate dark mode preference
-    await page.emulateMedia({ colorScheme: 'dark' });
-
-    await page.goto('/docs/getting-started/');
-
-    // Set light theme in localStorage
-    await page.evaluate(() => localStorage.setItem('theme', 'light'));
-    await page.reload();
-
-    // Should use saved theme (light) despite system preferring dark
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  });
-
-  test('responds to system theme change when no saved theme', async ({ page }) => {
-    // Start with light mode
-    await page.emulateMedia({ colorScheme: 'light' });
-
-    await page.goto('/docs/getting-started/');
-
-    // Clear saved theme so system preference takes effect
-    await page.evaluate(() => localStorage.removeItem('theme'));
-    await page.reload();
-
-    // Should be light
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-
-    // Store original matchMedia for later restoration
-    await page.evaluate(() => {
-      // No saved theme - verify this
-      if (localStorage.getItem('theme')) {
-        localStorage.removeItem('theme');
+      await expectTheme(page, THEMES.light);
+      if (assertStoredTheme) {
+        await expectStoredTheme(page, THEMES.light);
       }
     });
+  }
 
-    // Simulate system theme change to dark by emulating and reloading
-    await page.emulateMedia({ colorScheme: 'dark' });
+  test('responds to system theme change when no saved theme', async ({ page }) => {
+    await gotoWithSystemScheme(page, PATHS.gettingStarted, THEMES.light);
 
-    // Trigger the change event on the actual matchMedia listener
+    await expectTheme(page, THEMES.light);
+
+    // No saved theme - verify this before simulating the system change.
+    await page.evaluate((key) => {
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+      }
+    }, STORAGE_KEYS.theme);
+
+    await emulateColorScheme(page, THEMES.dark);
     await page.evaluate(() => {
-      // Create and dispatch a proper change event
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      // The listener checks if no saved theme, then updates
-      // We need to simulate the event
+      const query = window.matchMedia('(prefers-color-scheme: dark)');
       const event = new Event('change');
       Object.defineProperty(event, 'matches', { value: true });
-      mq.dispatchEvent(event);
+      query.dispatchEvent(event);
     });
+    await page.waitForTimeout(WAITS.short);
 
-    // Give time for event to process
-    await page.waitForTimeout(100);
-
-    // Should now be dark (if no saved theme)
-    const currentTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
-    expect(['light', 'dark']).toContain(currentTheme);
+    const currentTheme = await readTheme(page);
+    expect([THEMES.light, THEMES.dark]).toContain(currentTheme);
   });
 
   test('system theme change listener updates theme when no saved preference', async ({ page }) => {
-    // This test verifies the getPreferredTheme function (lines 14-19)
-    // which checks system preference when no saved theme exists
+    await emulateColorScheme(page, THEMES.light);
+    await page.goto(PATHS.gettingStarted);
 
-    // Start with light mode
-    await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/docs/getting-started/');
+    // setTheme() persists on load, so clear it AFTER the initial load.
+    await clearStoredTheme(page);
+    await emulateColorScheme(page, THEMES.dark);
 
-    // The setTheme function saves to localStorage, so clear it AFTER initial load
-    await page.evaluate(() => localStorage.removeItem('theme'));
-
-    // Emulate dark mode
-    await page.emulateMedia({ colorScheme: 'dark' });
-
-    // Reload - this re-runs the initialization which will check system preference
+    // Reload re-runs initialisation, which falls back to the system preference.
     await page.reload();
 
-    // Theme should be dark because system preference is dark
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  });
-
-  test('ignores system theme change when theme is saved', async ({ page }) => {
-    // Start with dark mode preference
-    await page.emulateMedia({ colorScheme: 'dark' });
-
-    await page.goto('/docs/getting-started/');
-
-    // Save light theme
-    await page.evaluate(() => localStorage.setItem('theme', 'light'));
-    await page.reload();
-
-    // Should be light due to saved preference
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-
-    // Verify saved theme exists
-    const savedTheme = await page.evaluate(() => localStorage.getItem('theme'));
-    expect(savedTheme).toBe('light');
+    await expectTheme(page, THEMES.dark);
   });
 });

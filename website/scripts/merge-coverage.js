@@ -11,8 +11,12 @@ const coverageDir = path.join(websiteDir, 'coverage');
 const srcDir = path.join(websiteDir, 'src', 'assets', 'js');
 const nycOutputDir = path.join(coverageDir, '.nyc_output');
 
+const ensureDir = (dir) => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+};
+
 // Ensure directories exist
-if (!fs.existsSync(nycOutputDir)) fs.mkdirSync(nycOutputDir, { recursive: true });
+ensureDir(nycOutputDir);
 
 // Read all coverage files
 const files = fs.readdirSync(coverageDir)
@@ -80,7 +84,7 @@ const istanbulCoverage = {};
 
 // Use a temp directory for v8-to-istanbul source files
 const tempDir = path.join(coverageDir, '.temp-sources');
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+ensureDir(tempDir);
 
 for (const [url, v8Data] of Object.entries(mergedV8)) {
   const fileName = url.split('/').pop() || 'unknown.js';

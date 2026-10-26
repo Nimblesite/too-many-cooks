@@ -1,18 +1,24 @@
-import { test, expect } from './coverage.setup.js';
+import { test } from './coverage.setup.js';
+import { PATHS, SELECTORS } from './support/constants.js';
+import { firstCodeWrapper, hoverCodeWrapper } from './support/code-blocks.js';
+import {
+  expectBodyVisible,
+  expectCountAboveZero,
+  expectVisible,
+  gotoSettled,
+} from './support/page.js';
 
 test.describe('Code Blocks', () => {
   test('copy button appears on hover', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
+    await gotoSettled(page, PATHS.gettingStarted);
 
-    await expect(page.locator('body')).toBeVisible();
+    await expectBodyVisible(page);
+    await expectCountAboveZero(page.locator(SELECTORS.codeElement));
 
-    const codeBlockCount = await page.locator('pre code').count();
-    expect(codeBlockCount).toBeGreaterThan(0);
+    const codeWrapper = firstCodeWrapper(page);
+    await expectVisible(codeWrapper);
 
-    const codeWrapper = page.locator('pre').first().locator('..');
-    await expect(codeWrapper).toBeVisible();
-
-    await codeWrapper.hover();
-    await expect(codeWrapper.locator('.copy-btn')).toBeVisible();
+    await hoverCodeWrapper(page);
+    await expectVisible(codeWrapper.locator(SELECTORS.copyButton));
   });
 });
