@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 
 import { error, type Result, success } from "too-many-cooks-core";
 
-/** Candidate package dirs relative to this file: src/ (tsx) and build/src/ (node). */
-const PKG_DIR_CANDIDATES: readonly string[] = ["..", "../.."];
+/** Candidate package dirs relative to this file: src/ (tsx), build/src/ (node),
+ *  and the executable's own dir inside the single-executable bundle (sea.ts). */
+const PKG_DIR_CANDIDATES: readonly string[] = ["..", "../..", "."];
 
 /** Schema path relative to the package directory. */
 const SCHEMA_REL: string = "schema/tmc-schema.yaml";

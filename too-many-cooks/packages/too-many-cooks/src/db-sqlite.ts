@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { applyMigrations } from "./migrate.js";
+import { databaseOptions } from "./sea.js";
 
 import {
   type Logger,
@@ -66,7 +67,7 @@ const openAndInit: (config: TooManyCooksDataConfig, log: Logger) => Result<TooMa
   }
   let db: Database.Database;
   try {
-    db = new Database(config.dbPath);
+    db = new Database(config.dbPath, databaseOptions());
     db.pragma(PRAGMA_FOREIGN_KEYS);
     seedBroadcastSentinel(db);
   } catch (e: unknown) {

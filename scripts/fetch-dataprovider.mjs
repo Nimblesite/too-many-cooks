@@ -4,12 +4,11 @@
 // published npm package can create the DB offline, with no npx/PATH lookup.
 // Every archive is verified against the release's SHA256SUMS. Idempotent: a
 // matching version stamp skips the download.
-import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { download, downloadVerified, extract, parseSums } from "./lib/fetch-verified.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = readFileSync(join(ROOT, "scripts", "dataprovider-version"), "utf8").trim();
@@ -26,28 +25,13 @@ const KEEP = /^(DataProviderMigrate(\.exe)?|(lib)?e_sqlite3\.(dylib|so|dll))$/u;
 const archiveName = (platform) =>
   `${TOOL}-${VERSION}-${platform}.${platform.startsWith("win32") ? "zip" : "tar.gz"}`;
 
-const download = async (url) => {
-  const res = await fetch(url);
-  if (!res.ok) { throw new Error(`GET ${url} -> ${res.status}`); }
-  return Buffer.from(await res.arrayBuffer());
-};
-
-const parseSums = (text) => new Map(
-  text.trim().split("\n").map((line) => line.trim().split(/\s+/u)).map(([hash, file]) => [file, hash]),
-);
-
 const install = async (platform, sums) => {
   const dest = join(OUT_DIR, platform);
   const stamp = join(dest, STAMP_FILE);
   if (existsSync(stamp) && readFileSync(stamp, "utf8").trim() === VERSION) { return; }
   const name = archiveName(platform);
-  const bytes = await download(`${RELEASE_URL}/${name}`);
-  const actual = createHash("sha256").update(bytes).digest("hex");
-  if (sums.get(name) !== actual) { throw new Error(`SHA256 mismatch for ${name}: ${actual}`); }
-  const work = mkdtempSync(join(tmpdir(), "dpm-"));
-  writeFileSync(join(work, name), bytes);
-  // bsdtar (macOS, Windows 10+, most Linux CI) extracts both .tar.gz and .zip.
-  execFileSync("tar", ["-xf", name], { cwd: work, stdio: "inherit" });
+  const bytes = await downloadVerified(`${RELEASE_URL}/${name}`, name, sums.get(name));
+  const work = extract(name, bytes, "dpm-");
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
   readdirSync(work).filter((f) => KEEP.test(f))

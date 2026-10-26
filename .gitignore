@@ -79,3 +79,8 @@ logs/
 .deslop/
 # [DB-MIGRATE] DataProviderMigrate binaries — fetched by scripts/fetch-dataprovider.mjs, shipped in the npm package
 too-many-cooks/packages/too-many-cooks/dataprovider/
+
+# Single-executable server: pinned Node runtimes cache + staged VSIX payload
+too-many-cooks/.sea-cache/
+too_many_cooks_vscode_extension/bin/
+too_many_cooks_vscode_extension/shipwright.json

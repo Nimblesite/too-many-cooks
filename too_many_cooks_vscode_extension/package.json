@@ -237,7 +237,13 @@
         "tooManyCooks.autoConnect": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically connect to server on startup (requires npm install -g too-many-cooks)"
+          "description": "Automatically connect to server on startup"
+        },
+        "tooManyCooks.serverPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to a too-many-cooks server binary to use instead of the one bundled with the extension. Its --version must match the extension version."
         },
         "tooManyCooks.port": {
           "type": "number",
@@ -300,6 +306,7 @@
     "ui": "./out/src/ui"
   },
   "dependencies": {
+    "@nimblesite/shipwright-vscode": "^0.11.0",
     "module-alias": "^2.2.3"
   },
   "overrides": {

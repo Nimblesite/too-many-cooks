@@ -1,19 +1,17 @@
 /// ConnectionManager local-server launch + spawn-failure tests — Issue #17 / ENOENT fix.
 ///
 /// The VSIX "Start Local Server" command must work on a clean machine with no
-/// global `too-many-cooks` install. It therefore launches the server via
-/// `npx -y too-many-cooks@latest` (always the latest published build) rather
-/// than spawning a bare `too-many-cooks` binary that only exists when installed
-/// globally — the bare spawn produced `spawn too-many-cooks ENOENT`.
-///
-/// On Windows `npx` resolves to a `npx.cmd` shim that Node's spawn() can only
-/// run via the shell; without it spawn() fails with ENOENT. These tests also
-/// prove a genuine spawn failure is surfaced promptly with a descriptive error
-/// instead of being swallowed and masked by the generic startup timeout.
+/// global `too-many-cooks` install. It launches the server binary bundled in
+/// the VSIX ([SWR-IDE-RESOLUTION], serverResolver.ts) — never npx, a global
+/// install or a PATH lookup, all of which failed with `spawn ... ENOENT` or
+/// pulled an unverified version. The binary is a real executable (an .exe on
+/// Windows), so no platform spawns through a shell. These tests also prove a
+/// genuine spawn failure is surfaced promptly with a descriptive error instead
+/// of being swallowed and masked by the generic startup timeout.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { buildLocalLaunchSpec, buildLocalSpawnConfig, createConnectionManager } from '../../src/services/connectionManager';
+import { buildLocalSpawnConfig, createConnectionManager } from '../../src/services/connectionManager';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import { createLogCollector } from './testSupport';
 
@@ -21,25 +19,33 @@ const NONEXISTENT_BIN: string = '/nonexistent/tmc-server-does-not-exist-zzz';
 const NONEXISTENT_LAUNCH: LocalLaunchSpec = { args: [], command: NONEXISTENT_BIN };
 const TEST_PORT: number = 4099;
 const GENERIC_TIMEOUT_FRAGMENT: string = 'did not start within';
-const EXPECTED_PACKAGE: string = 'too-many-cooks@latest';
 
 describe('ConnectionManager local server launch (ENOENT fix)', () => {
-  it('launches via `npx` pinned to the latest published package so no global install is needed', () => {
-    const spec: LocalLaunchSpec = buildLocalLaunchSpec();
+  it('spawns exactly the binary the resolver returns — never npx', async () => {
+    const { log, logs } = createLogCollector();
+    const resolved: string[] = [];
+    const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log, async (): Promise<LocalLaunchSpec> => {
+      resolved.push(NONEXISTENT_BIN);
+      return await Promise.resolve(NONEXISTENT_LAUNCH);
+    });
 
-    assert.strictEqual(
-      spec.command,
-      'npx',
-      `must launch via npx (not a bare binary) so a clean machine has no spawn ENOENT — got "${spec.command}"`,
-    );
+    await assert.rejects(cm.startLocal(TEST_PORT));
+
+    assert.deepStrictEqual(resolved, [NONEXISTENT_BIN], 'the launch is resolved once per start');
     assert.ok(
-      spec.args.includes(EXPECTED_PACKAGE),
-      `must run the latest published server every time — args were: ${spec.args.join(' ')}`,
+      logs.some((l: string) => l.includes(`Spawning local server '${NONEXISTENT_BIN}`)),
+      `must spawn the resolved binary itself — logs: ${logs.join(' | ')}`,
     );
-    assert.ok(
-      spec.args.includes('-y'),
-      `must pass -y so npx auto-installs without an interactive prompt — args were: ${spec.args.join(' ')}`,
-    );
+    assert.ok(!logs.some((l: string) => l.includes('npx')), 'must never launch through npx');
+  });
+
+  it('refuses to start without a resolved launch instead of guessing a binary', async () => {
+    const { log, logs } = createLogCollector();
+    const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+
+    await assert.rejects(cm.startLocal(TEST_PORT), /No local server launch is configured/u);
+    assert.ok(!logs.some((l: string) => l.includes('Spawning local server')), 'nothing is spawned');
+    assert.strictEqual(cm.getMode(), 'disconnected');
   });
 });
 
@@ -70,8 +76,8 @@ describe('ConnectionManager local server spawn failure (#17)', () => {
     );
   });
 
-  it('uses the shell on Windows so the npx.cmd shim resolves, but not on posix', () => {
-    assert.strictEqual(buildLocalSpawnConfig('win32').shell, true, 'Windows must spawn via shell to find the .cmd shim');
+  it('never spawns through a shell, so an extension path with spaces launches on every platform', () => {
+    assert.strictEqual(buildLocalSpawnConfig('win32').shell, false, 'Windows runs the bundled .exe directly');
     assert.strictEqual(buildLocalSpawnConfig('darwin').shell, false, 'macOS does not need the shell');
     assert.strictEqual(buildLocalSpawnConfig('linux').shell, false, 'Linux does not need the shell');
   });

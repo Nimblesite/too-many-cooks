@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode';
 
+import type { LaunchResolver, LocalLaunchSpec } from './services/connectionManager';
 import {
   registerCopyAgentNameCommand,
   registerCopyMessageAsQuoteCommand,
@@ -32,6 +33,8 @@ import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
 import { getFilePathFromItem } from './ui/tree/treeItemUtils';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
+import { resolveServerLaunch } from './services/serverResolver';
+import { shipwrightVscodeApi } from './services/shipwrightVscodeApi';
 
  
 const DEFAULT_PORT: number = 4040;
@@ -55,6 +58,13 @@ function resolvePort(): number {
 }
 
  
+/** [SWR-IDE-RESOLUTION] Launch the bundled, version-verified server binary. */
+function bundledServerLauncher(context: vscode.ExtensionContext): LaunchResolver {
+  return async (): Promise<LocalLaunchSpec> => {
+    return await resolveServerLaunch(context.extensionPath, shipwrightVscodeApi);
+  };
+}
+
 export function activate(context: vscode.ExtensionContext): TestAPI {
   outputChannel = vscode.window.createOutputChannel('Too Many Cooks');
   outputChannel.show(true);
@@ -66,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
   log(`Using workspace folder: ${workspaceFolder}`);
 
   const storeManager: StoreManager = new StoreManager(workspaceFolder, log, resolvePort());
-  const connectionManager: ReturnType<typeof createConnectionManager> = createConnectionManager(workspaceFolder, log);
+  const connectionManager: ReturnType<typeof createConnectionManager> = createConnectionManager(workspaceFolder, log, bundledServerLauncher(context));
   const mcpConfigManager: ReturnType<typeof createMcpConfigManager> = createMcpConfigManager(workspaceFolder, log);
 
   const pickerDeps: ConnectionPickerDeps = {

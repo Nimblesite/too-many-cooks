@@ -33,6 +33,10 @@ MCP_DIR := too-many-cooks
 EXT_DIR := too_many_cooks_vscode_extension
 WEB_DIR := website
 SHIPWRIGHT_REV := 369a32556f44c8db581b5886bc47756d3ad660a4
+# This machine as a Shipwright/VSIX target (darwin-arm64, linux-x64, ...).
+HOST_TARGET := $(shell node -p "process.platform + '-' + process.arch")
+# Source version (0.0.0-dev; only release runners stamp a real one).
+SOURCE_VERSION := $(shell node -p "require('./too-many-cooks/packages/too-many-cooks/package.json').version")
 
 # =============================================================================
 # Standard Targets
@@ -51,7 +55,10 @@ build:
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
 test:
 	@echo "==> Testing MCP server (fail-fast + coverage)..."
-	cd $(MCP_DIR) && npm run build -w packages/core && npm run test:coverage -w packages/too-many-cooks
+	cd $(MCP_DIR) && npm run build && npm run test:coverage -w packages/too-many-cooks
+	@echo "==> Staging the bundled single-executable server for $(HOST_TARGET) ([SWR-VSIX-BUNDLE])..."
+	bash scripts/stage-vsix-server.sh $(HOST_TARGET)
+	bash scripts/verify-bundled-server.sh $(HOST_TARGET) $(SOURCE_VERSION)
 	@echo "==> Testing VS Code extension (E2E + coverage)..."
 	cd $(EXT_DIR) && npm run test:coverage:integration
 	@echo "==> Testing website (Playwright + coverage)..."
@@ -82,6 +89,7 @@ clean:
 	$(RM) $(MCP_DIR)/packages/core/build
 	$(RM) $(MCP_DIR)/packages/too-many-cooks/build $(MCP_DIR)/packages/too-many-cooks/coverage
 	$(RM) $(EXT_DIR)/out $(EXT_DIR)/coverage $(EXT_DIR)/coverage-integration
+	$(RM) $(EXT_DIR)/bin $(EXT_DIR)/shipwright.json
 	$(RM) $(WEB_DIR)/_site
 
 ## ci: lint + test + build (full CI simulation)
@@ -169,8 +177,11 @@ _vsix_build:
 	cd $(EXT_DIR) && npm run pretest
 
 _vsix_package:
-	@echo "==> Packaging extension to .vsix..."
-	cd $(EXT_DIR) && npx vsce package
+	@echo "==> Packaging the $(HOST_TARGET) extension (bundled server) to .vsix..."
+	cd $(MCP_DIR) && npm run build
+	bash scripts/stage-vsix-server.sh $(HOST_TARGET)
+	cd $(EXT_DIR) && npx --yes @vscode/vsce@3.9.2 package --target $(HOST_TARGET) --out too-many-cooks-$(HOST_TARGET)-$(SOURCE_VERSION).vsix
+	bash scripts/verify-vsix.sh $(EXT_DIR)/too-many-cooks-$(HOST_TARGET)-$(SOURCE_VERSION).vsix $(HOST_TARGET) $(SOURCE_VERSION)
 
 _vsix_install:
 	@echo "==> Installing freshly packaged .vsix..."
