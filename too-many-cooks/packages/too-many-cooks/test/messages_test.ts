@@ -8,7 +8,17 @@ import {
   ERR_VALIDATION,
   ERR_NOT_FOUND,
 } from "too-many-cooks-core";
-import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
+import {
+  freshTestDb,
+  registerAgentPair,
+  requireDb,
+  teardownTestDb,
+} from "./support/db_fixture.js";
+import {
+  assertNonNullish,
+  expectErr,
+  expectOk,
+} from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_messages.db";
 
@@ -23,13 +33,10 @@ describe("messages", () => {
     const fixture = freshTestDb(TEST_DB_PATH);
     db = fixture.db;
 
-    // Register sender
-    const sender = await registerAgent(db, "sender-agent");
+    // Register sender and receiver
+    const [sender, receiver] = await registerAgentPair(db, "sender-agent", "receiver-agent");
     senderName = sender.agentName;
     senderKey = sender.agentKey;
-
-    // Register receiver
-    const receiver = await registerAgent(db, "receiver-agent");
     receiverName = receiver.agentName;
     receiverKey = receiver.agentKey;
   });
@@ -39,60 +46,43 @@ describe("messages", () => {
   });
 
   it("sendMessage creates message with ID", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    const result = await db.sendMessage(
-      senderName,
-      senderKey,
-      receiverName,
-      "Hello!",
+    const d = requireDb(db);
+    const messageId = expectOk(
+      await d.sendMessage(senderName, senderKey, receiverName, "Hello!"),
+      "send must be ok",
     );
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) {throw new Error("expected ok");}
-    const messageId = result.value;
     assert.strictEqual(messageId.length, 16);
   });
 
   it("sendMessage fails with invalid credentials", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    const result = await db.sendMessage(
-      senderName,
-      "wrong-key",
-      receiverName,
-      "Hello!",
+    const d = requireDb(db);
+    const error = expectErr(
+      await d.sendMessage(senderName, "wrong-key", receiverName, "Hello!"),
+      "send must fail",
     );
-    assert.strictEqual(result.ok, false);
-    if (result.ok) {throw new Error("expected error");}
-    assert.strictEqual(result.error.code, ERR_UNAUTHORIZED);
+    assert.strictEqual(error.code, ERR_UNAUTHORIZED);
   });
 
   it("sendMessage fails for content exceeding max length", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
+    const d = requireDb(db);
     const longContent = "x".repeat(201); // Default max is 200
-    const result = await db.sendMessage(
-      senderName,
-      senderKey,
-      receiverName,
-      longContent,
+    const error = expectErr(
+      await d.sendMessage(senderName, senderKey, receiverName, longContent),
+      "send must fail",
     );
-    assert.strictEqual(result.ok, false);
-    if (result.ok) {throw new Error("expected error");}
-    assert.strictEqual(result.error.code, ERR_VALIDATION);
-    assert.ok(result.error.message.includes("200"));
+    assert.strictEqual(error.code, ERR_VALIDATION);
+    assert.ok(error.message.includes("200"));
   });
 
   it("getMessages returns messages for agent", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    await db.sendMessage(senderName, senderKey, receiverName, "Message 1");
-    await db.sendMessage(senderName, senderKey, receiverName, "Message 2");
+    const d = requireDb(db);
+    await d.sendMessage(senderName, senderKey, receiverName, "Message 1");
+    await d.sendMessage(senderName, senderKey, receiverName, "Message 2");
 
-    const result = await db.getMessages(receiverName, receiverKey);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
+    const messages = expectOk(
+      await d.getMessages(receiverName, receiverKey),
+      "get must be ok",
+    );
     assert.strictEqual(messages.length, 2);
     assert.deepStrictEqual(
       new Set(messages.map((m) => m.content)),
@@ -101,109 +91,95 @@ describe("messages", () => {
   });
 
   it("getMessages auto-marks messages as read", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    await db.sendMessage(senderName, senderKey, receiverName, "Test message");
+    const d = requireDb(db);
+    await d.sendMessage(senderName, senderKey, receiverName, "Test message");
 
     // First fetch marks as read
-    await db.getMessages(receiverName, receiverKey);
+    await d.getMessages(receiverName, receiverKey);
 
     // Second fetch with unreadOnly=true should return empty
-    const result = await db.getMessages(receiverName, receiverKey, { unreadOnly: true });
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
+    const messages = expectOk(
+      await d.getMessages(receiverName, receiverKey, { unreadOnly: true }),
+      "get must be ok",
+    );
     assert.strictEqual(messages.length, 0);
   });
 
   it("getMessages with unreadOnly=false returns all messages", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    await db.sendMessage(senderName, senderKey, receiverName, "Test message");
+    const d = requireDb(db);
+    await d.sendMessage(senderName, senderKey, receiverName, "Test message");
 
     // First fetch marks as read
-    await db.getMessages(receiverName, receiverKey);
+    await d.getMessages(receiverName, receiverKey);
 
     // Second fetch with unreadOnly=false should still return message
-    const result = await db.getMessages(
-      receiverName,
-      receiverKey,
-      { unreadOnly: false },
+    const messages = expectOk(
+      await d.getMessages(receiverName, receiverKey, { unreadOnly: false }),
+      "get must be ok",
     );
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
     assert.strictEqual(messages.length, 1);
   });
 
   it("getMessages fails with invalid credentials", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    const result = await db.getMessages(receiverName, "wrong-key");
-    assert.strictEqual(result.ok, false);
-    if (result.ok) {throw new Error("expected error");}
-    assert.strictEqual(result.error.code, ERR_UNAUTHORIZED);
+    const d = requireDb(db);
+    const error = expectErr(
+      await d.getMessages(receiverName, "wrong-key"),
+      "get must fail",
+    );
+    assert.strictEqual(error.code, ERR_UNAUTHORIZED);
   });
 
   it("markRead marks specific message", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    const sendResult = await db.sendMessage(
-      senderName,
-      senderKey,
-      receiverName,
-      "To be read",
+    const d = requireDb(db);
+    const messageId = expectOk(
+      await d.sendMessage(senderName, senderKey, receiverName, "To be read"),
+      "send must be ok",
     );
-    if (!sendResult.ok) {throw new Error("expected ok");}
-    const messageId = sendResult.value;
 
-    const result = await db.markRead(messageId, receiverName, receiverKey);
+    const result = await d.markRead(messageId, receiverName, receiverKey);
     assert.strictEqual(result.ok, true);
   });
 
   it("markRead fails for nonexistent message", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    const result = await db.markRead("nonexistent-id", receiverName, receiverKey);
-    assert.strictEqual(result.ok, false);
-    if (result.ok) {throw new Error("expected error");}
-    assert.strictEqual(result.error.code, ERR_NOT_FOUND);
+    const d = requireDb(db);
+    const error = expectErr(
+      await d.markRead("nonexistent-id", receiverName, receiverKey),
+      "mark must fail",
+    );
+    assert.strictEqual(error.code, ERR_NOT_FOUND);
   });
 
   it("broadcast message reaches all agents", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
+    const d = requireDb(db);
     // Send broadcast (to_agent = '*' is broadcast)
-    await db.sendMessage(senderName, senderKey, "*", "Announcement!");
+    await d.sendMessage(senderName, senderKey, "*", "Announcement!");
 
     // Receiver should get broadcast messages
-    const result = await db.getMessages(receiverName, receiverKey);
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
+    const messages = expectOk(
+      await d.getMessages(receiverName, receiverKey),
+      "get must be ok",
+    );
     assert.strictEqual(messages.some((m) => m.content === "Announcement!"), true);
   });
 
   it("listAllMessages returns all messages", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    await db.sendMessage(senderName, senderKey, receiverName, "Direct message");
-    await db.sendMessage(senderName, senderKey, "*", "Broadcast");
+    const d = requireDb(db);
+    await d.sendMessage(senderName, senderKey, receiverName, "Direct message");
+    await d.sendMessage(senderName, senderKey, "*", "Broadcast");
 
-    const result = await db.listAllMessages();
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
+    const messages = expectOk(await d.listAllMessages(), "list must be ok");
     assert.strictEqual(messages.length, 2);
   });
 
   it("message contains correct metadata", async () => {
-    assert.notStrictEqual(db, undefined);
-    if (!db) {throw new Error("expected db");}
-    await db.sendMessage(senderName, senderKey, receiverName, "Test");
+    const d = requireDb(db);
+    await d.sendMessage(senderName, senderKey, receiverName, "Test");
 
-    const result = await db.getMessages(receiverName, receiverKey);
-    if (!result.ok) {throw new Error("expected ok");}
-    const messages = result.value;
-    const msg = messages[0];
-    assert.ok(msg !== undefined, "inbox should hold the sent message");
+    const messages = expectOk(
+      await d.getMessages(receiverName, receiverKey),
+      "get must be ok",
+    );
+    const msg = assertNonNullish(messages[0], "inbox should hold the sent message");
 
     assert.strictEqual(msg.fromAgent, senderName);
     assert.strictEqual(msg.toAgent, receiverName);

@@ -16,6 +16,7 @@ import {
   releaseServerLock,
   resolveLockPath,
 } from "../bin/server_lock.js";
+import { expectErr, expectOk } from "./support/assertions.js";
 
 const TMP_PREFIX = "/tmp/tmc-lockfile-";
 const TEST_PORT = 1234;
@@ -48,6 +49,10 @@ const writeLockFile = (path: string, content: string): void => {
 const lockJson = (pid: number, port: number, startedAt: number): string =>
   JSON.stringify({ pid, port, startedAt });
 
+/** Acquires a lock at `path` and unwraps the Ok value. */
+const acquire = (lockPath: string) =>
+  expectOk(acquireServerLock(lockPath, TEST_PORT, STARTED_AT), "acquire must be ok");
+
 describe("resolveLockPath", () => {
   it("places the lock next to data.db in .too_many_cooks", () => {
     const workspace = newWorkspace();
@@ -59,36 +64,32 @@ describe("resolveLockPath", () => {
 describe("acquireServerLock", () => {
   it("acquires when no lock file exists", () => {
     const lockPath = resolveLockPath(newWorkspace());
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!result.ok) { assert.fail(result.error); }
-    assert.strictEqual(result.value.kind, "acquired");
-    assert.strictEqual(result.value.path, lockPath);
+    const result = acquire(lockPath);
+    assert.strictEqual(result.kind, "acquired");
+    assert.strictEqual(result.path, lockPath);
   });
 
   it("reports busy when a live foreign process (PID 1) holds the lock", () => {
     const lockPath = resolveLockPath(newWorkspace());
     writeLockFile(lockPath, lockJson(INIT_PID, 99, 1));
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!result.ok) { assert.fail(result.error); }
-    if (result.value.kind !== "busy") { assert.fail("expected busy"); }
-    assert.deepStrictEqual(result.value.existing, { pid: INIT_PID, port: 99, startedAt: 1 });
+    const result = acquire(lockPath);
+    assert.strictEqual(result.kind, "busy");
+    assert.deepStrictEqual(result.existing, { pid: INIT_PID, port: 99, startedAt: 1 });
     assert.strictEqual(existsSync(lockPath), true);
   });
 
   it("reports busy when our own live pid holds the lock", () => {
     const lockPath = resolveLockPath(newWorkspace());
     writeLockFile(lockPath, lockJson(OWN_PID, TEST_PORT, STARTED_AT));
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!result.ok) { assert.fail(result.error); }
-    assert.strictEqual(result.value.kind, "busy");
+    const result = acquire(lockPath);
+    assert.strictEqual(result.kind, "busy");
   });
 
   it("overwrites a corrupt (non-JSON) lock file", () => {
     const lockPath = resolveLockPath(newWorkspace());
     writeLockFile(lockPath, "not json at all");
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!result.ok) { assert.fail(result.error); }
-    assert.strictEqual(result.value.kind, "acquired");
+    const result = acquire(lockPath);
+    assert.strictEqual(result.kind, "acquired");
   });
 
   it("overwrites locks with wrong-typed or missing fields", () => {
@@ -104,9 +105,8 @@ describe("acquireServerLock", () => {
     for (const bad of badLocks) {
       const lockPath = resolveLockPath(newWorkspace());
       writeLockFile(lockPath, bad);
-      const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-      if (!result.ok) { assert.fail(result.error); }
-      assert.strictEqual(result.value.kind, "acquired");
+      const result = acquire(lockPath);
+      assert.strictEqual(result.kind, "acquired");
     }
   });
 
@@ -114,9 +114,8 @@ describe("acquireServerLock", () => {
     const lockPath = resolveLockPath(newWorkspace());
     const deadPid = 999999;
     writeLockFile(lockPath, lockJson(deadPid, TEST_PORT, STARTED_AT));
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!result.ok) { assert.fail(result.error); }
-    assert.strictEqual(result.value.kind, "acquired");
+    const result = acquire(lockPath);
+    assert.strictEqual(result.kind, "acquired");
   });
 
   it("fails with an error when the lock path is not writable", () => {
@@ -124,19 +123,17 @@ describe("acquireServerLock", () => {
     const blocker = join(workspace, "blocker");
     closeSync(openSync(blocker, "w"));
     const lockPath = join(blocker, "server.lock");
-    const result = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    assert.strictEqual(result.ok, false);
-    if (result.ok) { assert.fail("unreachable"); }
-    assert.ok(result.error.startsWith("Failed to write lock file"));
-    assert.ok(result.error.includes(lockPath));
+    const error = expectErr(acquireServerLock(lockPath, TEST_PORT, STARTED_AT), "acquire must fail");
+    assert.ok(error.startsWith("Failed to write lock file"));
+    assert.ok(error.includes(lockPath));
   });
 });
 
 describe("releaseServerLock", () => {
   it("removes the lock when it records our own pid", () => {
     const lockPath = resolveLockPath(newWorkspace());
-    const acquired = acquireServerLock(lockPath, TEST_PORT, STARTED_AT);
-    if (!acquired.ok || acquired.value.kind !== "acquired") { assert.fail("acquire failed"); }
+    const acquired = acquire(lockPath);
+    assert.strictEqual(acquired.kind, "acquired");
     releaseServerLock(lockPath);
     assert.strictEqual(existsSync(lockPath), false);
   });

@@ -23,18 +23,12 @@ import { decrypt, encrypt } from "./crypto.js";
 const ERR_DECRYPTION_FAILED: string = "DECRYPTION_FAILED";
 
 /** Encrypt a nullable/optional string field. */
-const encryptField: (value: string | null | undefined, wk: WorkspaceKey) => string | null | undefined = (
-  value: string | null | undefined,
-  wk: WorkspaceKey
-): string | null | undefined => {
+const encryptField = (value: string | null | undefined, wk: WorkspaceKey): string | null | undefined => {
   return value === null || value === undefined ? value : encrypt(value, wk);
 };
 
 /** Decrypt a nullable string field, returning Result. */
-const decryptField: (value: string | null, keychain: Keychain) => Result<string | null, string> = (
-  value: string | null,
-  keychain: Keychain
-): Result<string | null, string> => {
+const decryptField = (value: string | null, keychain: Keychain): Result<string | null, string> => {
   if (value === null) {
     return success(null);
   }
@@ -42,27 +36,18 @@ const decryptField: (value: string | null, keychain: Keychain) => Result<string 
 };
 
 /** Decrypt a string field (non-nullable), returning Result. */
-const decryptRequired: (value: string, keychain: Keychain) => Result<string, string> = (
-  value: string,
-  keychain: Keychain
-): Result<string, string> => {
+const decryptRequired = (value: string, keychain: Keychain): Result<string, string> => {
   return decrypt(value, keychain);
 };
 
 /** Decrypt a FileLock's reason field. */
-const decryptLock: (lock: FileLock, keychain: Keychain) => Result<FileLock, string> = (
-  lock: FileLock,
-  keychain: Keychain
-): Result<FileLock, string> => {
+const decryptLock = (lock: FileLock, keychain: Keychain): Result<FileLock, string> => {
   const reasonResult: Result<string | null, string> = decryptField(lock.reason, keychain);
   return reasonResult.ok ? success({ ...lock, reason: reasonResult.value }) : error(reasonResult.error);
 };
 
 /** Decrypt a LockResult's nested lock reason. */
-const decryptLockResult: (lr: LockResult, keychain: Keychain) => Result<LockResult, string> = (
-  lr: LockResult,
-  keychain: Keychain
-): Result<LockResult, string> => {
+const decryptLockResult = (lr: LockResult, keychain: Keychain): Result<LockResult, string> => {
   if (lr.lock === undefined) {
     return success(lr);
   }
@@ -71,19 +56,13 @@ const decryptLockResult: (lr: LockResult, keychain: Keychain) => Result<LockResu
 };
 
 /** Decrypt a Message's content field. */
-const decryptMessage: (msg: Message, keychain: Keychain) => Result<Message, string> = (
-  msg: Message,
-  keychain: Keychain
-): Result<Message, string> => {
+const decryptMessage = (msg: Message, keychain: Keychain): Result<Message, string> => {
   const contentResult: Result<string, string> = decryptRequired(msg.content, keychain);
   return contentResult.ok ? success({ ...msg, content: contentResult.value }) : error(contentResult.error);
 };
 
 /** Decrypt an AgentPlan's goal and currentTask fields. */
-const decryptPlan: (plan: AgentPlan, keychain: Keychain) => Result<AgentPlan, string> = (
-  plan: AgentPlan,
-  keychain: Keychain
-): Result<AgentPlan, string> => {
+const decryptPlan = (plan: AgentPlan, keychain: Keychain): Result<AgentPlan, string> => {
   const goalResult: Result<string, string> = decryptRequired(plan.goal, keychain);
   if (!goalResult.ok) {
     return error(goalResult.error);
@@ -99,11 +78,7 @@ const decryptPlan: (plan: AgentPlan, keychain: Keychain) => Result<AgentPlan, st
 };
 
 /** Decrypt all items in a readonly array using a mapper. */
-const decryptArray: <T>(
-  items: readonly T[],
-  keychain: Keychain,
-  mapper: (item: T, kc: Keychain) => Result<T, string>
-) => Result<readonly T[], string> = <T>(
+const decryptArray = <T>(
   items: readonly T[],
   keychain: Keychain,
   mapper: (item: T, kc: Keychain) => Result<T, string>
@@ -120,12 +95,9 @@ const decryptArray: <T>(
 };
 
 /** Specialize decryptArray for a single-item mapper. */
-const decryptAll: <T>(
+const decryptAll = <T>(
   mapper: (item: T, kc: Keychain) => Result<T, string>
-) => (items: readonly T[], keychain: Keychain) => Result<readonly T[], string> =
-  <T>(
-    mapper: (item: T, kc: Keychain) => Result<T, string>
-  ): ((items: readonly T[], keychain: Keychain) => Result<readonly T[], string>) =>
+): ((items: readonly T[], keychain: Keychain) => Result<readonly T[], string>) =>
   (items: readonly T[], keychain: Keychain): Result<readonly T[], string> =>
     decryptArray(items, keychain, mapper);
 
@@ -138,18 +110,12 @@ const decryptPlans: (items: readonly AgentPlan[], keychain: Keychain) => Result<
   decryptAll(decryptPlan);
 
 /** Convert a crypto error to a DbError result. */
-const toDbError: <T>(result: Result<T, string>) => Result<T, DbError> = <T>(
-  result: Result<T, string>
-): Result<T, DbError> => {
+const toDbError = <T>(result: Result<T, string>): Result<T, DbError> => {
   return result.ok ? success(result.value) : error({ code: ERR_DECRYPTION_FAILED, message: result.error });
 };
 
 /** Wrap a db Result through a decryption transform. */
-const mapDbResult: <T>(
-  dbResult: Promise<Result<T, DbError>>,
-  transform: (value: T, kc: Keychain) => Result<T, string>,
-  keychain: Keychain
-) => Promise<Result<T, DbError>> = async <T>(
+const mapDbResult = async <T>(
   dbResult: Promise<Result<T, DbError>>,
   transform: (value: T, kc: Keychain) => Result<T, string>,
   keychain: Keychain
@@ -168,15 +134,13 @@ const mapDbResult: <T>(
 // this package is closure-based, so unbound methods behave identically.
 
 /** Agent identity + lifecycle methods: plaintext passthroughs (no encrypted fields). */
-const buildAgentMethods: (db: TooManyCooksDb) => AgentMethodGroup & CloseMethodGroup = (
-  db: TooManyCooksDb
-): AgentMethodGroup & CloseMethodGroup => {
+const buildAgentMethods = (db: TooManyCooksDb): AgentMethodGroup & CloseMethodGroup => {
   const { activate, authenticate, close, deactivate, deactivateAll, listAgents, lookupByKey, register } = db;
   return { activate, authenticate, close, deactivate, deactivateAll, listAgents, lookupByKey, register };
 };
 
 /** Lock methods: encrypt reason on the way out, decrypt on the way in. */
-const buildLockMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain: Keychain) => LockMethodGroup = (
+const buildLockMethods = (
   db: TooManyCooksDb,
   currentKey: WorkspaceKey,
   keychain: Keychain
@@ -213,7 +177,7 @@ const buildLockMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain:
 };
 
 /** Message methods: encrypt content out; decrypt bodies in; overview is plaintext headers. */
-const buildMessageMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain: Keychain) => MessageMethodGroup = (
+const buildMessageMethods = (
   db: TooManyCooksDb,
   currentKey: WorkspaceKey,
   keychain: Keychain
@@ -242,7 +206,7 @@ const buildMessageMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keycha
 };
 
 /** Plan methods: encrypt goal/currentTask out, decrypt in. */
-const buildPlanMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain: Keychain) => PlanMethodGroup = (
+const buildPlanMethods = (
   db: TooManyCooksDb,
   currentKey: WorkspaceKey,
   keychain: Keychain
@@ -263,10 +227,7 @@ const buildPlanMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain:
 });
 
 /** Admin methods: only adminSendMessage encrypts; the rest are passthroughs. */
-const buildAdminMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey) => AdminMethodGroup = (
-  db: TooManyCooksDb,
-  currentKey: WorkspaceKey
-): AdminMethodGroup => {
+const buildAdminMethods = (db: TooManyCooksDb, currentKey: WorkspaceKey): AdminMethodGroup => {
   const { adminDeleteAgent, adminDeleteLock, adminReset, adminResetKey } = db;
   return {
     adminDeleteLock,
@@ -280,7 +241,7 @@ const buildAdminMethods: (db: TooManyCooksDb, currentKey: WorkspaceKey) => Admin
 };
 
 /** Create an encrypting wrapper around a TooManyCooksDb. */
-export const withEncryption: (db: TooManyCooksDb, currentKey: WorkspaceKey, keychain: Keychain) => TooManyCooksDb = (
+export const withEncryption = (
   db: TooManyCooksDb,
   currentKey: WorkspaceKey,
   keychain: Keychain

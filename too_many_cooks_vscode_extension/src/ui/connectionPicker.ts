@@ -60,27 +60,24 @@ export interface ConnectionPickerDeps {
   readonly storeManager: StoreManager;
 }
 
+/** Read one input box value, returning null when cancelled or empty. */
+async function readInput(options: vscode.InputBoxOptions): Promise<string | null> {
+  const value: string | typeof CLEARED = await vscode.window.showInputBox(options) ?? CLEARED;
+  if (value === CLEARED || value.length === 0) { return null; }
+  return value;
+}
+
 /** Prompt for a single input box value. Returns null if cancelled or empty. */
 async function promptInput(
   prompt: string,
   password: boolean,
 ): Promise<string | null> {
-  const value: string | typeof CLEARED = await vscode.window.showInputBox({
-    password,
-    prompt,
-  }) ?? CLEARED;
-  if (value === CLEARED || value.length === 0) { return null; }
-  return value;
+  return await readInput({ password, prompt });
 }
 
 /** Prompt for API URL with a placeholder. Returns null if cancelled or empty. */
 async function promptApiUrl(): Promise<string | null> {
-  const value: string | typeof CLEARED = await vscode.window.showInputBox({
-    placeHolder: PLACEHOLDER_API_URL,
-    prompt: PROMPT_API_URL,
-  }) ?? CLEARED;
-  if (value === CLEARED || value.length === 0) { return null; }
-  return value;
+  return await readInput({ placeHolder: PLACEHOLDER_API_URL, prompt: PROMPT_API_URL });
 }
 
 /** Prompt the user for cloud credentials. Returns null if cancelled. */

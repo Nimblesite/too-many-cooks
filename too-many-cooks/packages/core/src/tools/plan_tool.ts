@@ -8,7 +8,7 @@ import type { Result } from "../result.js";
 import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
-import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
 /** Input schema for plan tool. */
 export const PLAN_INPUT_SCHEMA: {
@@ -39,38 +39,24 @@ export const PLAN_INPUT_SCHEMA: {
 } as const;
 
 /** Tool config for plan. */
-export const PLAN_TOOL_CONFIG: {
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: typeof PLAN_INPUT_SCHEMA;
-  readonly outputSchema: null;
-  readonly annotations: null;
-} = {
-  title: "Plan",
-  description:
-    "Manage your plan. You must register first (except list). " +
+export const PLAN_TOOL_CONFIG = toolConfig(
+  "Plan",
+  "Manage your plan. You must register first (except list). " +
     "REQUIRED: action (update|get|list). " +
     "For update: goal, current_task. " +
     'Example: {"action":"update","goal":"Fix bug",' +
     ' "current_task":"Reading code"}',
-  inputSchema: PLAN_INPUT_SCHEMA,
-  outputSchema: null,
-  annotations: null,
-} as const;
+  PLAN_INPUT_SCHEMA
+);
 
 /** Create plan tool handler. */
-export const createPlanHandler: (
+export const createPlanHandler = (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   logger: Logger,
-  getSession: SessionGetter,
-) => ToolCallback = (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  logger: Logger,
-  getSession: SessionGetter,
-): ToolCallback =>
-  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+  getSession: SessionGetter
+): ToolCallback => {
+  return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const actionOrError: string | CallToolResult = requireActionArg(args);
     if (typeof actionOrError !== "string") {return actionOrError;}
     const action: string = actionOrError;
@@ -88,7 +74,7 @@ export const createPlanHandler: (
             agentName,
             agentKey,
             typeof args.goal === "string" ? args.goal : null,
-            typeof args.current_task === "string" ? args.current_task : null,
+            typeof args.current_task === "string" ? args.current_task : null
           );
         case "get":
           return await handleGet(db, agentName);
@@ -96,28 +82,21 @@ export const createPlanHandler: (
           return unknownActionError(action);
       }
     });
-  }};
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
 
-const handleUpdate: (
+const handleUpdate = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   agentName: string,
   agentKey: string,
   goal: string | null,
-  currentTask: string | null,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  agentName: string,
-  agentKey: string,
-  goal: string | null,
-  currentTask: string | null,
+  currentTask: string | null
 ): Promise<CallToolResult> => {
   if (goal === null || currentTask === null) {
     return errorContent("update requires goal, current_task");
@@ -137,13 +116,7 @@ const handleUpdate: (
 // Get
 // ---------------------------------------------------------------------------
 
-const handleGet: (
-  db: TooManyCooksDb,
-  agentName: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  agentName: string,
-): Promise<CallToolResult> => {
+const handleGet = async (db: TooManyCooksDb, agentName: string): Promise<CallToolResult> => {
   const result: Result<AgentPlan | null, DbError> = await db.getPlan(agentName);
   if (!result.ok) {return makeErrorResult(result.error);}
   if (result.value !== null) {
@@ -156,7 +129,7 @@ const handleGet: (
 // List
 // ---------------------------------------------------------------------------
 
-const handleList: (db: TooManyCooksDb) => Promise<CallToolResult> = async (db: TooManyCooksDb): Promise<CallToolResult> => {
+const handleList = async (db: TooManyCooksDb): Promise<CallToolResult> => {
   const result: Result<readonly AgentPlan[], DbError> = await db.listPlans();
   return listJsonResult(result, "plans", agentPlanToJson);
 };

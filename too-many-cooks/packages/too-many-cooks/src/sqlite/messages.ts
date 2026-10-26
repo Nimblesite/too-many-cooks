@@ -20,12 +20,13 @@ import { messageHeaderFromJson } from "../json-guards.js";
 import type { MessageMethodGroup } from "../db-method-groups.js";
 import {
   BROADCAST_RECIPIENT,
+  asyncDbOp,
   attempt,
   authenticated,
+  listAll,
   newMessageId,
   now,
   runOrMiss,
-  selectMappedRows,
   toRow,
   toRows,
   validateContentLength,
@@ -73,14 +74,7 @@ const UNREAD_FOR_AGENT_WHERE: string =
   "(SELECT 1 FROM message_reads mr WHERE mr.message_id = messages.id AND mr.agent_name = ?))";
 
 /** Insert a message row and return its id. Shared by sendMessage/adminSendMessage. */
-export const insertMessage: (
-  db: Database.Database,
-  msgId: string,
-  fromAgent: string,
-  toAgent: string,
-  content: string,
-  timestamp: number
-) => Result<string, DbError> = (
+export const insertMessage = (
   db: Database.Database,
   msgId: string,
   fromAgent: string,
@@ -95,15 +89,7 @@ export const insertMessage: (
 };
 
 /** Send a message between agents. */
-const sendMessage: (
-  db: Database.Database,
-  log: Logger,
-  fromAgent: string,
-  fromKey: string,
-  toAgent: string,
-  content: string,
-  maxLen: number
-) => Result<string, DbError> = (
+const sendMessage = (
   db: Database.Database,
   log: Logger,
   fromAgent: string,
@@ -119,13 +105,7 @@ const sendMessage: (
 };
 
 /** Validate then insert a message row. */
-const composeMessage: (
-  db: Database.Database,
-  fromAgent: string,
-  toAgent: string,
-  content: string,
-  maxLen: number
-) => Result<string, DbError> = (
+const composeMessage = (
   db: Database.Database,
   fromAgent: string,
   toAgent: string,
@@ -140,13 +120,7 @@ const composeMessage: (
 };
 
 /** [MSG-AUTO-READ] Run one read-marking statement for a message. */
-const runMarkRead: (
-  directStmt: Database.Statement,
-  broadcastStmt: Database.Statement,
-  agentName: string,
-  msg: Message,
-  timestamp: number
-) => void = (
+const runMarkRead = (
   directStmt: Database.Statement,
   broadcastStmt: Database.Statement,
   agentName: string,
@@ -162,7 +136,7 @@ const runMarkRead: (
 
 /** Auto-mark fetched messages as read. Direct messages update read_at;
  *  broadcasts insert into message_reads. Failures are logged, never thrown. */
-const autoMarkRead: (db: Database.Database, log: Logger, agentName: string, messages: readonly Message[]) => void = (
+const autoMarkRead = (
   db: Database.Database,
   log: Logger,
   agentName: string,
@@ -190,13 +164,7 @@ const autoMarkRead: (db: Database.Database, log: Logger, agentName: string, mess
 };
 
 /** Get messages for an agent. */
-const getMessages: (
-  db: Database.Database,
-  log: Logger,
-  agentName: string,
-  agentKey: string,
-  unreadOnly: boolean
-) => Result<readonly Message[], DbError> = (
+const getMessages = (
   db: Database.Database,
   log: Logger,
   agentName: string,
@@ -210,12 +178,7 @@ const getMessages: (
 };
 
 /** Run the inbox query and auto-mark the fetched messages read. */
-const fetchMessages: (
-  db: Database.Database,
-  log: Logger,
-  agentName: string,
-  unreadOnly: boolean
-) => Result<readonly Message[], DbError> = (
+const fetchMessages = (
   db: Database.Database,
   log: Logger,
   agentName: string,
@@ -229,12 +192,7 @@ const fetchMessages: (
 };
 
 /** Mark one read: broadcasts insert a receipt, direct messages set read_at. */
-const recordRead: (
-  db: Database.Database,
-  messageId: string,
-  toAgent: string,
-  agentName: string
-) => Result<void, DbError> = (
+const recordRead = (
   db: Database.Database,
   messageId: string,
   toAgent: string,
@@ -250,11 +208,7 @@ const recordRead: (
 };
 
 /** Set read_at on a direct message owned by the caller. */
-const markDirectRead: (db: Database.Database, messageId: string, agentName: string) => Result<void, DbError> = (
-  db: Database.Database,
-  messageId: string,
-  agentName: string
-): Result<void, DbError> => {
+const markDirectRead = (db: Database.Database, messageId: string, agentName: string): Result<void, DbError> => {
   return attempt((): Result<void, DbError> =>
     runOrMiss(db.prepare(SQL_MARK_DIRECT_READ), [now(), messageId, agentName], {
       code: ERR_NOT_FOUND,
@@ -264,11 +218,7 @@ const markDirectRead: (db: Database.Database, messageId: string, agentName: stri
 };
 
 /** Look up the recipient and mark the message read for the caller. */
-const markMessageRead: (db: Database.Database, messageId: string, agentName: string) => Result<void, DbError> = (
-  db: Database.Database,
-  messageId: string,
-  agentName: string
-): Result<void, DbError> => {
+const markMessageRead = (db: Database.Database, messageId: string, agentName: string): Result<void, DbError> => {
   const row: Record<string, unknown> | undefined = toRow(db.prepare(SQL_GET_RECIPIENT).get(messageId));
   if (row === undefined) {
     return error({ code: ERR_NOT_FOUND, message: "Message not found" });
@@ -280,13 +230,7 @@ const markMessageRead: (db: Database.Database, messageId: string, agentName: str
 };
 
 /** Mark a message as read. */
-const markRead: (
-  db: Database.Database,
-  log: Logger,
-  messageId: string,
-  agentName: string,
-  agentKey: string
-) => Result<void, DbError> = (
+const markRead = (
   db: Database.Database,
   log: Logger,
   messageId: string,
@@ -300,31 +244,18 @@ const markRead: (
 };
 
 /** List all messages. */
-const listAllMessages: (db: Database.Database, log: Logger) => Result<readonly Message[], DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<readonly Message[], DbError> => {
-  log.trace("Listing all messages");
-  return selectMappedRows(db, SQL_LIST_ALL_MESSAGES, messageFromJson);
-};
+const listAllMessages = (db: Database.Database, log: Logger): Result<readonly Message[], DbError> =>
+  listAll(db, log, SQL_LIST_ALL_MESSAGES, messageFromJson, "messages");
 
 /** Run a COUNT(*) query returning column `c` and narrow it to a number. */
-const countRows: (db: Database.Database, sql: string, params: ReadonlyArray<number | string>) => number = (
-  db: Database.Database,
-  sql: string,
-  params: ReadonlyArray<number | string>
-): number => {
+const countRows = (db: Database.Database, sql: string, params: ReadonlyArray<number | string>): number => {
   const row: Record<string, unknown> | undefined = toRow(db.prepare(sql).get(...params));
   return typeof row?.c === "number" ? row.c : 0;
 };
 
 /// [STATUS-BOUNDED] Overview for a named caller: total visible, unread inbox
 /// count, and a bounded slice of recent unread inbox headers.
-const agentMessageOverview: (db: Database.Database, agentName: string, limit: number) => MessageOverview = (
-  db: Database.Database,
-  agentName: string,
-  limit: number
-): MessageOverview => {
+const agentMessageOverview = (db: Database.Database, agentName: string, limit: number): MessageOverview => {
   const total: number = countRows(db, `SELECT COUNT(*) AS c FROM messages WHERE ${VISIBLE_TO_AGENT_WHERE}`, [
     agentName,
     agentName,
@@ -346,10 +277,7 @@ const agentMessageOverview: (db: Database.Database, agentName: string, limit: nu
 
 /// [STATUS-BOUNDED] Overview for an unresolved caller: broadcasts only. Reads
 /// cannot be tracked without an identity, so every broadcast counts as unread.
-const broadcastMessageOverview: (db: Database.Database, limit: number) => MessageOverview = (
-  db: Database.Database,
-  limit: number
-): MessageOverview => {
+const broadcastMessageOverview = (db: Database.Database, limit: number): MessageOverview => {
   const total: number = countRows(db, "SELECT COUNT(*) AS c FROM messages WHERE to_agent = ?", [BROADCAST_RECIPIENT]);
   const sql: string = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM messages WHERE to_agent = ? ORDER BY created_at DESC LIMIT ?`;
   const rows: ReadonlyArray<Record<string, unknown>> = toRows(db.prepare(sql).all(BROADCAST_RECIPIENT, limit));
@@ -358,12 +286,7 @@ const broadcastMessageOverview: (db: Database.Database, limit: number) => Messag
 
 /// [STATUS-BOUNDED] Issues #41/#42: bounded, SQL-filtered inbox overview. No
 /// auto-mark-read side effect — `status` is a read-only overview.
-const getMessageOverview: (
-  db: Database.Database,
-  log: Logger,
-  agentName: string | null,
-  limit: number
-) => Result<MessageOverview, DbError> = (
+const getMessageOverview = (
   db: Database.Database,
   log: Logger,
   agentName: string | null,
@@ -376,23 +299,20 @@ const getMessageOverview: (
 };
 
 /** Build message operations. */
-export const createMessageOps: (
+export const createMessageOps = (
   db: Database.Database,
   log: Logger,
   config: TooManyCooksDataConfig
-) => MessageMethodGroup = (db: Database.Database, log: Logger, config: TooManyCooksDataConfig): MessageMethodGroup => ({
+): MessageMethodGroup => ({
   getMessages: async (
     name: string,
     key: string,
     options?: { unreadOnly?: boolean }
   ): Promise<Result<readonly Message[], DbError>> =>
     await Promise.resolve(getMessages(db, log, name, key, options?.unreadOnly ?? true)),
-  getMessageOverview: async (name: string | null, limit: number): Promise<Result<MessageOverview, DbError>> =>
-    await Promise.resolve(getMessageOverview(db, log, name, limit)),
-  listAllMessages: async (): Promise<Result<readonly Message[], DbError>> =>
-    await Promise.resolve(listAllMessages(db, log)),
-  markRead: async (msgId: string, name: string, key: string): Promise<Result<void, DbError>> =>
-    await Promise.resolve(markRead(db, log, msgId, name, key)),
+  getMessageOverview: asyncDbOp(getMessageOverview, db, log),
+  listAllMessages: asyncDbOp(listAllMessages, db, log),
+  markRead: asyncDbOp(markRead, db, log),
   sendMessage: async (from: string, key: string, to: string, content: string): Promise<Result<string, DbError>> =>
     await Promise.resolve(sendMessage(db, log, from, key, to, content, config.maxMessageLength)),
 });

@@ -10,7 +10,13 @@ import {
 } from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
 import { bindTestDb, registerAgent } from "./support/db_fixture.js";
-import { createTestEmitter, createTestLogger, parseToolJson } from "./support/handlers.js";
+import {
+  createTestEmitter,
+  createTestLogger,
+  parseToolJson,
+  runToolErr,
+  runToolOk,
+} from "./support/handlers.js";
 import { getArrayField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_lock_handler.db";
@@ -44,56 +50,60 @@ describe("lock handler", () => {
     return handler(args, {});
   };
 
-  const runAsAgent = async (
+  /** Runs a lock-handler call as the bound agent, expecting success. */
+  const runAsAgentOk = async (
     args: Record<string, unknown>,
-  ): Promise<CallToolResult> => runLockHandler(args, makeSession());
+  ): Promise<Record<string, unknown>> =>
+    runToolOk(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, makeSession()),
+      args,
+    );
+
+  /** Runs a lock-handler call as the bound agent, expecting a tool error. */
+  const runAsAgentErr = async (
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> =>
+    runToolErr(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, makeSession()),
+      args,
+    );
 
   const nullSession = (): SessionIdentity | null => null;
 
   it("acquire succeeds on free file", async () => {
-    const result = await runAsAgent({ action: "acquire", file_path: "/test/file.ts", reason: "editing" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    const parsed = await runAsAgentOk({ action: "acquire", file_path: "/test/file.ts", reason: "editing" });
     assert.strictEqual(parsed.acquired, true);
   });
 
   it("release succeeds when owned", async () => {
-    await runAsAgent({ action: "acquire", file_path: "/release/file.ts" });
-    const result = await runAsAgent({ action: "release", file_path: "/release/file.ts" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    await runAsAgentOk({ action: "acquire", file_path: "/release/file.ts" });
+    const parsed = await runAsAgentOk({ action: "release", file_path: "/release/file.ts" });
     assert.strictEqual(parsed.released, true);
   });
 
   it("renew succeeds when owned", async () => {
-    await runAsAgent({ action: "acquire", file_path: "/renew/file.ts" });
-    const result = await runAsAgent({ action: "renew", file_path: "/renew/file.ts" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    await runAsAgentOk({ action: "acquire", file_path: "/renew/file.ts" });
+    const parsed = await runAsAgentOk({ action: "renew", file_path: "/renew/file.ts" });
     assert.strictEqual(parsed.renewed, true);
   });
 
   it("query returns lock info", async () => {
-    await runAsAgent({ action: "acquire", file_path: "/query/file.ts", reason: "testing" });
-    const result = await runAsAgent({ action: "query", file_path: "/query/file.ts" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    await runAsAgentOk({ action: "acquire", file_path: "/query/file.ts", reason: "testing" });
+    const parsed = await runAsAgentOk({ action: "query", file_path: "/query/file.ts" });
     assert.strictEqual(parsed.locked, true);
   });
 
   it("query returns unlocked for free file", async () => {
-    const result = await runAsAgent({ action: "query", file_path: "/free/file.ts" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    const parsed = await runAsAgentOk({ action: "query", file_path: "/free/file.ts" });
     assert.strictEqual(parsed.locked, false);
   });
 
   it("list returns all locks", async () => {
-    await runAsAgent({ action: "acquire", file_path: "/list/a.ts" });
-    await runAsAgent({ action: "acquire", file_path: "/list/b.ts" });
-    const result = await runAsAgent({ action: "list" });
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    await runAsAgentOk({ action: "acquire", file_path: "/list/a.ts" });
+    await runAsAgentOk({ action: "acquire", file_path: "/list/b.ts" });
+    const parsed = await runAsAgentOk({ action: "list" });
     assert.strictEqual(Array.isArray(parsed.locks), true);
     assert.strictEqual(getArrayField(parsed, "locks").length, 2);
   });
@@ -103,58 +113,56 @@ describe("lock handler", () => {
     const agent2 = await registerAgent(testDb.db(), "force-handler-agent");
     const getSession2 = (): SessionIdentity => ({ agentName: agent2.agentName, agentKey: agent2.agentKey });
 
-    await runAsAgent({ action: "acquire", file_path: "/force/file.ts" });
-    const result = await runLockHandler({ action: "force_release", file_path: "/force/file.ts" }, getSession2);
-    assert.strictEqual(result.isError, true);
+    await runAsAgentOk({ action: "acquire", file_path: "/force/file.ts" });
+    await runToolErr(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, getSession2),
+      { action: "force_release", file_path: "/force/file.ts" },
+    );
   });
 
   it("fails when action is missing", async () => {
-    const result = await runAsAgent({});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({});
   });
 
   it("fails with unknown action", async () => {
-    const result = await runAsAgent({ action: "invalid_action" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "invalid_action" });
   });
 
   it("acquire fails without file_path", async () => {
-    const result = await runAsAgent({ action: "acquire" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "acquire" });
   });
 
   it("release fails without file_path", async () => {
-    const result = await runAsAgent({ action: "release" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "release" });
   });
 
   it("renew fails without file_path", async () => {
-    const result = await runAsAgent({ action: "renew" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "renew" });
   });
 
   it("query fails without file_path", async () => {
-    const result = await runAsAgent({ action: "query" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "query" });
   });
 
   it("force_release fails without file_path", async () => {
-    const result = await runAsAgent({ action: "force_release" });
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "force_release" });
   });
 
   it("fails when not registered and no session", async () => {
-    const result = await runLockHandler({ action: "acquire", file_path: "/test.ts" }, nullSession);
-    assert.strictEqual(result.isError, true);
+    await runToolErr(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, nullSession),
+      { action: "acquire", file_path: "/test.ts" },
+    );
   });
 
   it("works with agent_key override", async () => {
-    const result = await runLockHandler(
+    const parsed = await runToolOk(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, nullSession),
       { action: "acquire", file_path: "/override.ts", agent_key: agentKey },
-      nullSession,
     );
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.acquired, true);
   });
 
@@ -162,15 +170,18 @@ describe("lock handler", () => {
     const agent2 = await registerAgent(testDb.db(), "blocker-agent");
 
     // First agent acquires
-    await runAsAgent({ action: "acquire", file_path: "/contested.ts" });
+    await runAsAgentOk({ action: "acquire", file_path: "/contested.ts" });
 
     // Second agent tries
     const getSession2 = (): SessionIdentity => ({
       agentName: agent2.agentName,
       agentKey: agent2.agentKey,
     });
-    const result = await runLockHandler({ action: "acquire", file_path: "/contested.ts" }, getSession2);
-    assert.strictEqual(result.isError, true);
+    const result = await runToolErr(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, getSession2),
+      { action: "acquire", file_path: "/contested.ts" },
+    );
     const parsed = parseToolJson(result);
     assert.strictEqual(parsed.acquired, false);
   });

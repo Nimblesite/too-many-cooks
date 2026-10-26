@@ -19,11 +19,12 @@ import {
 import type { LockMethodGroup } from "../db-method-groups.js";
 import {
   type SqliteParams,
+  asyncDbOp,
   attempt,
   authedWrite,
   authenticated,
+  listAll,
   now,
-  selectMappedRows,
   selectOneOrNull,
 } from "./shared.js";
 
@@ -51,20 +52,13 @@ const SQL_RENEW_LOCK: string =
 const INITIAL_LOCK_VERSION: number = 1;
 
 /** Query lock for a file path. */
-const queryLock: (db: Database.Database, log: Logger, filePath: string) => Result<FileLock | null, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  filePath: string
-): Result<FileLock | null, DbError> => {
+const queryLock = (db: Database.Database, log: Logger, filePath: string): Result<FileLock | null, DbError> => {
   log.trace(`Querying lock for ${filePath}`);
   return selectOneOrNull(db, SQL_QUERY_LOCK, [filePath], fileLockFromJson);
 };
 
 /** Delete a lock by file path. */
-const deleteExpiredLock: (db: Database.Database, filePath: string) => Result<void, DbError> = (
-  db: Database.Database,
-  filePath: string
-): Result<void, DbError> => {
+const deleteExpiredLock = (db: Database.Database, filePath: string): Result<void, DbError> => {
   return attempt((): Result<void, DbError> => {
     db.prepare(SQL_DELETE_LOCK).run(filePath);
     return success(undefined);
@@ -72,14 +66,7 @@ const deleteExpiredLock: (db: Database.Database, filePath: string) => Result<voi
 };
 
 /** Insert a new lock row. */
-const insertLock: (
-  db: Database.Database,
-  filePath: string,
-  agentName: string,
-  timestamp: number,
-  expiresAt: number,
-  reason: string | null | undefined
-) => Result<LockResult, DbError> = (
+const insertLock = (
   db: Database.Database,
   filePath: string,
   agentName: string,
@@ -110,15 +97,7 @@ const insertLock: (
 };
 
 /** Acquire a file lock. */
-const acquireLock: (
-  db: Database.Database,
-  log: Logger,
-  filePath: string,
-  agentName: string,
-  agentKey: string,
-  reason: string | null | undefined,
-  timeoutMs: number
-) => Result<LockResult, DbError> = (
+const acquireLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
@@ -134,14 +113,7 @@ const acquireLock: (
 };
 
 /** Check the current holder, evict expired locks, then insert. */
-const takeLock: (
-  db: Database.Database,
-  log: Logger,
-  filePath: string,
-  agentName: string,
-  reason: string | null | undefined,
-  timeoutMs: number
-) => Result<LockResult, DbError> = (
+const takeLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
@@ -172,13 +144,7 @@ const takeLock: (
 };
 
 /** Release a file lock. */
-const releaseLock: (
-  db: Database.Database,
-  log: Logger,
-  filePath: string,
-  agentName: string,
-  agentKey: string
-) => Result<void, DbError> = (
+const releaseLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
@@ -194,13 +160,7 @@ const releaseLock: (
 };
 
 /** Force release an expired lock. */
-const forceReleaseLock: (
-  db: Database.Database,
-  log: Logger,
-  filePath: string,
-  agentName: string,
-  agentKey: string
-) => Result<void, DbError> = (
+const forceReleaseLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
@@ -212,11 +172,7 @@ const forceReleaseLock: (
 };
 
 /** Delete the lock only once it has actually expired. */
-const evictIfExpired: (db: Database.Database, log: Logger, filePath: string) => Result<void, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  filePath: string
-): Result<void, DbError> => {
+const evictIfExpired = (db: Database.Database, log: Logger, filePath: string): Result<void, DbError> => {
   const existing: Result<FileLock | null, DbError> = queryLock(db, log, filePath);
   if (!existing.ok) {
     return existing;
@@ -234,23 +190,11 @@ const evictIfExpired: (db: Database.Database, log: Logger, filePath: string) => 
 };
 
 /** List all locks. */
-const listLocks: (db: Database.Database, log: Logger) => Result<readonly FileLock[], DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<readonly FileLock[], DbError> => {
-  log.trace("Listing all locks");
-  return selectMappedRows(db, SQL_LIST_LOCKS, fileLockFromJson);
-};
+const listLocks = (db: Database.Database, log: Logger): Result<readonly FileLock[], DbError> =>
+  listAll(db, log, SQL_LIST_LOCKS, fileLockFromJson, "locks");
 
 /** Renew a file lock. */
-const renewLock: (
-  db: Database.Database,
-  log: Logger,
-  filePath: string,
-  agentName: string,
-  agentKey: string,
-  timeoutMs: number
-) => Result<void, DbError> = (
+const renewLock = (
   db: Database.Database,
   log: Logger,
   filePath: string,
@@ -267,25 +211,11 @@ const renewLock: (
 };
 
 /** Build lock operations. */
-export const createLockOps: (db: Database.Database, log: Logger) => LockMethodGroup = (
-  db: Database.Database,
-  log: Logger
-): LockMethodGroup => ({
-  acquireLock: async (
-    filePath: string,
-    name: string,
-    key: string,
-    reason: string | null | undefined,
-    timeout: number
-  ): Promise<Result<LockResult, DbError>> =>
-    await Promise.resolve(acquireLock(db, log, filePath, name, key, reason, timeout)),
-  forceReleaseLock: async (filePath: string, name: string, key: string): Promise<Result<void, DbError>> =>
-    await Promise.resolve(forceReleaseLock(db, log, filePath, name, key)),
-  listLocks: async (): Promise<Result<readonly FileLock[], DbError>> => await Promise.resolve(listLocks(db, log)),
-  queryLock: async (filePath: string): Promise<Result<FileLock | null, DbError>> =>
-    await Promise.resolve(queryLock(db, log, filePath)),
-  releaseLock: async (filePath: string, name: string, key: string): Promise<Result<void, DbError>> =>
-    await Promise.resolve(releaseLock(db, log, filePath, name, key)),
-  renewLock: async (filePath: string, name: string, key: string, timeout: number): Promise<Result<void, DbError>> =>
-    await Promise.resolve(renewLock(db, log, filePath, name, key, timeout)),
+export const createLockOps = (db: Database.Database, log: Logger): LockMethodGroup => ({
+  acquireLock: asyncDbOp(acquireLock, db, log),
+  forceReleaseLock: asyncDbOp(forceReleaseLock, db, log),
+  listLocks: asyncDbOp(listLocks, db, log),
+  queryLock: asyncDbOp(queryLock, db, log),
+  releaseLock: asyncDbOp(releaseLock, db, log),
+  renewLock: asyncDbOp(renewLock, db, log),
 });

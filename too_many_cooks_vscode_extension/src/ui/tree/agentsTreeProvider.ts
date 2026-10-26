@@ -42,23 +42,25 @@ export class AgentsTreeProvider extends StoreTreeProviderBase<AgentTreeItem> {
   }
 }
 
+function formatCount(count: number, noun: string): string {
+  return count > 1 ? `${String(count)} ${noun}s` : `${String(count)} ${noun}`;
+}
+
+function countUnreadMessages(detail: Readonly<AgentDetails>): number {
+  return detail.receivedMessages.filter(
+    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
+  ).length;
+}
+
 function createAgentItem(detail: Readonly<AgentDetails>): AgentTreeItem {
   const lockCount: number = detail.locks.length;
   const msgCount: number = detail.sentMessages.length + detail.receivedMessages.length;
   const parts: string[] = [];
   if (lockCount > 0) {
-    let suffix: string = '';
-    if (lockCount > 1) {
-      suffix = 's';
-    }
-    parts.push(`${String(lockCount)} lock${suffix}`);
+    parts.push(formatCount(lockCount, 'lock'));
   }
   if (msgCount > 0) {
-    let suffix: string = '';
-    if (msgCount > 1) {
-      suffix = 's';
-    }
-    parts.push(`${String(msgCount)} msg${suffix}`);
+    parts.push(formatCount(msgCount, 'msg'));
   }
 
   let desc: string = 'idle';
@@ -121,9 +123,7 @@ function appendLocksTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDet
 
  
 function appendMessagesTooltip(md: vscode.MarkdownString, detail: Readonly<AgentDetails>): void {
-  const unread: number = detail.receivedMessages.filter(
-    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
-  ).length;
+  const unread: number = countUnreadMessages(detail);
   if (detail.sentMessages.length === 0 && detail.receivedMessages.length === 0) {
     return;
   }
@@ -196,9 +196,7 @@ function appendMessageSummaryChild(
   children: readonly AgentTreeItem[],
   detail: Readonly<AgentDetails>,
 ): AgentTreeItem[] {
-  const unread: number = detail.receivedMessages.filter(
-    (msg: Readonly<Message>): boolean => { return msg.readAt === null; },
-  ).length;
+  const unread: number = countUnreadMessages(detail);
   if (detail.sentMessages.length === 0 && detail.receivedMessages.length === 0) {
     return [...children];
   }

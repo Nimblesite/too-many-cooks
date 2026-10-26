@@ -40,6 +40,28 @@ function field<T>(lookup: Readonly<FieldLookup<T>>): T | null {
   return lookup.guard(value) ? value : lookup.fallback;
 }
 
+/** Guard + fallback pair for a non-nullable field. */
+interface PrimitiveSpec<T> {
+  readonly fallback: T;
+  readonly guard: (value: unknown) => value is T;
+}
+
+function requiredField<T>(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+  spec: Readonly<PrimitiveSpec<T>>,
+): T {
+  return field({ fallback: spec.fallback, guard: spec.guard, key, record }) ?? spec.fallback;
+}
+
+function nullableField<T>(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+  guard: (value: unknown) => value is T,
+): T | null {
+  return field({ fallback: null, guard, key, record });
+}
+
 export function parseArray<T>(
   data: unknown,
   mapper: (raw: Readonly<Record<string, unknown>>) => T,
@@ -53,36 +75,36 @@ export function parseArray<T>(
 }
 
 export function stringField(record: Readonly<Record<string, unknown>>, key: string): string {
-  return field({ fallback: '', guard: isString, key, record }) ?? '';
+  return requiredField(record, key, { fallback: '', guard: isString });
 }
 
 export function numberField(record: Readonly<Record<string, unknown>>, key: string): number {
-  return field({ fallback: 0, guard: isNumber, key, record }) ?? 0;
+  return requiredField(record, key, { fallback: 0, guard: isNumber });
 }
 
 export function boolField(record: Readonly<Record<string, unknown>>, key: string): boolean {
-  return field({ fallback: false, guard: isBoolean, key, record }) ?? false;
+  return requiredField(record, key, { fallback: false, guard: isBoolean });
 }
 
 export function nullableStringField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): string | null {
-  return field({ fallback: null, guard: isString, key, record });
+  return nullableField(record, key, isString);
 }
 
 export function nullableNumberField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): number | null {
-  return field({ fallback: null, guard: isNumber, key, record });
+  return nullableField(record, key, isNumber);
 }
 
 export function nullableBoolField(
   record: Readonly<Record<string, unknown>>,
   key: string,
 ): boolean | null {
-  return field({ fallback: null, guard: isBoolean, key, record });
+  return nullableField(record, key, isBoolean);
 }
 
 export function parseAgentIdentity(raw: Readonly<Record<string, unknown>>): AgentIdentity {

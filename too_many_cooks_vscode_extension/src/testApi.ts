@@ -60,19 +60,9 @@ export interface TestAPI {
 }
 
  
-function extractLabel(item: vscode.TreeItem): string {
-  if (typeof item.label === 'string') {
-    return item.label;
-  }
-  return '';
-}
-
- 
-function extractDescription(item: vscode.TreeItem): string {
-  if (typeof item.description === 'string') {
-    return item.description;
-  }
-  return '';
+function extractStringField(item: vscode.TreeItem, key: 'label' | 'description'): string {
+  const value: unknown = item[key];
+  return typeof value === 'string' ? value : '';
 }
 
 interface ProviderWithChildren<TItem> {
@@ -83,8 +73,8 @@ function toSnapshot<TItem extends vscode.TreeItem>(
   item: TItem,
   provider: Readonly<ProviderWithChildren<TItem>>,
 ): TreeItemSnapshot {
-  const label: string = extractLabel(item);
-  const desc: string = extractDescription(item);
+  const label: string = extractStringField(item, 'label');
+  const desc: string = extractStringField(item, 'description');
   const children: TItem[] = provider.getChildren(item);
   if (children.length === 0) {
     return desc.length > 0 ? { description: desc, label } : { label };
@@ -97,8 +87,8 @@ function toSnapshot<TItem extends vscode.TreeItem>(
 
  
 function toMessageSnapshot(item: MessageTreeItem): TreeItemSnapshot {
-  const label: string = extractLabel(item);
-  const desc: string = extractDescription(item);
+  const label: string = extractStringField(item, 'label');
+  const desc: string = extractStringField(item, 'description');
   if (desc.length > 0) {
     return { description: desc, label };
   }
@@ -149,7 +139,7 @@ function countLockTreeItems(locksProvider: Readonly<LocksTreeProvider>): number 
 function countMessageTreeItems(messagesProvider: Readonly<MessagesTreeProvider>): number {
   return messagesProvider.getChildren().filter(
      
-    (item: MessageTreeItem): boolean => { return extractLabel(item) !== 'No messages'; },
+    (item: MessageTreeItem): boolean => { return extractStringField(item, 'label') !== 'No messages'; },
   ).length;
 }
 

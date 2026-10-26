@@ -10,7 +10,7 @@ import {
   fileLockToJson,
 } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
-import { jsonResult, type IdentityResult, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+import { jsonResult, type IdentityResult, makeErrorResult, resolveIdentity, toolConfig } from "./tool_utils.js";
 
 /// [STATUS-BOUNDED] Issues #41/#42: cap on the recent-header slice embedded in a
 /// status overview. The payload is bounded by this constant regardless of how
@@ -19,9 +19,7 @@ const RECENT_MESSAGE_LIMIT: number = 20;
 
 /// [STATUS-BOUNDED] Serialize a header to JSON — id/from/to/timestamps only,
 /// NEVER the body. Full message content is the job of the `message get` tool.
-const messageHeaderToJson: (header: MessageHeader) => Record<string, unknown> = (
-  header: MessageHeader,
-): Record<string, unknown> => ({
+const messageHeaderToJson = (header: MessageHeader): Record<string, unknown> => ({
   id: header.id,
   from_agent: header.fromAgent,
   to_agent: header.toAgent,
@@ -44,31 +42,19 @@ export const STATUS_INPUT_SCHEMA: {
 } as const;
 
 /** Tool config for status. */
-export const STATUS_TOOL_CONFIG: {
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: typeof STATUS_INPUT_SCHEMA;
-  readonly outputSchema: null;
-  readonly annotations: null;
-} = {
-  title: "Status",
-  description: "Get system overview: agents, locks, plans, messages",
-  inputSchema: STATUS_INPUT_SCHEMA,
-  outputSchema: null,
-  annotations: null,
-} as const;
+export const STATUS_TOOL_CONFIG = toolConfig(
+  "Status",
+  "Get system overview: agents, locks, plans, messages",
+  STATUS_INPUT_SCHEMA
+);
 
 /** Create status tool handler. */
-export const createStatusHandler: (
+export const createStatusHandler = (
   db: TooManyCooksDb,
   logger: Logger,
-  getSession?: SessionGetter,
-) => ToolCallback = (
-  db: TooManyCooksDb,
-  logger: Logger,
-  getSession: SessionGetter = (): null => null,
-): ToolCallback =>
-  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+  getSession: SessionGetter = (): null => null
+): ToolCallback => {
+  return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const log: Logger = logger.child({ tool: "status" });
 
     const agentsResult: Result<readonly AgentIdentity[], DbError> = await db.listAgents();
@@ -99,4 +85,5 @@ export const createStatusHandler: (
     log.debug("Status queried");
 
     return jsonResult({ agents, locks, plans, messages });
-  }};
+  };
+};

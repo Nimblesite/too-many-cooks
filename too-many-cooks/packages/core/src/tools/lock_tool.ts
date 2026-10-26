@@ -13,7 +13,7 @@ import type { Result } from "../result.js";
 import type { DbError, FileLock, LockResult } from "../types.js";
 import { fileLockToJson, lockResultToJson } from "../types.js";
 import { type CallToolResult, type SessionGetter, type ToolCallback, textContent } from "../mcp-types.js";
-import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
 
 /** Input schema for lock tool. */
 export const LOCK_INPUT_SCHEMA: {
@@ -41,40 +41,25 @@ export const LOCK_INPUT_SCHEMA: {
 } as const;
 
 /** Tool config for lock. */
-export const LOCK_TOOL_CONFIG: {
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: typeof LOCK_INPUT_SCHEMA;
-  readonly outputSchema: null;
-  readonly annotations: null;
-} = {
-  title: "File Lock",
-  description:
-    "Manage file locks. You must register first. " +
+export const LOCK_TOOL_CONFIG = toolConfig(
+  "File Lock",
+  "Manage file locks. You must register first. " +
     "REQUIRED: action (acquire|release|force_release|renew|query|list). " +
     "For acquire/release/renew: file_path. For query: file_path. " +
     'Example: {"action":"acquire","file_path":"/path/file.dart",' +
     ' "reason":"editing"}',
-  inputSchema: LOCK_INPUT_SCHEMA,
-  outputSchema: null,
-  annotations: null,
-} as const;
+  LOCK_INPUT_SCHEMA
+);
 
 /** Create lock tool handler. */
-export const createLockHandler: (
+export const createLockHandler = (
   db: TooManyCooksDb,
   config: TooManyCooksDataConfig,
   emitter: NotificationEmitter,
   logger: Logger,
-  getSession: SessionGetter,
-) => ToolCallback = (
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  emitter: NotificationEmitter,
-  logger: Logger,
-  getSession: SessionGetter,
-): ToolCallback =>
-  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+  getSession: SessionGetter
+): ToolCallback => {
+  return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const actionOrError: string | CallToolResult = requireActionArg(args);
     if (typeof actionOrError !== "string") {return actionOrError;}
     const action: string = actionOrError;
@@ -91,7 +76,8 @@ export const createLockHandler: (
 
     return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> =>
       await dispatchAction({ action, db, emitter, log, filePath, agentName, agentKey, reason, lockTimeoutMs: config.lockTimeoutMs }));
-  }};
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Action dispatch
@@ -109,7 +95,7 @@ type DispatchParams = {
   readonly lockTimeoutMs: number;
 };
 
-const dispatchAction: (params: DispatchParams) => Promise<CallToolResult> = async (params: DispatchParams): Promise<CallToolResult> => {
+const dispatchAction = async (params: DispatchParams): Promise<CallToolResult> => {
   const { action, db, emitter, log, filePath, agentName, agentKey, reason, lockTimeoutMs }: DispatchParams = params;
   switch (action) {
     case "acquire":
@@ -140,7 +126,7 @@ type AcquireParams = {
   readonly timeoutMs: number;
 };
 
-const handleAcquire: (params: AcquireParams) => Promise<CallToolResult> = async (params: AcquireParams): Promise<CallToolResult> => {
+const handleAcquire = async (params: AcquireParams): Promise<CallToolResult> => {
   const { db, emitter, log, filePath, agentName, agentKey, reason, timeoutMs }: AcquireParams = params;
   if (filePath === null) {
     return errorContent("acquire requires file_path");
@@ -164,20 +150,13 @@ const handleAcquire: (params: AcquireParams) => Promise<CallToolResult> = async 
 // Release
 // ---------------------------------------------------------------------------
 
-const handleRelease: (
+const handleRelease = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   filePath: string | null,
   agentName: string,
-  agentKey: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  filePath: string | null,
-  agentName: string,
-  agentKey: string,
+  agentKey: string
 ): Promise<CallToolResult> => {
   if (filePath === null) {
     return errorContent("release requires file_path");
@@ -193,20 +172,13 @@ const handleRelease: (
 // Force release
 // ---------------------------------------------------------------------------
 
-const handleForceRelease: (
+const handleForceRelease = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   filePath: string | null,
   agentName: string,
-  agentKey: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  filePath: string | null,
-  agentName: string,
-  agentKey: string,
+  agentKey: string
 ): Promise<CallToolResult> => {
   if (filePath === null) {
     return errorContent("force_release requires file_path");
@@ -224,22 +196,14 @@ const handleForceRelease: (
 // Renew
 // ---------------------------------------------------------------------------
 
-const handleRenew: (
+const handleRenew = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   filePath: string | null,
   agentName: string,
   agentKey: string,
-  timeoutMs: number,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  filePath: string | null,
-  agentName: string,
-  agentKey: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<CallToolResult> => {
   if (filePath === null) {
     return errorContent("renew requires file_path");
@@ -260,13 +224,7 @@ const handleRenew: (
 // Query
 // ---------------------------------------------------------------------------
 
-const handleQuery: (
-  db: TooManyCooksDb,
-  filePath: string | null,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  filePath: string | null,
-): Promise<CallToolResult> => {
+const handleQuery = async (db: TooManyCooksDb, filePath: string | null): Promise<CallToolResult> => {
   if (filePath === null) {
     return errorContent("query requires file_path");
   }
@@ -282,7 +240,7 @@ const handleQuery: (
 // List
 // ---------------------------------------------------------------------------
 
-const handleList: (db: TooManyCooksDb) => Promise<CallToolResult> = async (db: TooManyCooksDb): Promise<CallToolResult> => {
+const handleList = async (db: TooManyCooksDb): Promise<CallToolResult> => {
   const result: Result<readonly FileLock[], DbError> = await db.listLocks();
   return listJsonResult(result, "locks", fileLockToJson);
 };

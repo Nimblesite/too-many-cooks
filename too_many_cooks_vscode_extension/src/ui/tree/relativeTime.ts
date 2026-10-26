@@ -25,22 +25,32 @@ function humanizeAge(timestamp: number): AgeValue {
   return { count: 0, unit: 'now' };
 }
 
-export function getRelativeTime(timestamp: number): string {
+/** Suffix appended to the unit label for the long form. */
+const LONG_SUFFIX: string = ' ago';
+
+/** Suffix for the short form (no trailing text). */
+const SHORT_SUFFIX: string = '';
+
+/** Label shown when the age rounds to zero. */
+const LONG_NOW_LABEL: string = 'just now';
+
+/** Short label shown when the age rounds to zero. */
+const SHORT_NOW_LABEL: string = 'now';
+
+function formatAge(timestamp: number, suffix: string, nowLabel: string): string {
   const { count, unit }: AgeValue = humanizeAge(timestamp);
   switch (unit) {
-    case 'day': return `${String(count)}d ago`;
-    case 'hour': return `${String(count)}h ago`;
-    case 'minute': return `${String(count)}m ago`;
-    default: return 'just now';
+    case 'day': return `${String(count)}d${suffix}`;
+    case 'hour': return `${String(count)}h${suffix}`;
+    case 'minute': return `${String(count)}m${suffix}`;
+    default: return nowLabel;
   }
 }
 
+export function getRelativeTime(timestamp: number): string {
+  return formatAge(timestamp, LONG_SUFFIX, LONG_NOW_LABEL);
+}
+
 export function getRelativeTimeShort(timestamp: number): string {
-  const { count, unit }: AgeValue = humanizeAge(timestamp);
-  switch (unit) {
-    case 'day': return `${String(count)}d`;
-    case 'hour': return `${String(count)}h`;
-    case 'minute': return `${String(count)}m`;
-    default: return 'now';
-  }
+  return formatAge(timestamp, SHORT_SUFFIX, SHORT_NOW_LABEL);
 }

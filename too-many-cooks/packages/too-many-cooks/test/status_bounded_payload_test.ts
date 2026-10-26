@@ -10,12 +10,11 @@ import {
   type TooManyCooksDb,
   createStatusHandler,
 } from "too-many-cooks-core";
-import { bindTestDb } from "./support/db_fixture.js";
+import { bindTestDb, registerAgent } from "./support/db_fixture.js";
 import {
   createTestLogger,
   firstTextBlock,
-  type MessagesOverview,
-  statusMessagesOverview,
+  statusOverviewFor,
 } from "./support/handlers.js";
 import {
   getNumberField,
@@ -35,21 +34,20 @@ describe("status tool bounded payload (#41/#42)", () => {
   it("bounds payload, drops bodies, and reports counts even with a large message history", async () => {
     const db = testDb.db();
     const conn: TooManyCooksDb = db;
-    const sender = await conn.register("bounded-sender");
-    const reader = await conn.register("bounded-reader");
-    if (!sender.ok || !reader.ok) { throw new Error("expected registrations ok"); }
+    const sender = await registerAgent(conn, "bounded-sender");
+    const reader = await registerAgent(conn, "bounded-reader");
 
     // 100 long-bodied messages from sender -> reader. Full bodies would blow the payload.
     const longBody = "x".repeat(150);
     for (let i = 0; i < SEEDED_MESSAGES; i += 1) {
       const sent = await conn.sendMessage(
-        sender.value.agentName, sender.value.agentKey, reader.value.agentName, longBody,
+        sender.agentName, sender.agentKey, reader.agentName, longBody,
       );
       assert.strictEqual(sent.ok, true, "seed send must succeed");
     }
 
     const handler = createStatusHandler(conn, createTestLogger());
-    const result = await handler({ agent_key: reader.value.agentKey }, {});
+    const result = await handler({ agent_key: reader.agentKey }, {});
     assert.strictEqual(result.isError, false, "status must not error");
 
     const rawText = firstTextBlock(result);
@@ -76,32 +74,28 @@ describe("status tool bounded payload (#41/#42)", () => {
         false,
         "status headers must NEVER include the full message body",
       );
-      assert.strictEqual(header.to_agent, reader.value.agentName, "recent must be the caller's own inbox only");
+      assert.strictEqual(header.to_agent, reader.agentName, "recent must be the caller's own inbox only");
     }
   });
 
   it("recent excludes already-read messages and other agents' direct messages", async () => {
     const db = testDb.db();
     const conn: TooManyCooksDb = db;
-    const alice = await conn.register("bounded-alice");
-    const bob = await conn.register("bounded-bob");
-    const carol = await conn.register("bounded-carol");
-    if (!alice.ok || !bob.ok || !carol.ok) { throw new Error("expected registrations ok"); }
+    const alice = await registerAgent(conn, "bounded-alice");
+    const bob = await registerAgent(conn, "bounded-bob");
+    const carol = await registerAgent(conn, "bounded-carol");
 
     // Alice -> Bob (direct). Carol must never see it.
-    const toBob = await conn.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, "for-bob");
+    const toBob = await conn.sendMessage(alice.agentName, alice.agentKey, bob.agentName, "for-bob");
     assert.strictEqual(toBob.ok, true);
     // Alice -> Carol, then Carol reads it: must drop out of Carol's unread recent.
-    const toCarol = await conn.sendMessage(alice.value.agentName, alice.value.agentKey, carol.value.agentName, "for-carol");
+    const toCarol = await conn.sendMessage(alice.agentName, alice.agentKey, carol.agentName, "for-carol");
     assert.strictEqual(toCarol.ok, true);
     if (!toCarol.ok) { throw new Error("expected msg id"); }
-    const marked = await conn.markRead(toCarol.value, carol.value.agentName, carol.value.agentKey);
+    const marked = await conn.markRead(toCarol.value, carol.agentName, carol.agentKey);
     assert.strictEqual(marked.ok, true, "mark read must succeed");
 
-    const handler = createStatusHandler(conn, createTestLogger());
-    const result = await handler({ agent_key: carol.value.agentKey }, {});
-    assert.strictEqual(result.isError, false);
-    const messages: MessagesOverview = statusMessagesOverview(result);
+    const messages = await statusOverviewFor(conn, carol.agentKey);
 
     assert.strictEqual(messages.unread, 0, "Carol has no unread messages after reading hers");
     assert.strictEqual(

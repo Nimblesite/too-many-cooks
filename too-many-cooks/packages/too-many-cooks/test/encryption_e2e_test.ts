@@ -163,10 +163,16 @@ const createStorageDb = (): TooManyCooksDb => {
   };
 };
 
-test("message round-trip: send encrypted, retrieve decrypted", async () => {
+/** Fresh encrypted db plus its underlying storage db (which sees only ciphertext). */
+const createEncryptedDb = (): { readonly storageDb: TooManyCooksDb; readonly db: TooManyCooksDb } => {
   const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
   const storageDb = createStorageDb();
   const db = withEncryption(storageDb, wk, [wk]);
+  return { storageDb, db };
+};
+
+test("message round-trip: send encrypted, retrieve decrypted", async () => {
+  const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
@@ -192,9 +198,7 @@ test("message round-trip: send encrypted, retrieve decrypted", async () => {
 });
 
 test("plan round-trip: update encrypted, retrieve decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
 
@@ -216,9 +220,7 @@ test("plan round-trip: update encrypted, retrieve decrypted", async () => {
 });
 
 test("lock round-trip: acquire encrypted reason, query decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.acquireLock(
     LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
@@ -241,9 +243,7 @@ test("lock round-trip: acquire encrypted reason, query decrypted", async () => {
 });
 
 test("listLocks round-trip: multiple locks encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const secondFile = "/src/auth/tokens.ts";
   const secondReason = "adding refresh token support";
@@ -277,9 +277,7 @@ test("listLocks round-trip: multiple locks encrypted, listed decrypted", async (
 });
 
 test("listPlans round-trip: multiple plans encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const bobGoal = "Set up CI/CD pipeline";
   const bobTask = "Configuring GitHub Actions";
@@ -314,9 +312,7 @@ test("listPlans round-trip: multiple plans encrypted, listed decrypted", async (
 });
 
 test("listAllMessages round-trip: all messages encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const secondContent = "Looks good, merging now";
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
@@ -345,9 +341,7 @@ test("listAllMessages round-trip: all messages encrypted, listed decrypted", asy
 });
 
 test("adminSendMessage round-trip: admin message encrypted, retrieved decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const adminContent = "System maintenance at 3am UTC";
   await db.adminSendMessage(AGENT_ALICE, AGENT_BOB, adminContent);
@@ -397,9 +391,7 @@ test("key rotation: old ciphertext decryptable with keychain", async () => {
 });
 
 test("routing fields remain plaintext through encryption", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
@@ -431,9 +423,7 @@ test("routing fields remain plaintext through encryption", async () => {
 });
 
 test("server never sees plaintext content", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);

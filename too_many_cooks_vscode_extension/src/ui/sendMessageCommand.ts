@@ -1,11 +1,10 @@
 // Send message command — extracted from extension.ts to keep file under 300 LOC.
 
 import * as vscode from 'vscode';
-import { collectDistinct, pickSelection } from './treeSelection';
+import { collectAgentNames, getAgentNameFromItem } from './tree/treeItemUtils';
 import type { AgentIdentity } from '../state/types';
 import type { DialogService } from '../services/dialogService';
 import type { StoreManager } from '../services/storeManager';
-import { getAgentNameFromItem } from './tree/treeItemUtils';
 import { getDialogService } from '../services/dialogService';
 
  
@@ -38,10 +37,7 @@ interface DeliverArgs {
 }
 
 function collectRecipients(invocation: Readonly<SendInvocation>): readonly string[] {
-  return collectDistinct(
-    pickSelection(invocation.item, invocation.selection),
-    (candidate: vscode.TreeItem): string | null => { return getAgentNameFromItem(candidate); },
-  );
+  return collectAgentNames(invocation.item, invocation.selection);
 }
 
 async function handleSendMessage(

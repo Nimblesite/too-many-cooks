@@ -226,21 +226,11 @@ export class StoreManager {
   }
 
   public async forceReleaseLock(filePath: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/delete-lock`,
-      { filePath },
-      this.authHeaders,
-    );
-    await this.refreshStatus();
+    await this.postAdmin('/admin/delete-lock', { filePath });
   }
 
   public async deleteAgent(agentName: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/delete-agent`,
-      { agentName },
-      this.authHeaders,
-    );
-    await this.refreshStatus();
+    await this.postAdmin('/admin/delete-agent', { agentName });
   }
 
   public async deleteAllAgents(): Promise<void> {
@@ -256,11 +246,11 @@ export class StoreManager {
   }
 
   public async sendMessage(fromAgent: string, toAgent: string, content: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/send-message`,
-      { content, fromAgent, toAgent },
-      this.authHeaders,
-    );
+    await this.postAdmin('/admin/send-message', { content, fromAgent, toAgent });
+  }
+
+  private async postAdmin(path: string, body: Readonly<Record<string, unknown>>): Promise<void> {
+    await postJsonWithAuth(`${this.baseUrl}${path}`, body, this.authHeaders);
     await this.refreshStatus();
   }
 

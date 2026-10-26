@@ -23,6 +23,7 @@ import {
   ACTIVE_FALSE,
   ACTIVE_TRUE,
   BROADCAST_RECIPIENT,
+  asyncDbOp,
   attempt,
   authAndUpdate,
   generateKey,
@@ -61,11 +62,7 @@ const SQL_SET_ACTIVE: string = "UPDATE identity SET active = ? WHERE agent_name 
 export const SQL_DEACTIVATE_ALL: string = "UPDATE identity SET active = 0";
 
 /** Register a new agent. */
-const register: (db: Database.Database, log: Logger, name: string) => Result<AgentRegistration, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  name: string
-): Result<AgentRegistration, DbError> => {
+const register = (db: Database.Database, log: Logger, name: string): Result<AgentRegistration, DbError> => {
   log.debug(`Registering agent: ${name}`);
   if (!isNameLengthValid(name)) {
     log.warn("Registration failed: invalid name length");
@@ -79,11 +76,7 @@ const register: (db: Database.Database, log: Logger, name: string) => Result<Age
 };
 
 /** Insert the registration row and report the outcome. */
-const insertRegistration: (db: Database.Database, log: Logger, name: string) => Result<AgentRegistration, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  name: string
-): Result<AgentRegistration, DbError> => {
+const insertRegistration = (db: Database.Database, log: Logger, name: string): Result<AgentRegistration, DbError> => {
   const key: string = generateKey();
   const timestamp: number = now();
   try {
@@ -101,10 +94,7 @@ const insertRegistration: (db: Database.Database, log: Logger, name: string) => 
 };
 
 /** Get agent identity by name. */
-const getAgent: (db: Database.Database, name: string) => Result<AgentIdentity, DbError> = (
-  db: Database.Database,
-  name: string
-): Result<AgentIdentity, DbError> => {
+const getAgent = (db: Database.Database, name: string): Result<AgentIdentity, DbError> => {
   return attempt((): Result<AgentIdentity, DbError> => {
     const row: Record<string, unknown> | undefined = toRow(db.prepare(SQL_GET_AGENT).get(name));
     return row === undefined
@@ -114,12 +104,7 @@ const getAgent: (db: Database.Database, name: string) => Result<AgentIdentity, D
 };
 
 /** Authenticate agent and return identity. */
-const authenticate: (
-  db: Database.Database,
-  log: Logger,
-  name: string,
-  key: string
-) => Result<AgentIdentity, DbError> = (
+const authenticate = (
   db: Database.Database,
   log: Logger,
   name: string,
@@ -135,11 +120,7 @@ const authenticate: (
 };
 
 /** Look up agent name by key. */
-const lookupByKey: (db: Database.Database, log: Logger, key: string) => Result<string, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  key: string
-): Result<string, DbError> => {
+const lookupByKey = (db: Database.Database, log: Logger, key: string): Result<string, DbError> => {
   log.debug("Looking up agent by key");
   return attempt((): Result<string, DbError> => {
     const row: Record<string, unknown> | undefined = toRow(db.prepare(SQL_LOOKUP_BY_KEY).get(key));
@@ -154,16 +135,13 @@ const lookupByKey: (db: Database.Database, log: Logger, key: string) => Result<s
 };
 
 /** List all active agents. */
-const listAgents: (db: Database.Database, log: Logger) => Result<readonly AgentIdentity[], DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<readonly AgentIdentity[], DbError> => {
+const listAgents = (db: Database.Database, log: Logger): Result<readonly AgentIdentity[], DbError> => {
   log.debug("Listing all agents");
   return selectMappedRows(db, SQL_LIST_AGENTS, agentIdentityFromJson);
 };
 
 /** Set agent active/inactive. */
-const setActive: (db: Database.Database, log: Logger, agentName: string, active: boolean) => Result<void, DbError> = (
+const setActive = (
   db: Database.Database,
   log: Logger,
   agentName: string,
@@ -180,10 +158,7 @@ const setActive: (db: Database.Database, log: Logger, agentName: string, active:
 };
 
 /** Deactivate all agents. */
-const deactivateAll: (db: Database.Database, log: Logger) => Result<void, DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<void, DbError> => {
+const deactivateAll = (db: Database.Database, log: Logger): Result<void, DbError> => {
   log.debug("Deactivating all agents");
   return attempt((): Result<void, DbError> => {
     db.prepare(SQL_DEACTIVATE_ALL).run();
@@ -192,21 +167,14 @@ const deactivateAll: (db: Database.Database, log: Logger) => Result<void, DbErro
 };
 
 /** Build agent identity operations. */
-export const createAgentOps: (db: Database.Database, log: Logger) => AgentMethodGroup = (
-  db: Database.Database,
-  log: Logger
-): AgentMethodGroup => ({
+export const createAgentOps = (db: Database.Database, log: Logger): AgentMethodGroup => ({
   activate: async (name: string): Promise<Result<void, DbError>> =>
     await Promise.resolve(setActive(db, log, name, true)),
-  authenticate: async (name: string, key: string): Promise<Result<AgentIdentity, DbError>> =>
-    await Promise.resolve(authenticate(db, log, name, key)),
+  authenticate: asyncDbOp(authenticate, db, log),
   deactivate: async (name: string): Promise<Result<void, DbError>> =>
     await Promise.resolve(setActive(db, log, name, false)),
-  deactivateAll: async (): Promise<Result<void, DbError>> => await Promise.resolve(deactivateAll(db, log)),
-  listAgents: async (): Promise<Result<readonly AgentIdentity[], DbError>> =>
-    await Promise.resolve(listAgents(db, log)),
-  lookupByKey: async (key: string): Promise<Result<string, DbError>> =>
-    await Promise.resolve(lookupByKey(db, log, key)),
-  register: async (name: string): Promise<Result<AgentRegistration, DbError>> =>
-    await Promise.resolve(register(db, log, name)),
+  deactivateAll: asyncDbOp(deactivateAll, db, log),
+  listAgents: asyncDbOp(listAgents, db, log),
+  lookupByKey: asyncDbOp(lookupByKey, db, log),
+  register: asyncDbOp(register, db, log),
 });

@@ -3,13 +3,18 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
+import type { SessionGetter, TooManyCooksDb } from "too-many-cooks-core";
 import {
-  type TooManyCooksDb,
-  createMessageHandler,
-} from "too-many-cooks-core";
-import type { SessionIdentity } from "too-many-cooks-core";
-import { freshTestDb, registerAgent, teardownTestDb } from "./support/db_fixture.js";
-import { createTestEmitter, createTestLogger, parseToolJson } from "./support/handlers.js";
+  freshTestDb,
+  registerAgent,
+  requireDb,
+  teardownTestDb,
+} from "./support/db_fixture.js";
+import {
+  messageHandlerFor,
+  nameKeySession,
+  parseToolJson,
+} from "./support/handlers.js";
 import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_broadcast_mark_read.db";
@@ -44,27 +49,27 @@ describe("broadcast mark_read bug (issue #7)", () => {
     teardownTestDb(db, TEST_DB_PATH);
   });
 
-  const makeSenderSession = (): (() => SessionIdentity) =>
-    () => ({ agentName: senderName, agentKey: senderKey });
+  const makeSenderSession = (): SessionGetter =>
+    nameKeySession(senderName, senderKey);
 
-  const makeReceiverSession = (): (() => SessionIdentity) =>
-    () => ({ agentName: receiverName, agentKey: receiverKey });
+  const makeReceiverSession = (): SessionGetter =>
+    nameKeySession(receiverName, receiverKey);
 
-  const makeThirdSession = (): (() => SessionIdentity) =>
-    () => ({ agentName: thirdAgentName, agentKey: thirdAgentKey });
+  const makeThirdSession = (): SessionGetter =>
+    nameKeySession(thirdAgentName, thirdAgentKey);
 
   it("mark_read succeeds on a broadcast message", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const d = requireDb(db);
 
     // Sender broadcasts a message
-    const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
+    const senderHandler = messageHandlerFor(d, makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "broadcast announcement" }, {});
     assert.strictEqual(sendResult.isError, false);
     const sendParsed = parseToolJson(sendResult);
     const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver fetches messages — should see the broadcast
-    const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
+    const receiverHandler = messageHandlerFor(d, makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
     assert.strictEqual(getResult1.isError, false);
     const getParsed1 = parseToolJson(getResult1);
@@ -79,16 +84,16 @@ describe("broadcast mark_read bug (issue #7)", () => {
   });
 
   it("broadcast disappears from inbox after mark_read", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const d = requireDb(db);
 
     // Sender broadcasts
-    const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
+    const senderHandler = messageHandlerFor(d, makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "ephemeral broadcast" }, {});
     const sendParsed = parseToolJson(sendResult);
     const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver gets messages (first fetch)
-    const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
+    const receiverHandler = messageHandlerFor(d, makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
     const parsed1 = parseToolJson(getResult1);
     const msgs1 = getRecordArrayField(parsed1, "messages");
@@ -108,21 +113,21 @@ describe("broadcast mark_read bug (issue #7)", () => {
   });
 
   it("broadcast read by one agent is still unread for another", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const d = requireDb(db);
 
     // Sender broadcasts
-    const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
+    const senderHandler = messageHandlerFor(d, makeSenderSession());
     const sendResult = await senderHandler({ action: "send", to_agent: "*", content: "multi-reader broadcast" }, {});
     const sendParsed = parseToolJson(sendResult);
     const broadcastId = getStringField(sendParsed, "message_id");
 
     // Receiver marks it as read
-    const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
+    const receiverHandler = messageHandlerFor(d, makeReceiverSession());
     await receiverHandler({ action: "get" }, {});
     await receiverHandler({ action: "mark_read", message_id: broadcastId }, {});
 
     // Third agent should STILL see it as unread
-    const thirdHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeThirdSession());
+    const thirdHandler = messageHandlerFor(d, makeThirdSession());
     const getResult = await thirdHandler({ action: "get" }, {});
     const parsed = parseToolJson(getResult);
     const msgs = getRecordArrayField(parsed, "messages");
@@ -133,14 +138,14 @@ describe("broadcast mark_read bug (issue #7)", () => {
   });
 
   it("auto-mark-read on get prevents broadcast from reappearing", async () => {
-    if (!db) { throw new Error("expected db"); }
+    const d = requireDb(db);
 
     // Sender broadcasts
-    const senderHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSenderSession());
+    const senderHandler = messageHandlerFor(d, makeSenderSession());
     await senderHandler({ action: "send", to_agent: "*", content: "auto-read broadcast" }, {});
 
     // Receiver fetches messages (auto-marks as read)
-    const receiverHandler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeReceiverSession());
+    const receiverHandler = messageHandlerFor(d, makeReceiverSession());
     const getResult1 = await receiverHandler({ action: "get" }, {});
     const parsed1 = parseToolJson(getResult1);
     const msgs1 = getRecordArrayField(parsed1, "messages");

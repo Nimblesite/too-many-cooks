@@ -96,50 +96,38 @@ type ApiResponse = {
 };
 
 /** Type guard: validates an unknown JSON payload is an ApiResponse. */
-const isApiResponse: (val: unknown) => val is ApiResponse = (val: unknown): val is ApiResponse =>
-  isRecord(val) && typeof val.ok === "boolean";
+const isApiResponse = (val: unknown): val is ApiResponse => isRecord(val) && typeof val.ok === "boolean";
 
 /** Extract a DbError from an API error response. */
-const extractDbError: (body: ApiResponse) => DbError = (body: ApiResponse): DbError => ({
+const extractDbError = (body: ApiResponse): DbError => ({
   code: body.error?.code ?? ERR_NETWORK,
   message: body.error?.message ?? ERR_UNKNOWN_API,
 });
 
 /** Value extractor: ignores payload, returns void. */
-const extractVoid: (_val: unknown) => undefined = (): undefined => undefined;
+const extractVoid = (_val: unknown): undefined => undefined;
 
 /** Value extractor: narrows to string via type guard. */
-const extractString: (val: unknown) => string = (val: unknown): string => (typeof val === "string" ? val : "");
+const extractString = (val: unknown): string => (typeof val === "string" ? val : "");
 
 /** Create a value extractor that applies a mapper to a Record. */
-const mapped: <T>(mapper: (raw: Record<string, unknown>) => T) => (val: unknown) => T =
-  <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => T) =>
-  (val: unknown): T =>
-    mapper(isRecord(val) ? val : {});
+const mapped = <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => T) =>
+  (val: unknown): T => mapper(isRecord(val) ? val : {});
 
 /** Create a value extractor that maps an array of Records. */
-const mappedArray: <T>(mapper: (raw: Record<string, unknown>) => T) => (val: unknown) => readonly T[] =
-  <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => readonly T[]) =>
-  (val: unknown): readonly T[] =>
-    Array.isArray(val) ? val.map((item: unknown): T => mapper(isRecord(item) ? item : {})) : [];
+const mappedArray = <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => readonly T[]) =>
+  (val: unknown): readonly T[] => (Array.isArray(val) ? val.map((item: unknown): T => mapper(isRecord(item) ? item : {})) : []);
 
 /** Create a value extractor for nullable single-item responses. */
-const mappedNullable: <T>(mapper: (raw: Record<string, unknown>) => T) => (val: unknown) => T | null =
-  <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => T | null) =>
-  (val: unknown): T | null =>
-    val === null || val === undefined ? null : mapper(isRecord(val) ? val : {});
+const mappedNullable = <T>(mapper: (raw: Record<string, unknown>) => T): ((val: unknown) => T | null) =>
+  (val: unknown): T | null => (val === null || val === undefined ? null : mapper(isRecord(val) ? val : {}));
 
 /** Generic API response parser. Replaces 5 specialized parse functions. */
-const parseApiResponse: <T>(body: ApiResponse, extract: (value: unknown) => T) => Result<T, DbError> = <T>(
-  body: ApiResponse,
-  extract: (value: unknown) => T
-): Result<T, DbError> =>
+const parseApiResponse = <T>(body: ApiResponse, extract: (value: unknown) => T): Result<T, DbError> =>
   body.ok ? { ok: true, value: extract(body.value) } : { ok: false, error: extractDbError(body) };
 
 /// [STATUS-BOUNDED] Issues #41/#42: parse a bounded message overview from JSON.
-const messageOverviewFromJson: (raw: Record<string, unknown>) => MessageOverview = (
-  raw: Record<string, unknown>
-): MessageOverview => ({
+const messageOverviewFromJson = (raw: Record<string, unknown>): MessageOverview => ({
   total: typeof raw.total === "number" ? raw.total : 0,
   unread: typeof raw.unread === "number" ? raw.unread : 0,
   recent: Array.isArray(raw.recent)
@@ -151,8 +139,7 @@ const messageOverviewFromJson: (raw: Record<string, unknown>) => MessageOverview
 type ApiCaller = (method: string, args: Record<string, unknown>) => Promise<ApiResponse>;
 
 /** Create an HTTP API caller bound to a specific endpoint. */
-const createApiCaller: (apiUrl: string, apiKey: string, workspaceId: string) => ApiCaller =
-  (apiUrl: string, apiKey: string, workspaceId: string): ApiCaller =>
+const createApiCaller = (apiUrl: string, apiKey: string, workspaceId: string): ApiCaller =>
   async (method: string, args: Record<string, unknown>): Promise<ApiResponse> => {
     const response: Response = await fetch(`${apiUrl}/${method}`, {
       method: HTTP_METHOD,
@@ -168,12 +155,7 @@ const createApiCaller: (apiUrl: string, apiKey: string, workspaceId: string) => 
   };
 
 /** Call an endpoint and parse the response with `extract`. */
-const callExtract: <T>(
-  call: ApiCaller,
-  endpoint: string,
-  args: Record<string, unknown>,
-  extract: (value: unknown) => T
-) => Promise<Result<T, DbError>> = async <T>(
+const callExtract = async <T>(
   call: ApiCaller,
   endpoint: string,
   args: Record<string, unknown>,
@@ -181,9 +163,7 @@ const callExtract: <T>(
 ): Promise<Result<T, DbError>> => parseApiResponse(await call(endpoint, args), extract);
 
 /** Build the identity/auth methods for TooManyCooksDb. */
-const buildIdentityMethods: (call: ApiCaller) => AgentMethodGroup & CloseMethodGroup = (
-  call: ApiCaller
-): AgentMethodGroup & CloseMethodGroup => ({
+const buildIdentityMethods = (call: ApiCaller): AgentMethodGroup & CloseMethodGroup => ({
   register: async (agentName: string): Promise<Result<AgentRegistration, DbError>> =>
     await callExtract(call, EP_REGISTER, { agentName }, mapped(agentRegistrationFromJson)),
   authenticate: async (agentName: string, agentKey: string): Promise<Result<AgentIdentity, DbError>> =>
@@ -196,13 +176,12 @@ const buildIdentityMethods: (call: ApiCaller) => AgentMethodGroup & CloseMethodG
     await callExtract(call, EP_ACTIVATE, { agentName }, extractVoid),
   deactivate: async (agentName: string): Promise<Result<void, DbError>> =>
     await callExtract(call, EP_DEACTIVATE, { agentName }, extractVoid),
-  deactivateAll: async (): Promise<Result<void, DbError>> =>
-    await callExtract(call, EP_DEACTIVATE_ALL, {}, extractVoid),
+  deactivateAll: async (): Promise<Result<void, DbError>> => await callExtract(call, EP_DEACTIVATE_ALL, {}, extractVoid),
   close: async (): Promise<Result<void, DbError>> => await callExtract(call, EP_CLOSE, {}, extractVoid),
 });
 
 /** Build the lock methods for TooManyCooksDb. */
-const buildLockMethods: (call: ApiCaller) => LockMethodGroup = (call: ApiCaller): LockMethodGroup => ({
+const buildLockMethods = (call: ApiCaller): LockMethodGroup => ({
   acquireLock: async (
     filePath: string,
     agentName: string,
@@ -229,7 +208,7 @@ const buildLockMethods: (call: ApiCaller) => LockMethodGroup = (call: ApiCaller)
 });
 
 /** Build the message methods for TooManyCooksDb. */
-const buildMessageMethods: (call: ApiCaller) => MessageMethodGroup = (call: ApiCaller): MessageMethodGroup => ({
+const buildMessageMethods = (call: ApiCaller): MessageMethodGroup => ({
   sendMessage: async (
     fromAgent: string,
     fromKey: string,
@@ -257,7 +236,7 @@ const buildMessageMethods: (call: ApiCaller) => MessageMethodGroup = (call: ApiC
 });
 
 /** Build the plan methods for TooManyCooksDb. */
-const buildPlanMethods: (call: ApiCaller) => PlanMethodGroup = (call: ApiCaller): PlanMethodGroup => ({
+const buildPlanMethods = (call: ApiCaller): PlanMethodGroup => ({
   updatePlan: async (
     agentName: string,
     agentKey: string,
@@ -272,7 +251,7 @@ const buildPlanMethods: (call: ApiCaller) => PlanMethodGroup = (call: ApiCaller)
 });
 
 /** Build the admin methods for TooManyCooksDb. */
-const buildAdminMethods: (call: ApiCaller) => AdminMethodGroup = (call: ApiCaller): AdminMethodGroup => ({
+const buildAdminMethods = (call: ApiCaller): AdminMethodGroup => ({
   adminDeleteLock: async (filePath: string): Promise<Result<void, DbError>> =>
     await callExtract(call, EP_ADMIN_DELETE_LOCK, { filePath }, extractVoid),
   adminDeleteAgent: async (agentName: string): Promise<Result<void, DbError>> =>
@@ -285,11 +264,7 @@ const buildAdminMethods: (call: ApiCaller) => AdminMethodGroup = (call: ApiCalle
 });
 
 /** Create a cloud-backed TooManyCooksDb that calls the Edge Function. */
-export const createCloudDb: (apiUrl: string, apiKey: string, workspaceId: string) => TooManyCooksDb = (
-  apiUrl: string,
-  apiKey: string,
-  workspaceId: string
-): TooManyCooksDb => {
+export const createCloudDb = (apiUrl: string, apiKey: string, workspaceId: string): TooManyCooksDb => {
   const call: ApiCaller = createApiCaller(apiUrl, apiKey, workspaceId);
   return {
     ...buildIdentityMethods(call),

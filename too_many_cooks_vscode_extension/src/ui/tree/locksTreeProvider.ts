@@ -35,27 +35,17 @@ export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
     const items: LockTreeItem[] = [];
 
     if (active.length > 0) {
-      const item: LockTreeItem = new LockTreeItem({
-        collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
-        isCategory: true,
-        label: `Active (${String(active.length)})`,
-        lock: null,
-      });
-      item.iconPath = new vscode.ThemeIcon('folder');
-      item.contextValue = 'category';
-      items.push(item);
+      items.push(createCategoryItem(
+        `Active (${String(active.length)})`,
+        vscode.TreeItemCollapsibleState.Expanded,
+      ));
     }
 
     if (expired.length > 0) {
-      const item: LockTreeItem = new LockTreeItem({
-        collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-        isCategory: true,
-        label: `Expired (${String(expired.length)})`,
-        lock: null,
-      });
-      item.iconPath = new vscode.ThemeIcon('folder');
-      item.contextValue = 'category';
-      items.push(item);
+      items.push(createCategoryItem(
+        `Expired (${String(expired.length)})`,
+        vscode.TreeItemCollapsibleState.Collapsed,
+      ));
     }
 
     if (items.length === 0) {
@@ -92,6 +82,21 @@ export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
       return createLockItem(lock, now);
     });
   }
+}
+
+function createCategoryItem(
+  label: string,
+  collapsibleState: vscode.TreeItemCollapsibleState,
+): LockTreeItem {
+  const item: LockTreeItem = new LockTreeItem({
+    collapsibleState,
+    isCategory: true,
+    label,
+    lock: null,
+  });
+  item.iconPath = new vscode.ThemeIcon('folder');
+  item.contextValue = 'category';
+  return item;
 }
 
 function createLockItem(lock: Readonly<FileLock>, now: number): LockTreeItem {

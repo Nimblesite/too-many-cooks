@@ -13,7 +13,7 @@ import {
 } from "too-many-cooks-core";
 
 import type { PlanMethodGroup } from "../db-method-groups.js";
-import { attempt, authenticated, now, selectMappedRows, selectOneOrNull, validatePlanLengths } from "./shared.js";
+import { asyncDbOp, attempt, authenticated, listAll, now, selectOneOrNull, validatePlanLengths } from "./shared.js";
 
 /** Fetch one agent's plan. */
 const SQL_GET_PLAN: string = "SELECT * FROM plans WHERE agent_name = ?";
@@ -32,15 +32,7 @@ const SQL_UPSERT_PLAN: string = `
     `;
 
 /** Update an agent's plan. */
-const updatePlan: (
-  db: Database.Database,
-  log: Logger,
-  agentName: string,
-  agentKey: string,
-  goal: string,
-  currentTask: string,
-  maxLen: number
-) => Result<void, DbError> = (
+const updatePlan = (
   db: Database.Database,
   log: Logger,
   agentName: string,
@@ -56,13 +48,7 @@ const updatePlan: (
 };
 
 /** Validate then upsert the plan row. */
-const upsertPlan: (
-  db: Database.Database,
-  agentName: string,
-  goal: string,
-  currentTask: string,
-  maxLen: number
-) => Result<void, DbError> = (
+const upsertPlan = (
   db: Database.Database,
   agentName: string,
   goal: string,
@@ -80,33 +66,23 @@ const upsertPlan: (
 };
 
 /** Get an agent's plan. */
-const getPlan: (db: Database.Database, log: Logger, agentName: string) => Result<AgentPlan | null, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  agentName: string
-): Result<AgentPlan | null, DbError> => {
+const getPlan = (db: Database.Database, log: Logger, agentName: string): Result<AgentPlan | null, DbError> => {
   log.trace(`Getting plan for ${agentName}`);
   return selectOneOrNull(db, SQL_GET_PLAN, [agentName], agentPlanFromJson);
 };
 
 /** List all plans. */
-const listPlans: (db: Database.Database, log: Logger) => Result<readonly AgentPlan[], DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<readonly AgentPlan[], DbError> => {
-  log.trace("Listing all plans");
-  return selectMappedRows(db, SQL_LIST_PLANS, agentPlanFromJson);
-};
+const listPlans = (db: Database.Database, log: Logger): Result<readonly AgentPlan[], DbError> =>
+  listAll(db, log, SQL_LIST_PLANS, agentPlanFromJson, "plans");
 
 /** Build plan operations. */
-export const createPlanOps: (db: Database.Database, log: Logger, config: TooManyCooksDataConfig) => PlanMethodGroup = (
+export const createPlanOps = (
   db: Database.Database,
   log: Logger,
   config: TooManyCooksDataConfig
 ): PlanMethodGroup => ({
-  getPlan: async (name: string): Promise<Result<AgentPlan | null, DbError>> =>
-    await Promise.resolve(getPlan(db, log, name)),
-  listPlans: async (): Promise<Result<readonly AgentPlan[], DbError>> => await Promise.resolve(listPlans(db, log)),
+  getPlan: asyncDbOp(getPlan, db, log),
+  listPlans: asyncDbOp(listPlans, db, log),
   updatePlan: async (name: string, key: string, goal: string, task: string): Promise<Result<void, DbError>> =>
     await Promise.resolve(updatePlan(db, log, name, key, goal, task, config.maxPlanLength)),
 });

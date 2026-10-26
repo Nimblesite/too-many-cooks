@@ -117,3 +117,22 @@ export const registerAgent = async (
   }
   return result.value;
 };
+
+/** Registers two agents; returns them in registration order. */
+export const registerAgentPair = async (
+  db: TooManyCooksDb,
+  firstName: string,
+  secondName: string,
+): Promise<readonly [RegisteredAgent, RegisteredAgent]> => [
+  await registerAgent(db, firstName),
+  await registerAgent(db, secondName),
+];
+
+/** Asserts a per-test db is bound and returns it (replaces `if (!db) throw`). */
+export const requireDb = (db: TooManyCooksDb | undefined): TooManyCooksDb => {
+  assert.notStrictEqual(db, undefined, "expected db");
+  if (db === undefined) {
+    throw new Error("expected db");
+  }
+  return db;
+};

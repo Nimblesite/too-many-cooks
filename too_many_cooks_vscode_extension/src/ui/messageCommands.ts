@@ -15,29 +15,23 @@ function hasMessage(value: object): value is { readonly message: unknown } {
   return 'message' in value;
 }
 
-function hasStringProp(
+function hasPrimitiveProp(
   value: Readonly<Record<string, unknown>>,
   key: string,
+  kind: 'number' | 'string',
 ): boolean {
-  return typeof value[key] === 'string';
-}
-
-function hasNumberProp(
-  value: Readonly<Record<string, unknown>>,
-  key: string,
-): boolean {
-  return typeof value[key] === 'number';
+  return typeof value[key] === kind;
 }
 
 function isMessage(value: unknown): value is Message {
   if (typeof value !== 'object' || value === null) { return false; }
   const record: Readonly<Record<string, unknown>> = { ...value };
   return (
-    hasStringProp(record, 'id') &&
-    hasStringProp(record, 'fromAgent') &&
-    hasStringProp(record, 'toAgent') &&
-    hasStringProp(record, 'content') &&
-    hasNumberProp(record, 'createdAt')
+    hasPrimitiveProp(record, 'id', 'string') &&
+    hasPrimitiveProp(record, 'fromAgent', 'string') &&
+    hasPrimitiveProp(record, 'toAgent', 'string') &&
+    hasPrimitiveProp(record, 'content', 'string') &&
+    hasPrimitiveProp(record, 'createdAt', 'number')
   );
 }
 
@@ -98,41 +92,61 @@ async function copyToClipboard(value: string, successMessage: string): Promise<v
   await dialogs.showInformationMessage(successMessage);
 }
 
-export function registerCopyMessageContentCommand(): vscode.Disposable {
+interface MapCopySpec {
+  readonly commandId: string;
+  readonly extractor: (msg: Readonly<Message>) => string;
+  readonly separator: string;
+  readonly successLabel: string;
+}
+
+function registerMapCopyCommand(spec: Readonly<MapCopySpec>): vscode.Disposable {
   return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageContent',
+    spec.commandId,
     async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
       const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => { return msg.content; })
-        .join('\n\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message(s) content`);
+      const text: string = messages.map(spec.extractor).join(spec.separator);
+      await copyToClipboard(text, `Copied ${String(messages.length)} ${spec.successLabel}`);
     },
   );
+}
+
+export function registerCopyMessageContentCommand(): vscode.Disposable {
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageContent',
+    extractor: (msg: Readonly<Message>): string => { return msg.content; },
+    separator: '\n\n',
+    successLabel: 'message(s) content',
+  });
 }
 
 export function registerCopyMessageAsQuoteCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageAsQuote',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages.map(formatMessageQuote).join('\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} quoted message(s)`);
-    },
-  );
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageAsQuote',
+    extractor: formatMessageQuote,
+    separator: '\n',
+    successLabel: 'quoted message(s)',
+  });
 }
 
 export function registerCopyMessageIdCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageId',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => { return msg.id; })
-        .join('\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message ID(s)`);
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageId',
+    extractor: (msg: Readonly<Message>): string => { return msg.id; },
+    separator: '\n',
+    successLabel: 'message ID(s)',
+  });
+}
+
+export function registerCopyMessagesCommand(): vscode.Disposable {
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessages',
+    extractor: (msg: Readonly<Message>): string => {
+      return `[${new Date(msg.createdAt).toISOString()}] ` +
+        `${msg.fromAgent} → ${formatTarget(msg.toAgent)}\n${msg.content}`;
     },
-  );
+    separator: '\n\n---\n\n',
+    successLabel: 'message(s)',
+  });
 }
 
 export function registerCopyMessageSenderCommand(): vscode.Disposable {
@@ -163,22 +177,6 @@ export function registerCopyMessageRecipientCommand(): vscode.Disposable {
         recipients.join('\n'),
         `Copied ${String(recipients.length)} recipient(s)`,
       );
-    },
-  );
-}
-
-export function registerCopyMessagesCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessages',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => {
-          return `[${new Date(msg.createdAt).toISOString()}] ` +
-            `${msg.fromAgent} → ${formatTarget(msg.toAgent)}\n${msg.content}`;
-        })
-        .join('\n\n---\n\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message(s)`);
     },
   );
 }

@@ -25,14 +25,10 @@ type IdentityErr = {
 
 export type IdentityResult = IdentityErr | IdentityOk;
 
-export const resolveIdentity: (
+export const resolveIdentity = async (
   db: TooManyCooksDb,
   args: Record<string, unknown>,
-  getSession: SessionGetter,
-) => Promise<IdentityResult> = async (
-  db: TooManyCooksDb,
-  args: Record<string, unknown>,
-  getSession: SessionGetter,
+  getSession: SessionGetter
 ): Promise<IdentityResult> => {
   const keyOverride: string | null =
     typeof args.agent_key === "string" ? args.agent_key : null;
@@ -65,31 +61,27 @@ export const resolveIdentity: (
 // Error helpers
 // ---------------------------------------------------------------------------
 
-export const makeErrorResult: (e: DbError) => CallToolResult = (e: DbError): CallToolResult => {return {
+export const makeErrorResult = (e: DbError): CallToolResult => {return {
   content: [textContent(JSON.stringify(dbErrorToJson(e)))],
   isError: true,
 }};
 
-export const errorContent: (msg: string) => CallToolResult = (msg: string): CallToolResult => {return {
+export const errorContent = (msg: string): CallToolResult => {return {
   content: [textContent(JSON.stringify({ error: msg }))],
   isError: true,
 }};
 
 /** Build a successful JSON tool result. */
-export const jsonResult: (payload: Record<string, unknown>) => CallToolResult = (payload: Record<string, unknown>): CallToolResult => {return {
+export const jsonResult = (payload: Record<string, unknown>): CallToolResult => {return {
   content: [textContent(JSON.stringify(payload))],
   isError: false,
 }};
 
 /** Build a successful JSON tool result from a db list result. */
-export const listJsonResult: <T>(
+export const listJsonResult = <T>(
   result: Result<readonly T[], DbError>,
   key: string,
-  toJson: (item: T) => Record<string, unknown>,
-) => CallToolResult = <T>(
-  result: Result<readonly T[], DbError>,
-  key: string,
-  toJson: (item: T) => Record<string, unknown>,
+  toJson: (item: T) => Record<string, unknown>
 ): CallToolResult => {
   if (!result.ok) {return makeErrorResult(result.error);}
   return jsonResult({ [key]: result.value.map(toJson) });
@@ -99,28 +91,37 @@ export const listJsonResult: <T>(
 export const MISSING_ACTION_MESSAGE: string = "missing_parameter: action is required";
 
 /** Extract the `action` string argument, or an error result when missing. */
-export const requireActionArg: (args: Record<string, unknown>) => string | CallToolResult = (
-  args: Record<string, unknown>,
-): string | CallToolResult => {
+export const requireActionArg = (args: Record<string, unknown>): string | CallToolResult => {
   const actionArg: unknown = args.action;
   return typeof actionArg === "string" ? actionArg : errorContent(MISSING_ACTION_MESSAGE);
 };
 
 /** Build an error result for an unrecognized action. */
-export const unknownActionError: (action: string) => CallToolResult = (action: string): CallToolResult =>
+export const unknownActionError = (action: string): CallToolResult =>
   errorContent(`Unknown action: ${action}`);
 
+/** Shared shape of every tool's registration config. */
+export type ToolConfig<Schema> = {
+  readonly title: string;
+  readonly description: string;
+  readonly inputSchema: Schema;
+  readonly outputSchema: null;
+  readonly annotations: null;
+};
+
+/** Build a tool config, filling the shared null output/annotation fields. */
+export const toolConfig = <Schema>(
+  title: string,
+  description: string,
+  inputSchema: Schema
+): ToolConfig<Schema> => ({ title, description, inputSchema, outputSchema: null, annotations: null });
+
 /** Resolve a caller identity and pass it to `fn`, or short-circuit with an error result. */
-export const withResolvedAgent: <T>(
+export const withResolvedAgent = async <T>(
   db: TooManyCooksDb,
   args: Record<string, unknown>,
   getSession: SessionGetter,
-  fn: (agentName: string, agentKey: string) => Promise<T>,
-) => Promise<T | CallToolResult> = async <T>(
-  db: TooManyCooksDb,
-  args: Record<string, unknown>,
-  getSession: SessionGetter,
-  fn: (agentName: string, agentKey: string) => Promise<T>,
+  fn: (agentName: string, agentKey: string) => Promise<T>
 ): Promise<T | CallToolResult> => {
   const identity: IdentityResult = await resolveIdentity(db, args, getSession);
   if (identity.isError) {return identity.result;}

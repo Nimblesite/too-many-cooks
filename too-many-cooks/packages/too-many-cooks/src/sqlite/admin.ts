@@ -20,6 +20,7 @@ import { SQL_DEACTIVATE_ALL } from "./agents.js";
 import { insertMessage } from "./messages.js";
 import {
   BROADCAST_RECIPIENT,
+  asyncDbOp,
   attempt,
   ensureInactiveIdentity,
   generateKey,
@@ -50,11 +51,7 @@ const RESET_STATEMENTS: readonly string[] = [
 ];
 
 /** Admin: delete a lock by file path. */
-const adminDeleteLock: (db: Database.Database, log: Logger, filePath: string) => Result<void, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  filePath: string
-): Result<void, DbError> => {
+const adminDeleteLock = (db: Database.Database, log: Logger, filePath: string): Result<void, DbError> => {
   log.warn(`Admin deleting lock on ${filePath}`);
   return attempt((): Result<void, DbError> =>
     runOrMiss(db.prepare(SQL_ADMIN_DELETE_LOCK), [filePath], {
@@ -65,11 +62,7 @@ const adminDeleteLock: (db: Database.Database, log: Logger, filePath: string) =>
 };
 
 /** Admin: delete an agent and all related data. */
-const adminDeleteAgent: (db: Database.Database, log: Logger, agentName: string) => Result<void, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  agentName: string
-): Result<void, DbError> => {
+const adminDeleteAgent = (db: Database.Database, log: Logger, agentName: string): Result<void, DbError> => {
   log.warn(`Admin deleting agent ${agentName}`);
   if (agentName === BROADCAST_RECIPIENT) {
     return error({ code: ERR_VALIDATION, message: "Cannot delete broadcast sentinel" });
@@ -87,11 +80,7 @@ const adminDeleteAgent: (db: Database.Database, log: Logger, agentName: string) 
 };
 
 /** Admin: release an agent's locks; failures are logged, never fatal. */
-const releaseAgentLocks: (db: Database.Database, log: Logger, agentName: string) => void = (
-  db: Database.Database,
-  log: Logger,
-  agentName: string
-): void => {
+const releaseAgentLocks = (db: Database.Database, log: Logger, agentName: string): void => {
   try {
     const lockResult: Database.RunResult = db.prepare(SQL_RELEASE_AGENT_LOCKS).run(agentName);
     if (lockResult.changes > 0) {
@@ -103,10 +92,7 @@ const releaseAgentLocks: (db: Database.Database, log: Logger, agentName: string)
 };
 
 /** Admin: rotate an agent's key and report the new registration. */
-const updateAgentKey: (db: Database.Database, agentName: string) => Result<AgentRegistration, DbError> = (
-  db: Database.Database,
-  agentName: string
-): Result<AgentRegistration, DbError> => {
+const updateAgentKey = (db: Database.Database, agentName: string): Result<AgentRegistration, DbError> => {
   const newKey: string = generateKey();
   return attempt((): Result<AgentRegistration, DbError> => {
     const result: Database.RunResult = db.prepare(SQL_UPDATE_AGENT_KEY).run(newKey, now(), agentName);
@@ -117,21 +103,14 @@ const updateAgentKey: (db: Database.Database, agentName: string) => Result<Agent
 };
 
 /** Admin: reset an agent's key. */
-const adminResetKey: (db: Database.Database, log: Logger, agentName: string) => Result<AgentRegistration, DbError> = (
-  db: Database.Database,
-  log: Logger,
-  agentName: string
-): Result<AgentRegistration, DbError> => {
+const adminResetKey = (db: Database.Database, log: Logger, agentName: string): Result<AgentRegistration, DbError> => {
   log.warn(`Admin resetting key for agent ${agentName}`);
   releaseAgentLocks(db, log, agentName);
   return updateAgentKey(db, agentName);
 };
 
 /** Admin: reset all transient data. */
-const adminReset: (db: Database.Database, log: Logger) => Result<void, DbError> = (
-  db: Database.Database,
-  log: Logger
-): Result<void, DbError> => {
+const adminReset = (db: Database.Database, log: Logger): Result<void, DbError> => {
   log.warn("Admin resetting transient data");
   return attempt((): Result<void, DbError> => {
     for (const sql of RESET_STATEMENTS) {
@@ -145,12 +124,7 @@ const adminReset: (db: Database.Database, log: Logger) => Result<void, DbError> 
  *  '*' is skipped because the broadcast sentinel is seeded at DB open.
  *  Auto-created peers are inactive so they don't pollute agent listings; if
  *  they later register for real, the upsert in agents.ts reactivates them. */
-const ensureParticipants: (
-  db: Database.Database,
-  fromAgent: string,
-  toAgent: string,
-  timestamp: number
-) => Result<void, DbError> = (
+const ensureParticipants = (
   db: Database.Database,
   fromAgent: string,
   toAgent: string,
@@ -166,14 +140,7 @@ const ensureParticipants: (
 };
 
 /** Admin: send a message without auth. */
-const adminSendMessage: (
-  db: Database.Database,
-  log: Logger,
-  fromAgent: string,
-  toAgent: string,
-  content: string,
-  maxLen: number
-) => Result<string, DbError> = (
+const adminSendMessage = (
   db: Database.Database,
   log: Logger,
   fromAgent: string,
@@ -195,22 +162,15 @@ const adminSendMessage: (
 };
 
 /** Build admin operations and close. */
-export const createAdminOps: (
-  db: Database.Database,
-  log: Logger,
-  config: TooManyCooksDataConfig
-) => AdminMethodGroup & CloseMethodGroup = (
+export const createAdminOps = (
   db: Database.Database,
   log: Logger,
   config: TooManyCooksDataConfig
 ): AdminMethodGroup & CloseMethodGroup => ({
-  adminDeleteAgent: async (name: string): Promise<Result<void, DbError>> =>
-    await Promise.resolve(adminDeleteAgent(db, log, name)),
-  adminDeleteLock: async (filePath: string): Promise<Result<void, DbError>> =>
-    await Promise.resolve(adminDeleteLock(db, log, filePath)),
-  adminReset: async (): Promise<Result<void, DbError>> => await Promise.resolve(adminReset(db, log)),
-  adminResetKey: async (name: string): Promise<Result<AgentRegistration, DbError>> =>
-    await Promise.resolve(adminResetKey(db, log, name)),
+  adminDeleteAgent: asyncDbOp(adminDeleteAgent, db, log),
+  adminDeleteLock: asyncDbOp(adminDeleteLock, db, log),
+  adminReset: asyncDbOp(adminReset, db, log),
+  adminResetKey: asyncDbOp(adminResetKey, db, log),
   adminSendMessage: async (from: string, to: string, content: string): Promise<Result<string, DbError>> =>
     await Promise.resolve(adminSendMessage(db, log, from, to, content, config.maxMessageLength)),
   close: async (): Promise<Result<undefined, DbError>> => {

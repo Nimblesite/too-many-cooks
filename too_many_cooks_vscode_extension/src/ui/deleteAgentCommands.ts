@@ -1,24 +1,12 @@
 // Delete agent commands — extracted from extension.ts to keep file under 300 LOC.
 
 import * as vscode from 'vscode';
-import { collectDistinct, pickSelection } from './treeSelection';
 import type { DialogService } from '../services/dialogService';
 import type { StoreManager } from '../services/storeManager';
-import { getAgentNameFromItem } from './tree/treeItemUtils';
+import { collectAgentNames } from './tree/treeItemUtils';
 import { getDialogService } from '../services/dialogService';
 
 type LogFn = (msg: string) => void;
-
-function collectAgentNames(
-   
-  item: vscode.TreeItem | undefined,
-  selection: readonly vscode.TreeItem[] | undefined,
-): readonly string[] {
-  return collectDistinct(
-    pickSelection(item, selection),
-    (candidate: vscode.TreeItem): string | null => { return getAgentNameFromItem(candidate); },
-  );
-}
 
 async function deleteAgents(
   storeManager: Readonly<StoreManager>,
