@@ -54,6 +54,17 @@ jobs:
       - name: Build
         run: make build
 
+  # [SWR-VSIX-PACKAGE] Build, boot and package the per-platform VSIX on all four
+  # native runners for every PR, so the release path is proven before a tag.
+  # Skipped when release.yml calls this as its gate (it runs the same workflow
+  # itself with the tag's version).
+  vsix-platforms:
+    name: VSIX platforms
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/vsix-platforms.yml
+
   # Dependency review ([GITHUB-DEP-REVIEW]) — fails a PR that adds a dependency
   # with known vulnerabilities. Lightweight, PR-only, read-only token (the
   # failure is in the job log, no PR comment), so release.yml can call ci.yml
