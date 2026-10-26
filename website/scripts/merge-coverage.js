@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import v8toIstanbul from 'v8-to-istanbul';
+import { mergeV8Entries, toIstanbul } from './v8-coverage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const websiteDir = path.join(__dirname, '..');
@@ -28,96 +28,16 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-// Merge V8 coverage data
-const mergedV8 = {};
-
-for (const file of files) {
-  const content = fs.readFileSync(path.join(coverageDir, file), 'utf-8');
-  if (content.trim() === '[]' || content.trim() === '') continue;
-
-  const data = JSON.parse(content);
-
-  for (const entry of data) {
-    if (!entry.url || !entry.source) continue;
-
-    const key = entry.url;
-    if (!mergedV8[key]) {
-      mergedV8[key] = {
-        url: entry.url,
-        scriptId: entry.scriptId || '0',
-        source: entry.source,
-        functions: new Map(), // Use Map to properly merge function coverage
-      };
-    }
-
-    // Merge functions by their offset ranges
-    if (entry.functions) {
-      for (const func of entry.functions) {
-        const rangeKey = `${func.ranges[0].startOffset}-${func.ranges[0].endOffset}`;
-        const existing = mergedV8[key].functions.get(rangeKey);
-
-        if (!existing) {
-          // Clone the function data
-          mergedV8[key].functions.set(rangeKey, JSON.parse(JSON.stringify(func)));
-        } else {
-          // Merge counts for each range
-          for (let i = 0; i < func.ranges.length; i++) {
-            if (existing.ranges[i]) {
-              existing.ranges[i].count = Math.max(
-                existing.ranges[i].count,
-                func.ranges[i].count
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-// Convert Map back to array for v8-to-istanbul
-for (const key of Object.keys(mergedV8)) {
-  mergedV8[key].functions = Array.from(mergedV8[key].functions.values());
-}
-
-// Convert to Istanbul format and generate reports
-const istanbulCoverage = {};
-
-// Use a temp directory for v8-to-istanbul source files
-const tempDir = path.join(coverageDir, '.temp-sources');
-ensureDir(tempDir);
-
-for (const [url, v8Data] of Object.entries(mergedV8)) {
-  const fileName = url.split('/').pop() || 'unknown.js';
-  // Use a temp file for v8-to-istanbul, but map to real source path
-  const tempFile = path.join(tempDir, fileName);
-  const realSourceFile = path.join(srcDir, fileName);
-
-  // Write source to temp file for v8-to-istanbul to read
-  fs.writeFileSync(tempFile, v8Data.source);
-
-  try {
-    const converter = v8toIstanbul(tempFile, 0, { source: v8Data.source });
-    await converter.load();
-
-    // Apply V8 coverage
-    converter.applyCoverage(v8Data.functions);
-
-    // Get Istanbul format
-    const istanbul = converter.toIstanbul();
-
-    // Remap the path to the real source file
-    for (const [tempPath, data] of Object.entries(istanbul)) {
-      data.path = realSourceFile;
-      istanbulCoverage[realSourceFile] = data;
-    }
-  } catch (err) {
-    console.error(`Error converting ${fileName}:`, err.message);
-  }
-}
-
-// Clean up temp directory
-fs.rmSync(tempDir, { recursive: true, force: true });
+// Every Playwright test wrote one file of V8 entries; merge and convert them.
+const entries = files.flatMap((file) => {
+  const content = fs.readFileSync(path.join(coverageDir, file), 'utf-8').trim();
+  return content === '' ? [] : JSON.parse(content);
+});
+const istanbulCoverage = await toIstanbul(
+  mergeV8Entries(entries),
+  srcDir,
+  path.join(coverageDir, '.temp-sources'),
+);
 
 // Write Istanbul coverage
 const istanbulFile = path.join(nycOutputDir, 'coverage.json');
