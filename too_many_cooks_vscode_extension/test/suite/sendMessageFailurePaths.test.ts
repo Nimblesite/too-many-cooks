@@ -11,19 +11,19 @@ import {
   assertShownErrorMessage,
   assertShownInformationMessage,
   clearShownDialogMessages,
-  ensureServerReady,
   getShownInformationMessages,
   getTestAPI,
-  installDialogMocks,
+  makeAgentItem,
   mockInputBox,
   mockQuickPick,
   pointAtUnreachablePort,
   reconnectToTestServer,
   registerAgent,
+  registerAgentAndWait,
   resetServerState,
-  restoreDialogMocks,
-  safeDisconnect,
-  waitForAgentInTree,
+  setupDialogMockedSuite,
+  teardownDialogMockedSuite,
+  uniqueName,
   waitForMessageInTree,
 } from './testHelpers';
 
@@ -39,24 +39,9 @@ const SEND_FAILURE_PREFIX = 'Failed to send message to ';
 const NOT_CONNECTED_MESSAGE = 'Not connected to server';
 const LONG_CONTENT_FRAGMENT = 'xxx';
 
-function makeAgentItem(agentName: string): unknown {
-  return { agentName };
-}
-
-function uniqueName(prefix: string): string {
-  return `${prefix}-${String(Date.now())}-${String(Math.floor(Math.random() * 100000))}`;
-}
-
 suite('Send Message Failure Paths', () => {
-  suiteSetup(async () => {
-    await ensureServerReady();
-    installDialogMocks();
-  });
-
-  suiteTeardown(async () => {
-    restoreDialogMocks();
-    await safeDisconnect();
-  });
+  suiteSetup(setupDialogMockedSuite);
+  suiteTeardown(teardownDialogMockedSuite);
 
   test('long message content takes the truncation branch', async () => {
     const api = getTestAPI();
@@ -64,8 +49,7 @@ suite('Send Message Failure Paths', () => {
     const sender: string = uniqueName('long-sender');
     const recipient: string = uniqueName('long-recipient');
     await registerAgent(api, sender);
-    await registerAgent(api, recipient);
-    await waitForAgentInTree(api, recipient);
+    await registerAgentAndWait(api, recipient);
     clearShownDialogMessages();
 
     const longContent: string = REPEAT_CHAR.repeat(LONG_CONTENT_LENGTH);
@@ -86,8 +70,7 @@ suite('Send Message Failure Paths', () => {
     const api = getTestAPI();
     await resetServerState();
     const name: string = uniqueName('fail-send');
-    await registerAgent(api, name);
-    await waitForAgentInTree(api, name);
+    await registerAgentAndWait(api, name);
 
     await pointAtUnreachablePort(api);
     clearShownDialogMessages();

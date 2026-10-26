@@ -17,6 +17,7 @@ import {
   resetServerState,
   restoreDialogMocks,
   safeDisconnect,
+  sendMessageToolCall,
   waitForExtensionActivation,
   waitForMessageInTree,
 } from './testHelpers';
@@ -73,13 +74,7 @@ suite('UI Bug Fixes', () => {
   test('BUG FIX: Messages show as single row (no 4-row expansion)', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: '*',
-      content: 'Test message for UI verification',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, '*', 'Test message for UI verification');
 
     await waitForMessageInTree(api, 'Test message');
 
@@ -120,13 +115,7 @@ suite('UI Bug Fixes', () => {
     const regResult = await callToolString(api, 'register', { name: receiver });
     const receiverKey = extractKeyFromResult(regResult);
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: receiver,
-      content: 'This should be auto-marked read',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, receiver, 'This should be auto-marked read');
 
     const fetched = await callToolString(api, 'message', {
       action: 'get',
@@ -153,13 +142,7 @@ suite('UI Bug Fixes', () => {
   test('BROADCAST: Messages to "*" appear in tree as "all"', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: '*',
-      content: 'Broadcast test message to everyone',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, '*', 'Broadcast test message to everyone');
 
     await waitForMessageInTree(api, 'Broadcast test');
 

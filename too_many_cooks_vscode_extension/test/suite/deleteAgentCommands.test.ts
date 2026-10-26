@@ -10,19 +10,18 @@ import * as vscode from 'vscode';
 import {
   assertEqual,
   assertOk,
-  ensureServerReady,
   getTestAPI,
-  installDialogMocks,
+  makeAgentItem,
   mockWarningMessage,
-  registerAgent,
+  pointAtUnreachablePort,
+  reconnectToTestServer,
+  registerAgentAndWait,
   resetServerState,
-  restoreDialogMocks,
-  safeDisconnect,
-  TEST_PORT,
+  setupDialogMockedSuite,
+  teardownDialogMockedSuite,
+  uniqueName,
   waitForAgentGone,
-  waitForAgentInTree,
   waitForCondition,
-  waitForConnection,
 } from './testHelpers';
 
 const CMD_DELETE_AGENT = 'tooManyCooks.deleteAgent';
@@ -31,24 +30,9 @@ const CONFIRM_REMOVE = 'Remove';
 const CONFIRM_REMOVE_ALL = 'Remove All';
 const ZERO = 0;
 
-function makeAgentItem(agentName: string): unknown {
-  return { agentName };
-}
-
-function uniqueName(prefix: string): string {
-  return `${prefix}-${String(Date.now())}-${String(Math.floor(Math.random() * 100000))}`;
-}
-
 suite('Delete Agent Commands', () => {
-  suiteSetup(async () => {
-    await ensureServerReady();
-    installDialogMocks();
-  });
-
-  suiteTeardown(async () => {
-    restoreDialogMocks();
-    await safeDisconnect();
-  });
+  suiteSetup(setupDialogMockedSuite);
+  suiteTeardown(teardownDialogMockedSuite);
 
   test('deleteAgent with no selection deletes nothing', async () => {
     const api = getTestAPI();
@@ -63,8 +47,7 @@ suite('Delete Agent Commands', () => {
     const api = getTestAPI();
     await resetServerState();
     const name: string = uniqueName('keep');
-    await registerAgent(api, name);
-    await waitForAgentInTree(api, name);
+    await registerAgentAndWait(api, name);
 
     mockWarningMessage(undefined);
     await vscode.commands.executeCommand(CMD_DELETE_AGENT, makeAgentItem(name));
@@ -76,8 +59,7 @@ suite('Delete Agent Commands', () => {
     const api = getTestAPI();
     await resetServerState();
     const name: string = uniqueName('del');
-    await registerAgent(api, name);
-    await waitForAgentInTree(api, name);
+    await registerAgentAndWait(api, name);
 
     mockWarningMessage(CONFIRM_REMOVE);
     await vscode.commands.executeCommand(CMD_DELETE_AGENT, makeAgentItem(name));
@@ -92,10 +74,8 @@ suite('Delete Agent Commands', () => {
     await resetServerState();
     const first: string = uniqueName('multi-a');
     const second: string = uniqueName('multi-b');
-    await registerAgent(api, first);
-    await registerAgent(api, second);
-    await waitForAgentInTree(api, first);
-    await waitForAgentInTree(api, second);
+    await registerAgentAndWait(api, first);
+    await registerAgentAndWait(api, second);
 
     mockWarningMessage(CONFIRM_REMOVE);
     const selection: unknown[] = [makeAgentItem(first), makeAgentItem(second)];
@@ -122,8 +102,7 @@ suite('Delete Agent Commands', () => {
     const api = getTestAPI();
     await resetServerState();
     const name: string = uniqueName('keep-all');
-    await registerAgent(api, name);
-    await waitForAgentInTree(api, name);
+    await registerAgentAndWait(api, name);
 
     mockWarningMessage(undefined);
     await vscode.commands.executeCommand(CMD_DELETE_ALL);
@@ -136,10 +115,8 @@ suite('Delete Agent Commands', () => {
     await resetServerState();
     const first: string = uniqueName('all-a');
     const second: string = uniqueName('all-b');
-    await registerAgent(api, first);
-    await registerAgent(api, second);
-    await waitForAgentInTree(api, first);
-    await waitForAgentInTree(api, second);
+    await registerAgentAndWait(api, first);
+    await registerAgentAndWait(api, second);
 
     mockWarningMessage(CONFIRM_REMOVE_ALL);
     await vscode.commands.executeCommand(CMD_DELETE_ALL);
@@ -153,19 +130,14 @@ suite('Delete Agent Commands', () => {
     const api = getTestAPI();
     await resetServerState();
     const name: string = uniqueName('fail');
-    await registerAgent(api, name);
-    await waitForAgentInTree(api, name);
+    await registerAgentAndWait(api, name);
 
-    await api.disconnect();
-    const sm = api.getStoreManager();
-    sm.setTarget({ mode: 'local', port: 1, transport: 'http-streamable' });
+    await pointAtUnreachablePort(api);
 
     mockWarningMessage(CONFIRM_REMOVE);
     await vscode.commands.executeCommand(CMD_DELETE_AGENT, makeAgentItem(name));
 
-    sm.setTarget({ mode: 'local', port: Number(TEST_PORT), transport: 'http-streamable' });
-    await api.connect();
-    await waitForConnection();
+    await reconnectToTestServer(api);
     assertOk(api.isConnected(), 'reconnected after failure-path test');
   });
 });

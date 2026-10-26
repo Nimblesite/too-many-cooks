@@ -10,14 +10,12 @@ import {
   assertOk,
   assertShownErrorMessage,
   clearShownDialogMessages,
-  ensureServerReady,
   getTestAPI,
-  installDialogMocks,
   mockWarningMessage,
   pointAtUnreachablePort,
   reconnectToTestServer,
-  restoreDialogMocks,
-  safeDisconnect,
+  setupDialogMockedSuite,
+  teardownDialogMockedSuite,
 } from './testHelpers';
 
 const CMD_CONNECT = 'tooManyCooks.connect';
@@ -30,15 +28,8 @@ const REFRESH_ERROR_PREFIX = 'Failed to refresh:';
 const RELEASE_ERROR_PREFIX = 'Failed to release lock:';
 
 suite('Extension Command Failure Paths', () => {
-  suiteSetup(async () => {
-    await ensureServerReady();
-    installDialogMocks();
-  });
-
-  suiteTeardown(async () => {
-    restoreDialogMocks();
-    await safeDisconnect();
-  });
+  suiteSetup(setupDialogMockedSuite);
+  suiteTeardown(teardownDialogMockedSuite);
 
   test('connect and refresh commands surface server failures', async () => {
     const api = getTestAPI();

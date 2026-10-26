@@ -3,6 +3,7 @@
 // NO MOCKING. NO SKIPPING. FAIL HARD.
 
 import {
+  acquireLockToolCall,
   assertEqual,
   assertOk,
   callToolString,
@@ -18,6 +19,8 @@ import {
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
+  sendMessageToolCall,
+  updatePlanToolCall,
   waitForAgentInTree,
   waitForCondition,
   waitForConnection,
@@ -114,13 +117,7 @@ suite('DB Integration - UI Verification', () => {
   test('Acquire lock on /src/main.ts → file path APPEARS in locks tree', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/main.ts',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      reason: 'Editing main',
-    });
+    await acquireLockToolCall(api, '/src/main.ts', agent1Name, agent1Key, 'Editing main');
 
     await waitForLockInTree(api, '/src/main.ts');
 
@@ -137,21 +134,9 @@ suite('DB Integration - UI Verification', () => {
   test('Acquire 2 more locks → all 3 file paths visible', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/utils.ts',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      reason: 'Utils',
-    });
+    await acquireLockToolCall(api, '/src/utils.ts', agent1Name, agent1Key, 'Utils');
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/types.ts',
-      agent_name: agent2Name,
-      agent_key: agent2Key,
-      reason: 'Types',
-    });
+    await acquireLockToolCall(api, '/src/types.ts', agent2Name, agent2Key, 'Types');
 
     await waitForCondition(
       () => api.getLockTreeItemCount() >= 3,
@@ -189,13 +174,7 @@ suite('DB Integration - UI Verification', () => {
   test('Update plan for agent-1 → plan content APPEARS in agent children', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'plan', {
-      action: 'update',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      goal: 'Implement feature X',
-      current_task: 'Writing tests',
-    });
+    await updatePlanToolCall(api, agent1Name, agent1Key, 'Implement feature X', 'Writing tests');
 
     await waitForCondition(() => {
       const agentItem = api.findAgentInTree(agent1Name);
@@ -220,13 +199,7 @@ suite('DB Integration - UI Verification', () => {
   test('Send message agent-1 → agent-2 → message APPEARS in tree', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: agent2Name,
-      content: 'Starting work on main.ts',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Starting work on main.ts');
 
     await waitForMessageInTree(api, 'Starting work');
 
@@ -246,21 +219,9 @@ suite('DB Integration - UI Verification', () => {
   test('Send 2 more messages → all 3 messages visible with correct labels', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent2Name,
-      agent_key: agent2Key,
-      to_agent: agent1Name,
-      content: 'Acknowledged',
-    });
+    await sendMessageToolCall(api, agent2Name, agent2Key, agent1Name, 'Acknowledged');
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: agent2Name,
-      content: 'Done with main.ts',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Done with main.ts');
 
     await waitForCondition(
       () => api.getMessageTreeItemCount() >= 3,
@@ -278,13 +239,7 @@ suite('DB Integration - UI Verification', () => {
   test('Broadcast message to * → message APPEARS in tree with "all" label', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: '*',
-      content: 'BROADCAST: Important announcement for all agents',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, '*', 'BROADCAST: Important announcement for all agents');
 
     await waitForMessageInTree(api, 'BROADCAST');
 
@@ -369,72 +324,30 @@ suite('DB Integration - UI Verification', () => {
 
     // Re-acquire locks if lost
     if (!api.findLockInTree('/src/main.ts')) {
-      await api.callTool('lock', {
-        action: 'acquire',
-        file_path: '/src/main.ts',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        reason: 'Editing main',
-      });
+      await acquireLockToolCall(api, '/src/main.ts', agent1Name, agent1Key, 'Editing main');
     }
     if (!api.findLockInTree('/src/types.ts')) {
-      await api.callTool('lock', {
-        action: 'acquire',
-        file_path: '/src/types.ts',
-        agent_name: agent2Name,
-        agent_key: agent2Key,
-        reason: 'Types',
-      });
+      await acquireLockToolCall(api, '/src/types.ts', agent2Name, agent2Key, 'Types');
     }
 
     // Re-create plan if lost
     const agentItemForPlan = api.findAgentInTree(agent1Name);
     if (!agentItemForPlan || !hasChildWithLabel(agentItemForPlan, 'Goal:')) {
-      await api.callTool('plan', {
-        action: 'update',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        goal: 'Implement feature X',
-        current_task: 'Writing tests',
-      });
+      await updatePlanToolCall(api, agent1Name, agent1Key, 'Implement feature X', 'Writing tests');
     }
 
     // Re-send messages if lost
     if (!api.findMessageInTree('Starting work')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: agent2Name,
-        content: 'Starting work on main.ts',
-      });
+      await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Starting work on main.ts');
     }
     if (!api.findMessageInTree('Acknowledged')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent2Name,
-        agent_key: agent2Key,
-        to_agent: agent1Name,
-        content: 'Acknowledged',
-      });
+      await sendMessageToolCall(api, agent2Name, agent2Key, agent1Name, 'Acknowledged');
     }
     if (!api.findMessageInTree('Done with main')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: agent2Name,
-        content: 'Done with main.ts',
-      });
+      await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Done with main.ts');
     }
     if (!api.findMessageInTree('BROADCAST')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: '*',
-        content: 'BROADCAST: Important announcement for all agents',
-      });
+      await sendMessageToolCall(api, agent1Name, agent1Key, '*', 'BROADCAST: Important announcement for all agents');
     }
 
     await waitForCondition(

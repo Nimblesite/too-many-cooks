@@ -4,6 +4,7 @@
 import * as vscode from 'vscode';
 import {
   acquireLockAndWait,
+  acquireLockToolCall,
   assertEqual,
   assertOk,
   callToolString,
@@ -20,6 +21,8 @@ import {
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
+  sendMessageToolCall,
+  updatePlanToolCall,
   waitForAgentGone,
   waitForAgentInTree,
   waitForCondition,
@@ -108,21 +111,9 @@ suite('Store Error Handling Coverage', () => {
     const regResult = await callToolString(api, 'register', { name: deleteAgentName });
     const deleteAgentKey = extractKeyFromResult(regResult);
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/delete/agent.ts',
-      agent_name: deleteAgentName,
-      agent_key: deleteAgentKey,
-      reason: 'Will be deleted with agent',
-    });
+    await acquireLockToolCall(api, '/test/delete/agent.ts', deleteAgentName, deleteAgentKey, 'Will be deleted with agent');
 
-    await api.callTool('plan', {
-      action: 'update',
-      agent_name: deleteAgentName,
-      agent_key: deleteAgentKey,
-      goal: 'Will be deleted',
-      current_task: 'Waiting to be deleted',
-    });
+    await updatePlanToolCall(api, deleteAgentName, deleteAgentKey, 'Will be deleted', 'Waiting to be deleted');
 
     await waitForAgentInTree(api, deleteAgentName);
 
@@ -229,13 +220,7 @@ suite('Tree Provider Edge Cases', () => {
     const regResult = await callToolString(api, 'register', { name: receiverName });
     const receiverKey = extractKeyFromResult(regResult);
 
-    await api.callTool('message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: receiverName,
-      content: 'Edge case message',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, receiverName, 'Edge case message');
 
     await waitForMessageInTree(api, 'Edge case');
 
@@ -268,13 +253,7 @@ suite('Tree Provider Edge Cases', () => {
     const api = getTestAPI();
     if (!agentKey) { throw new Error('agentKey not set'); }
 
-    await api.callTool('plan', {
-      action: 'update',
-      agent_name: agentName,
-      agent_key: agentKey,
-      goal: 'Edge case goal',
-      current_task: 'Testing edge cases',
-    });
+    await updatePlanToolCall(api, agentName, agentKey, 'Edge case goal', 'Testing edge cases');
 
     // Wait for plan to appear
     await waitForCondition(() => {

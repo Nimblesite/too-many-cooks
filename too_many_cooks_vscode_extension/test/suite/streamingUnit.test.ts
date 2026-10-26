@@ -10,7 +10,7 @@ const MCP_HEADERS = {
   'content-type': 'application/json',
 };
 
-import { initDirectMcpSession, MCP_ENDPOINT } from './testHelpers';
+import { delay, initDirectMcpSession, MCP_ENDPOINT } from './testHelpers';
 
 // ============================================================================
 // Helpers - minimal, no VSIX dependency
@@ -44,10 +44,6 @@ async function registerAgentDirect(mcpSessionId: string, name: string): Promise<
   const text = await response.text();
   console.log(`[UNIT] Register response (first 200): ${text.substring(0, 200)}`);
   return text;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
 }
 
 // ============================================================================

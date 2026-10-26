@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import {
   assertEqual,
   installDialogMocks,
+  makeAgentItem,
   restoreDialogMocks,
   waitForExtensionActivation,
 } from './testHelpers';
@@ -66,10 +67,6 @@ const THIRD: MessageRecord = {
 
 function makeMessageItem(message: MessageRecord): unknown {
   return { message };
-}
-
-function makeAgentItem(agentName: string): unknown {
-  return { agentName };
 }
 
 async function writeClipboard(value: string): Promise<void> {

@@ -600,6 +600,92 @@ export function messagesTreeLeafStats(api: TestAPI): readonly [number, number] {
   return [rootCount, firstChildCount];
 }
 
+// ============================================================================
+// Shared test-construction helpers
+// ============================================================================
+
+const UNIQUE_NAME_RANDOM_BOUND = 100000;
+
+/** Build a run-unique name from a prefix plus timestamp/random suffix. */
+export function uniqueName(prefix: string): string {
+  return `${prefix}-${String(Date.now())}-${String(Math.floor(Math.random() * UNIQUE_NAME_RANDOM_BOUND))}`;
+}
+
+/** Duck-typed tree item carrying only an agentName, as used by VSIX commands. */
+export function makeAgentItem(agentName: string): unknown {
+  return { agentName };
+}
+
+/** Register an agent and wait for it to appear in the agents tree. */
+export async function registerAgentAndWait(api: TestAPI, name: string): Promise<string> {
+  const key = await registerAgent(api, name);
+  await waitForAgentInTree(api, name);
+  return key;
+}
+
+/** Suite setup for dialog-mocked command suites. */
+export async function setupDialogMockedSuite(): Promise<void> {
+  await ensureServerReady();
+  installDialogMocks();
+}
+
+/** Suite teardown for dialog-mocked command suites. */
+export async function teardownDialogMockedSuite(): Promise<void> {
+  restoreDialogMocks();
+  await safeDisconnect();
+}
+
+/** Send a message via the MCP tool and return the raw result text. */
+export async function sendMessageToolCall(
+  api: TestAPI,
+  fromAgent: string,
+  agentKey: string,
+  toAgent: string,
+  content: string,
+): Promise<string> {
+  return callToolString(api, 'message', {
+    action: 'send',
+    agent_key: agentKey,
+    agent_name: fromAgent,
+    content,
+    to_agent: toAgent,
+  });
+}
+
+/** Acquire a lock via the MCP tool and return the raw result text. */
+export async function acquireLockToolCall(
+  api: TestAPI,
+  filePath: string,
+  agentName: string,
+  agentKey: string,
+  reason: string,
+): Promise<string> {
+  return callToolString(api, 'lock', {
+    action: 'acquire',
+    agent_key: agentKey,
+    agent_name: agentName,
+    file_path: filePath,
+    reason,
+  });
+}
+
+/** Update an agent plan via the MCP tool and return the raw result text. */
+export async function updatePlanToolCall(
+  api: TestAPI,
+  agentName: string,
+  agentKey: string,
+  goal: string,
+  currentTask: string,
+): Promise<string> {
+  return callToolString(api, 'plan', {
+    action: 'update',
+    agent_key: agentKey,
+    agent_name: agentName,
+    current_task: currentTask,
+    goal,
+  });
+}
+
 // Assertion helpers
 export function assertOk(value: unknown, message: string): void {
   if (!value) { throw new Error(`Assertion failed: ${message}`); }

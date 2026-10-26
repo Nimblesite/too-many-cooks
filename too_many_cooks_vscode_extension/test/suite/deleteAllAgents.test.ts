@@ -14,6 +14,7 @@
 // assertions catch it immediately — no more orphaned rows in the UI.
 
 import {
+  acquireLockToolCall,
   assertEqual,
   assertOk,
   callToolString,
@@ -23,6 +24,9 @@ import {
   getTestAPI,
   resetServerState,
   safeDisconnect,
+  sendMessageToolCall,
+  uniqueName,
+  updatePlanToolCall,
   waitForAgentGone,
   waitForAgentInTree,
   waitForCondition,
@@ -38,7 +42,7 @@ interface RegisteredAgent {
 
 async function register(label: string): Promise<RegisteredAgent> {
   const api = getTestAPI();
-  const name = `${label}-${String(Date.now())}-${String(Math.floor(Math.random() * 100000))}`;
+  const name = uniqueName(label);
   const raw = await callToolString(api, 'register', { name });
   assertOk(!raw.includes('"error"'), `Register ${name} failed: ${raw}`);
   const key = extractKeyFromResult(raw);
@@ -74,13 +78,7 @@ async function waitForMessagesInTree(contents: readonly string[]): Promise<void>
 }
 async function acquireLock(agent: RegisteredAgent, filePath: string): Promise<void> {
   const api = getTestAPI();
-  const raw = await callToolString(api, 'lock', {
-    action: 'acquire',
-    agent_key: agent.key,
-    agent_name: agent.name,
-    file_path: filePath,
-    reason: `edit-${filePath}`,
-  });
+  const raw = await acquireLockToolCall(api, filePath, agent.name, agent.key, `edit-${filePath}`);
   assertOk(!raw.includes('"error"'), `Acquire ${filePath} by ${agent.name} failed: ${raw}`);
 }
 
@@ -90,13 +88,7 @@ async function sendMessage(
   content: string,
 ): Promise<void> {
   const api = getTestAPI();
-  const raw = await callToolString(api, 'message', {
-    action: 'send',
-    agent_key: from.key,
-    agent_name: from.name,
-    content,
-    to_agent: toAgentName,
-  });
+  const raw = await sendMessageToolCall(api, from.name, from.key, toAgentName, content);
   assertOk(!raw.includes('"error"'), `Send "${content}" from ${from.name} to ${toAgentName} failed: ${raw}`);
 }
 
@@ -106,13 +98,7 @@ async function updatePlan(
   currentTask: string,
 ): Promise<void> {
   const api = getTestAPI();
-  const raw = await callToolString(api, 'plan', {
-    action: 'update',
-    agent_key: agent.key,
-    agent_name: agent.name,
-    current_task: currentTask,
-    goal,
-  });
+  const raw = await updatePlanToolCall(api, agent.name, agent.key, goal, currentTask);
   assertOk(!raw.includes('"error"'), `Plan for ${agent.name} failed: ${raw}`);
 }
 

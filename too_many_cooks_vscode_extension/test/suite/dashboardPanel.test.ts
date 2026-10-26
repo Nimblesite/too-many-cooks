@@ -11,11 +11,13 @@ import {
   acquireLockAndWait,
   assertEqual,
   assertOk,
-  callToolString,
   ensureServerReady,
   getTestAPI,
   registerAgent,
   safeDisconnect,
+  sendMessageToolCall,
+  uniqueName,
+  updatePlanToolCall,
   waitForCondition,
 } from './testHelpers';
 
@@ -23,10 +25,6 @@ const CMD_SHOW_DASHBOARD = 'tooManyCooks.showDashboard';
 const CMD_CLOSE_ALL = 'workbench.action.closeAllEditors';
 const ONE = 1;
 const TWO = 2;
-
-function uniqueName(prefix: string): string {
-  return `${prefix}-${String(Date.now())}-${String(Math.floor(Math.random() * 100000))}`;
-}
 
 suite('Dashboard Panel', () => {
   suiteSetup(async () => {
@@ -43,20 +41,8 @@ suite('Dashboard Panel', () => {
     const firstKey: string = await registerAgent(api, firstName);
 
     await acquireLockAndWait(api, firstName, firstKey, '/dashboard/lock.ts', 'dashboard test');
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_key: firstKey,
-      agent_name: firstName,
-      content: 'dashboard message',
-      to_agent: '*',
-    });
-    await callToolString(api, 'plan', {
-      action: 'update',
-      agent_key: firstKey,
-      agent_name: firstName,
-      current_task: 'dash task',
-      goal: 'dash goal',
-    });
+    await sendMessageToolCall(api, firstName, firstKey, '*', 'dashboard message');
+    await updatePlanToolCall(api, firstName, firstKey, 'dash goal', 'dash task');
 
     await waitForCondition(() => api.getLockCount() >= ONE, 'first lock present');
     await waitForCondition(() => api.getMessageCount() >= ONE, 'first message present');
