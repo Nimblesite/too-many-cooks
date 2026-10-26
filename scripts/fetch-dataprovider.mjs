@@ -25,10 +25,15 @@ const KEEP = /^(DataProviderMigrate(\.exe)?|(lib)?e_sqlite3\.(dylib|so|dll))$/u;
 const archiveName = (platform) =>
   `${TOOL}-${VERSION}-${platform}.${platform.startsWith("win32") ? "zip" : "tar.gz"}`;
 
+// Read without an exists check first: check-then-use is a file-system race.
+const readStamp = (stamp) => {
+  try { return readFileSync(stamp, "utf8").trim(); } catch { return ""; }
+};
+
 const install = async (platform, sums) => {
   const dest = join(OUT_DIR, platform);
   const stamp = join(dest, STAMP_FILE);
-  if (existsSync(stamp) && readFileSync(stamp, "utf8").trim() === VERSION) { return; }
+  if (readStamp(stamp) === VERSION) { return; }
   const name = archiveName(platform);
   const bytes = await downloadVerified(`${RELEASE_URL}/${name}`, name, sums.get(name));
   const work = extract(name, bytes, "dpm-");

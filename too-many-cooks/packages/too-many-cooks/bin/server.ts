@@ -94,6 +94,8 @@ const exitOnVersionFlag: (info: ServerInfo) => void = (info: ServerInfo): void =
   process.exit(0);
 };
 
+const FATAL_SEE_LOG: string = "Server failed to start; see .too_many_cooks/ logs";
+
 const main: () => Promise<void> = async (): Promise<void> => {
   const info: Result<ServerInfo, string> = serverInfoFor(import.meta.url);
   if (!info.ok) {throw new Error(info.error);}
@@ -110,7 +112,8 @@ const main: () => Promise<void> = async (): Promise<void> => {
     await startServer(log, port, info.value);
   } catch (e) {
     log.fatal("Fatal error", { error: String(e) });
-    throw e;
+    // The cause is in the log; never echo it, it can carry the cloud API key.
+    throw new Error(FATAL_SEE_LOG);
   }
 };
 
