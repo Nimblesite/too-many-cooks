@@ -169,18 +169,31 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  # Build the VSIX exactly once and publish it as an artifact. The github-release,
-  # Marketplace and Open VSX jobs consume that SAME artifact, so identical bytes
-  # ship everywhere.
+  # [SWR-VSIX-PACKAGE] One VSIX per target, each built on its NATIVE runner so
+  # the bundled single-executable server is booted on the platform it ships
+  # for before it is packaged. A vsix-only release still rebuilds the server at
+  # the new version: the extension verifies --version == its own version
+  # ([SWR-REL-CHANGES-CONTRACT]).
   build-vsix:
-    name: Build VSCode Extension
-    runs-on: ubuntu-latest
+    name: Build VSCode Extension (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
     needs: [scope, codeql, ci]
     if: needs.scope.outputs.vsix == 'true'
     permissions:
       contents: read
-      id-token: write     # Sigstore attestations
-      attestations: write # [SWR-VSIX-PROVENANCE] [SWR-SEC-SBOM]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-arm64, runner: macos-15 }
+          - { target: darwin-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: win32-x64, runner: windows-2025 }
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -201,27 +214,95 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: bash scripts/stamp-version.sh "$VERSION"
 
+      - name: Install and build the server
+        working-directory: too-many-cooks
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
+      # Pinned Node runtime (SHA-256 verified) + bundled server, addon, schema
+      # and DataProviderMigrate under bin/$TARGET/. [SWR-VSIX-BUNDLE]
+      - name: Stage the single-executable server
+        run: bash scripts/stage-vsix-server.sh "$TARGET"
+
+      # --version must be exactly the tag, and the binary must boot from an
+      # empty environment and create its DB, on this native runner.
+      - name: Verify the bundled server natively
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: bash scripts/verify-bundled-server.sh "$TARGET" "$VERSION"
+
       - name: Install extension dependencies
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
 
       # vsce is version-pinned: a floating `npx @vscode/vsce` would fetch and run
       # the latest release at package time — a supply-chain risk. Bump deliberately.
-      - name: Package VSCode extension
+      - name: Package the ${{ matrix.target }} VSIX
         working-directory: too_many_cooks_vscode_extension
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          npx --yes @vscode/vsce@3.9.2 package --out "$GITHUB_WORKSPACE/dist/too-many-cooks-${VERSION}.vsix"
+          npx --yes @vscode/vsce@3.9.2 package --target "$TARGET" \
+            --out "$GITHUB_WORKSPACE/dist/too-many-cooks-${TARGET}-${VERSION}.vsix"
+
+      - name: Upload ${{ matrix.target }} VSIX
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vsix-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  # [SWR-VSIX-VERIFY] Inspect all four packages, then attest them. The
+  # github-release, Marketplace and Open VSX jobs consume THIS `vsix` artifact,
+  # so identical, verified bytes ship everywhere.
+  verify-vsix:
+    name: Verify & attest VSIX packages
+    runs-on: ubuntu-24.04
+    needs: build-vsix
+    permissions:
+      contents: read
+      id-token: write     # Sigstore attestations
+      attestations: write # [SWR-VSIX-PROVENANCE] [SWR-SEC-SBOM]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: vsix-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify every package's contents
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for target in darwin-arm64 darwin-x64 linux-x64 win32-x64; do
+            bash scripts/verify-vsix.sh "dist/too-many-cooks-${target}-${VERSION}.vsix" "$target" "$VERSION"
+          done
+          test "$(find dist -name '*.vsix' | wc -l)" -eq 4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install extension dependencies (SBOM input)
+        working-directory: too_many_cooks_vscode_extension
+        run: npm ci
 
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          path: too_many_cooks_vscode_extension
+          path: .
           format: cyclonedx-json
-          output-file: dist/too-many-cooks-vscode-${{ steps.version.outputs.VERSION }}.cdx.json
+          output-file: dist/too-many-cooks-vscode-${{ github.ref_name }}.cdx.json
           upload-artifact: false
           upload-release-assets: false
 
@@ -234,9 +315,9 @@ jobs:
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: dist/*.vsix
-          sbom-path: dist/too-many-cooks-vscode-${{ steps.version.outputs.VERSION }}.cdx.json
+          sbom-path: dist/too-many-cooks-vscode-${{ github.ref_name }}.cdx.json
 
-      - name: Upload VSIX artifact
+      - name: Upload verified VSIX artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vsix
@@ -249,7 +330,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-mcp, build-vsix]
+    needs: [build-mcp, verify-vsix]
     # A skipped (out-of-scope) build must not skip the release; a failed one must.
     if: >-
       !cancelled()
@@ -259,8 +340,11 @@ jobs:
       contents: write # create the release
       id-token: write # cosign keyless signing
     steps:
+      # Only the published sets: the per-target vsix-* intermediates are already
+      # inside the verified `vsix` artifact.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
+          pattern: '{npm-tarballs,vsix}'
           path: dist
           merge-multiple: true
 
@@ -299,7 +383,7 @@ jobs:
   publish-marketplace:
     name: Publish VSIX to VS Code Marketplace
     runs-on: ubuntu-latest
-    needs: build-vsix
+    needs: verify-vsix
     # Passwordless publish via Microsoft Entra ID OIDC — NO long-lived PAT.
     # Binding the job to the `release` environment makes the GitHub OIDC subject
     # deterministic (repo:Nimblesite/too-many-cooks:environment:release), so ONE
@@ -368,7 +452,7 @@ jobs:
   publish-openvsx:
     name: Publish VSIX (Open VSX)
     runs-on: ubuntu-latest
-    needs: build-vsix
+    needs: verify-vsix
     # Independent of publish-marketplace: the Open VSX push (which serves the
     # VS Code forks — Cursor, Windsurf, Antigravity) must not be gated on the MS
     # Marketplace publish, and vice versa. Open VSX has no OIDC/trusted-publishing
