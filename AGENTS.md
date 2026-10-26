@@ -39,7 +39,7 @@ Duplicate code is the #1 review rejection. Follow [deslop for AI](https://deslop
 ## Hard Rules — Universal
 - **Literals are illegal.** Move all literals to named constants.
 - **No manual JSON serialization/deserialization.**
-- 
+- **Dependency security is paramount** Always check packages for vulnerabilities and upgrade where they exist
 - **Switch expressions/ternaries over if/else** (except in declarative contexts).
 - **Avoid global state.** If necessary, centralize it in immutable types.
 - **Return `Result<T,E>`** (`neverthrow`) instead of throwing. **NO PLACEHOLDERS** — throw if incomplete.

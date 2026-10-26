@@ -136,7 +136,7 @@ export const createDb: (
   );
 };
 
-/** Apply Prisma migrations and open the DB. Closes the handle on failure so the file can be unlinked. */
+/** [DB-MIGRATE] Apply the DataProvider schema and open the DB. */
 const openAndInit: (
   config: TooManyCooksDataConfig,
   log: Logger,
@@ -144,11 +144,8 @@ const openAndInit: (
   config: TooManyCooksDataConfig,
   log: Logger,
 ): Result<TooManyCooksDb, string> => {
-  try {
-    applyMigrations(config.dbPath);
-  } catch (e: unknown) {
-    return error(`Prisma migrate deploy failed: ${String(e)}`);
-  }
+  const migrated: Result<void, string> = applyMigrations(config.dbPath);
+  if (!migrated.ok) { return error(`Migration failed: ${migrated.error}`); }
   let db: Database.Database;
   try {
     db = new Database(config.dbPath);
@@ -157,7 +154,7 @@ const openAndInit: (
   } catch (e: unknown) {
     return error(`Failed to open database: ${String(e)}`);
   }
-  log.debug("Schema applied via prisma migrate deploy");
+  log.debug("Schema applied via DataProviderMigrate");
   return success(createDbOps(db, config, log));
 };
 

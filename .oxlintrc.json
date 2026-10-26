@@ -179,7 +179,11 @@
           "m",
           "x",
           "y",
-          "z"
+          "z",
+          "T",
+          "E",
+          "K",
+          "V"
         ]
       }
     ],
@@ -380,84 +384,7 @@
   "overrides": [
     {
       "files": [
-        "too-many-cooks/**/*.ts"
-      ],
-      "rules": {
-        "eslint/no-console": [
-          "error",
-          {
-            "allow": [
-              "error"
-            ]
-          }
-        ],
-        "eslint/no-magic-numbers": [
-          "error",
-          {
-            "ignore": [
-              0,
-              1,
-              2,
-              3,
-              4,
-              5,
-              100,
-              200,
-              400,
-              404,
-              500
-            ],
-            "ignoreArrayIndexes": true
-          }
-        ],
-        "eslint/no-undefined": "off",
-        "eslint/sort-keys": "off",
-        "eslint/sort-imports": "off",
-        "eslint/no-inline-comments": "off",
-        "eslint/capitalized-comments": "off",
-        "eslint/arrow-body-style": "off"
-      }
-    },
-    {
-      "files": [
-        "too_many_cooks_vscode_extension/**/*.ts"
-      ],
-      "rules": {
-        "typescript/switch-exhaustiveness-check": [
-          "error",
-          {
-            "considerDefaultExhaustiveForUnions": true
-          }
-        ],
-        "typescript/consistent-type-definitions": [
-          "error",
-          "interface"
-        ],
-        "eslint/func-style": [
-          "error",
-          "declaration"
-        ],
-        "eslint/max-lines": [
-          "error",
-          300
-        ],
-        "eslint/max-params": [
-          "error",
-          3
-        ],
-        "eslint/class-methods-use-this": [
-          "error",
-          {
-            "exceptMethods": [
-              "getTreeItem"
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "too-many-cooks/packages/**/test/**/*.ts",
+        "**/test/**/*.ts",
         "**/*.test.ts",
         "**/*.spec.ts"
       ],
@@ -518,8 +445,6 @@
     "**/node_modules/**",
     "**/*.gen.ts",
     "**/scripts/**",
-    "**/.vscode-test/**",
-    "website/**",
-    "too_many_cooks_vscode_extension/playwright.config.ts"
+    "**/.vscode-test/**"
   ]
 }

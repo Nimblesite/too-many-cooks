@@ -3,8 +3,8 @@
 /// Why this exists: every other test in this suite runs against the source
 /// (tsx + node_modules layout), so they cannot detect bugs in the npm
 /// tarball — missing files from package.json `files`, devDependencies that
-/// production needs at runtime, prisma config files that fail to load when
-/// `prisma` is a devDependency. The shipped artifact has a different shape
+/// production needs at runtime, migration binaries that never made it into
+/// the tarball. The shipped artifact has a different shape
 /// than the source tree, so it MUST be tested as a black box.
 ///
 /// What it does:
@@ -13,7 +13,7 @@
 ///   3. Spawn `node node_modules/too-many-cooks/build/bin/server.js`
 ///      (no tsx, no source paths — exactly what a real user runs).
 ///   4. Assert the server starts, the DB exists, the schema is correct,
-///      and prisma `db push`-based schema repair works after corruption.
+///      and [DB-MIGRATE] DataProviderMigrate schema repair works after corruption.
 ///
 /// If this passes locally, `npm install -g too-many-cooks@<version>` works.
 /// If it fails, do not publish.
@@ -51,11 +51,20 @@ const PACKAGE_NAME: string = "too-many-cooks";
 /** Path inside the install where the server bin lives. */
 const BIN_REL_PATH: string = "node_modules/too-many-cooks/build/bin/server.js";
 
-/** Path inside the install where the prisma schema lives. */
-const SCHEMA_REL_PATH: string = "node_modules/too-many-cooks/prisma/schema.prisma";
+/** Path inside the install where the DataProvider YAML schema lives. */
+const SCHEMA_REL_PATH: string = "node_modules/too-many-cooks/schema/tmc-schema.yaml";
 
-/** Path inside the install where the prisma CLI lives. */
+/** Where prisma would land if it were still a runtime dependency. It must NOT
+ *  be: runtime `npx prisma` broke Windows installs (spawnSync npx ENOENT). */
 const PRISMA_RUNTIME_REL_PATH: string = "node_modules/prisma/package.json";
+
+/** Bundled DataProviderMigrate executables, one per supported platform. */
+const MIGRATE_BIN_TARBALL_PATHS: readonly string[] = [
+  "dataprovider/darwin-arm64/DataProviderMigrate",
+  "dataprovider/darwin-x64/DataProviderMigrate",
+  "dataprovider/linux-x64/DataProviderMigrate",
+  "dataprovider/win32-x64/DataProviderMigrate.exe",
+];
 
 /** Workspace-relative path to the SQLite database file. */
 const DB_REL_PATH: string = ".too_many_cooks/data.db";
@@ -78,16 +87,16 @@ const REQUIRED_TABLES: readonly string[] = [
   "plans",
 ];
 
-/** Column we drop to prove `db push` repairs drift. */
+/** Column we drop to prove DataProviderMigrate repairs drift. */
 const DRIFT_TABLE: string = "locks";
 const DRIFT_COLUMN: string = "reason";
 
 /** HTTP status code expected from /admin/status. */
 const HTTP_OK: number = 200;
 
-/** Forbidden files in the published tarball — regressions for bugs we hit
- *  in 0.8.0 (prisma.config.ts shipped but `prisma/config` unresolvable). */
-const FORBIDDEN_TARBALL_PATHS: readonly string[] = ["prisma.config.ts"];
+/** Forbidden files in the published tarball: Prisma is gone ([DB-MIGRATE]);
+ *  prisma.config.ts also broke 0.8.0 (`prisma/config` unresolvable). */
+const FORBIDDEN_TARBALL_PATHS: readonly string[] = ["prisma.config.ts", "schema.prisma"];
 
 // ============================================================================
 // Fixture state — populated by before()
@@ -263,7 +272,7 @@ describe("published package: tarball + install + boot", () => {
   // Static asserts on the tarball itself
   // --------------------------------------------------------------------------
 
-  it("tarball does NOT contain prisma.config.ts (regression: 0.8.0 shipped it and broke `npx prisma`)", (): void => {
+  it("tarball does NOT contain Prisma files (regression: 0.8.0 shipped prisma.config.ts and broke `npx prisma`)", (): void => {
     const fx: Fixture = requireFixture();
     const entries: readonly string[] = tarballEntries(fx.tarballPath);
     for (const forbidden of FORBIDDEN_TARBALL_PATHS) {
@@ -271,16 +280,25 @@ describe("published package: tarball + install + boot", () => {
       assert.deepStrictEqual(
         hits,
         [],
-        `Tarball MUST NOT contain ${forbidden} (regression for 0.8.0 prisma/config resolution bug). Got: ${hits.join(", ")}`,
+        `Tarball MUST NOT contain ${forbidden} (Prisma was replaced by DataProvider). Got: ${hits.join(", ")}`,
       );
     }
   });
 
-  it("tarball contains the prisma schema", (): void => {
+  it("tarball contains the DataProvider YAML schema", (): void => {
     const fx: Fixture = requireFixture();
     const entries: readonly string[] = tarballEntries(fx.tarballPath);
-    const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith("prisma/schema.prisma"));
-    assert.notStrictEqual(hits.length, 0, "Tarball MUST contain prisma/schema.prisma");
+    const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith("schema/tmc-schema.yaml"));
+    assert.notStrictEqual(hits.length, 0, "Tarball MUST contain schema/tmc-schema.yaml");
+  });
+
+  it("tarball bundles DataProviderMigrate for every supported platform (the VSIX must boot offline)", (): void => {
+    const fx: Fixture = requireFixture();
+    const entries: readonly string[] = tarballEntries(fx.tarballPath);
+    for (const bin of MIGRATE_BIN_TARBALL_PATHS) {
+      const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith(`/${bin}`));
+      assert.notStrictEqual(hits.length, 0, `Tarball MUST contain ${bin}`);
+    }
   });
 
   it("tarball contains the bin entry point", (): void => {
@@ -294,16 +312,16 @@ describe("published package: tarball + install + boot", () => {
   // Installed-tree asserts (proves npm install resolves runtime deps)
   // --------------------------------------------------------------------------
 
-  it("install resolves `prisma` as a runtime dependency (regression: 0.8.0 had it as devDep)", (): void => {
+  it("install does NOT pull in `prisma` (migrations run via the bundled DataProviderMigrate)", (): void => {
     const fx: Fixture = requireFixture();
     const p: string = join(fx.installDir, PRISMA_RUNTIME_REL_PATH);
     assert.ok(
-      existsSync(p),
-      `prisma must be installed at runtime — production runs \`npx prisma db push\`. Missing: ${p}`,
+      !existsSync(p),
+      `prisma must NOT be a runtime dependency — the server migrates with DataProviderMigrate. Found: ${p}`,
     );
   });
 
-  it("installed package has the prisma schema at the path migrate.ts expects", (): void => {
+  it("installed package has the YAML schema at the path migrate.ts expects", (): void => {
     const fx: Fixture = requireFixture();
     const p: string = join(fx.installDir, SCHEMA_REL_PATH);
     assert.ok(existsSync(p), `Schema must exist at install-relative ${SCHEMA_REL_PATH}`);
@@ -340,10 +358,10 @@ describe("published package: tarball + install + boot", () => {
   });
 
   // --------------------------------------------------------------------------
-  // The schema-repair contract — `prisma db push` patches drift
+  // The schema-repair contract — DataProviderMigrate patches drift
   // --------------------------------------------------------------------------
 
-  it("re-spawning the bin after dropping a column restores the column via `prisma db push`", async (): Promise<void> => {
+  it("re-spawning the bin after dropping a column restores the column via DataProviderMigrate", async (): Promise<void> => {
     const fx: Fixture = requireFixture();
     const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
     mkdirSync(join(workspace, ".too_many_cooks"), { recursive: true });
@@ -364,7 +382,7 @@ describe("published package: tarball + install + boot", () => {
     const dropped: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
     assert.ok(!dropped.includes(DRIFT_COLUMN), `setup: ${DRIFT_TABLE}.${DRIFT_COLUMN} gone after DROP COLUMN. Got: ${dropped.join(",")}`);
 
-    // Second boot — `prisma db push` must repair the drift.
+    // Second boot — DataProviderMigrate must repair the drift.
     const second: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
     try {
       await pollUntilReady(PORT, second);
@@ -374,14 +392,14 @@ describe("published package: tarball + install + boot", () => {
     const afterRepair: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
     assert.ok(
       afterRepair.includes(DRIFT_COLUMN),
-      `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by prisma db push on the published bin. Got: ${afterRepair.join(",")}`,
+      `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by DataProviderMigrate on the published bin. Got: ${afterRepair.join(",")}`,
     );
 
     rmSync(workspace, { recursive: true, force: true });
   });
 
   // --------------------------------------------------------------------------
-  // Stale-DB rebuild — when push fails, the bin must nuke + retry
+  // Stale-DB rebuild — when migration fails, the bin must nuke + retry
   // --------------------------------------------------------------------------
 
   it("booting against a wildly stale DB still ends up with a correct schema", async (): Promise<void> => {

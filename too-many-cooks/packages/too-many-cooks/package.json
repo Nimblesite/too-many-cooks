@@ -10,7 +10,8 @@
   },
   "files": [
     "build",
-    "prisma",
+    "schema",
+    "dataprovider",
     "README.md",
     "LICENSE"
   ],
@@ -20,9 +21,12 @@
     "directory": "too-many-cooks/packages/too-many-cooks"
   },
   "scripts": {
+    "prebuild": "node ../../../scripts/fetch-dataprovider.mjs",
     "build": "tsc",
     "start": "node build/bin/server.js",
+    "pretest": "node ../../../scripts/fetch-dataprovider.mjs",
     "test": "node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts",
+    "pretest:coverage": "node ../../../scripts/fetch-dataprovider.mjs",
     "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
   },
   "dependencies": {

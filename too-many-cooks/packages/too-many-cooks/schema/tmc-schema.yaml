@@ -1,0 +1,138 @@
+# [DB-MIGRATE] Too Many Cooks database schema — the single source of truth.
+# Applied by the DataProviderMigrate CLI (https://dataprovider.tech/docs/migrations/)
+# to SQLite (local) and PostgreSQL (cloud). Never write DDL by hand.
+name: too_many_cooks
+tables:
+  - name: identity
+    columns:
+      - name: agent_name
+        type: Text
+        isNullable: false
+      - name: agent_key
+        type: Text
+        isNullable: false
+      - name: active
+        type: Boolean
+        isNullable: false
+        defaultValue: "false"
+      - name: registered_at
+        type: BigInt
+        isNullable: false
+      - name: last_active
+        type: BigInt
+        isNullable: false
+    primaryKey:
+      columns: [agent_name]
+    indexes:
+      - name: identity_agent_key_key
+        columns: [agent_key]
+        isUnique: true
+
+  - name: locks
+    columns:
+      - name: file_path
+        type: Text
+        isNullable: false
+      - name: agent_name
+        type: Text
+        isNullable: false
+      - name: acquired_at
+        type: BigInt
+        isNullable: false
+      - name: expires_at
+        type: BigInt
+        isNullable: false
+      - name: reason
+        type: Text
+        isNullable: true
+      - name: version
+        type: Int
+        isNullable: false
+        defaultValue: "1"
+    primaryKey:
+      columns: [file_path]
+    foreignKeys:
+      - columns: [agent_name]
+        referencedTable: identity
+        referencedColumns: [agent_name]
+        onDelete: Cascade
+
+  - name: messages
+    columns:
+      - name: id
+        type: Text
+        isNullable: false
+      - name: from_agent
+        type: Text
+        isNullable: false
+      - name: to_agent
+        type: Text
+        isNullable: false
+      - name: content
+        type: Text
+        isNullable: false
+      - name: created_at
+        type: BigInt
+        isNullable: false
+      - name: read_at
+        type: BigInt
+        isNullable: true
+    primaryKey:
+      columns: [id]
+    foreignKeys:
+      - columns: [from_agent]
+        referencedTable: identity
+        referencedColumns: [agent_name]
+        onDelete: Cascade
+      - columns: [to_agent]
+        referencedTable: identity
+        referencedColumns: [agent_name]
+        onDelete: Cascade
+    indexes:
+      - name: idx_messages_inbox
+        columns: [to_agent, read_at, created_at]
+
+  - name: message_reads
+    columns:
+      - name: message_id
+        type: Text
+        isNullable: false
+      - name: agent_name
+        type: Text
+        isNullable: false
+      - name: read_at
+        type: BigInt
+        isNullable: false
+    primaryKey:
+      columns: [message_id, agent_name]
+    foreignKeys:
+      - columns: [message_id]
+        referencedTable: messages
+        referencedColumns: [id]
+        onDelete: Cascade
+      - columns: [agent_name]
+        referencedTable: identity
+        referencedColumns: [agent_name]
+        onDelete: Cascade
+
+  - name: plans
+    columns:
+      - name: agent_name
+        type: Text
+        isNullable: false
+      - name: goal
+        type: Text
+        isNullable: false
+      - name: current_task
+        type: Text
+        isNullable: false
+      - name: updated_at
+        type: BigInt
+        isNullable: false
+    primaryKey:
+      columns: [agent_name]
+    foreignKeys:
+      - columns: [agent_name]
+        referencedTable: identity
+        referencedColumns: [agent_name]
+        onDelete: Cascade

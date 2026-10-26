@@ -12,6 +12,12 @@ import Database from "better-sqlite3";
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 
+/** to_agent FK clause (any quoting style) whose ON DELETE action is NO ACTION. */
+const TO_AGENT_FK_NO_ACTION: RegExp = /FOREIGN KEY \(\W*to_agent\W*\) REFERENCES[^,]*ON DELETE NO ACTION/u;
+
+/** to_agent FK clause (any quoting style) whose ON DELETE action is CASCADE. */
+const TO_AGENT_FK_CASCADE: RegExp = /FOREIGN KEY \(\W*to_agent\W*\) REFERENCES[^,]*ON DELETE CASCADE/u;
+
 const TEST_FK_DB_PATH = ".test_fk_integrity.db" as const;
 const BROADCAST: string = "*";
 
@@ -341,7 +347,8 @@ describe("foreign_key_integrity", () => {
 
   /// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: on a DB that predates the
   /// to_agent cascade migration, reopening through createDb must repair the schema
-  /// (prisma db push rebuilds the table with ON DELETE CASCADE) so that deleting a
+  /// ([DB-MIGRATE] DataProviderMigrate diffs the FK and rebuilds the table with
+  /// ON DELETE CASCADE) so that deleting a
   /// recipient cascade-deletes their inbound messages — no orphans survive. This
   /// is the legacy-DB counterpart to the fresh-DB cascade tests above.
   it("repairs a pre-cascade messages table on reopen, then cascade-deletes inbound messages (#43)", async () => {
@@ -355,18 +362,18 @@ describe("foreign_key_integrity", () => {
     downgradeMessagesToPreCascade(TEST_FK_DB_PATH);
     assert.match(
       messagesDdl(TEST_FK_DB_PATH),
-      /messages_to_agent_fkey[\s\S]*ON DELETE NO ACTION/u,
+      TO_AGENT_FK_NO_ACTION,
       "precondition: legacy messages table must lack the to_agent cascade",
     );
 
     const second = createDb(config);
-    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via prisma db push");
+    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via DataProviderMigrate");
     if (!second.ok) { return; }
 
     assert.match(
       messagesDdl(TEST_FK_DB_PATH),
-      /messages_to_agent_fkey[\s\S]*ON DELETE CASCADE/u,
-      "db push must rebuild the messages table with the to_agent cascade",
+      TO_AGENT_FK_CASCADE,
+      "the migration must rebuild the messages table with the to_agent cascade",
     );
 
     const sender = await second.value.register("pre-sender");

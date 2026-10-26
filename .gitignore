@@ -54,7 +54,6 @@ website/_site/
 .commandtree/commandtree.sqlite3
 
 # Database migrations (generated)
-too-many-cooks/packages/local/prisma/migrations/
 
 # Other
 codegen/.dart_tool/
@@ -78,3 +77,5 @@ logs/
 .deslop-cache/
 
 .deslop/
+# [DB-MIGRATE] DataProviderMigrate binaries — fetched by scripts/fetch-dataprovider.mjs, shipped in the npm package
+too-many-cooks/packages/too-many-cooks/dataprovider/
