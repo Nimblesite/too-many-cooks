@@ -579,6 +579,46 @@ strong {
   position: relative;
 }
 
+/* The homepage hero leads with the film: a compact title, the CTAs, then the video. */
+.hero-film {
+  padding: var(--space-12) 0 var(--space-16);
+}
+
+.hero-film h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-4xl);
+  margin-bottom: var(--space-4);
+}
+
+.hero-film .hero-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0;
+}
+
+.hero-film .hero-subtitle {
+  margin-bottom: var(--space-6);
+}
+
+.hero-film .hero-buttons {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-10);
+}
+
+.hero-film .showcase-figure {
+  position: relative;
+}
+
+.hero-note {
+  margin-top: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  position: relative;
+}
+
 /* ---------- Summary Section ---------- */
 .summary-section {
   padding: var(--space-16) 0;
@@ -1013,30 +1053,7 @@ pre code {
   color: var(--text-tertiary);
 }
 
-/* ---------- Blog ---------- */
-.blog-post {
-  padding: var(--space-16) 0;
-}
-
-.blog-post-header {
-  margin-bottom: var(--space-10);
-  padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.blog-post-meta {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  margin-bottom: var(--space-3);
-}
-
-.blog-post-header h1 {
-  margin-bottom: var(--space-4);
-}
-
+/* ---------- Tags (blog tag pages; the blog itself is styled by blog.css) ---------- */
 .tag {
   display: inline-block;
   padding: var(--space-1) var(--space-3);
@@ -1050,18 +1067,6 @@ pre code {
   background: var(--accent-wash);
   color: var(--accent);
   border: 1px solid var(--accent);
-}
-
-.blog-post-content {
-  max-width: 720px;
-}
-
-.blog-post-content h2,
-.blog-post-content h3,
-.blog-post-content p,
-.blog-post-content ul,
-.blog-post-content ol {
-  max-width: 720px;
 }
 
 /* ---------- Footer ---------- */

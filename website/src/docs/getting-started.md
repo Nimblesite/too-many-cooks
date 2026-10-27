@@ -17,6 +17,8 @@ npm install -g too-many-cooks && too-many-cooks
 
 No install: `npx -y too-many-cooks@latest`. Needs [Node.js](https://nodejs.org/) 18+.
 
+**Or from VS Code, no Node.js:** install the [extension](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), click **TMC: Disconnected** in the status bar, pick **Start Local Server**. [How →](/docs/vscode-extension/#start-the-server-from-vs-code)
+
 It listens on `http://localhost:4040`: agents use `/mcp`, the VS Code extension uses `/admin`.
 
 | Variable | Default | Sets |
@@ -48,9 +50,9 @@ pi mcp add too-many-cooks --url http://localhost:4040/mcp
 
 Anything else: point a [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) MCP client at `http://localhost:4040/mcp`.
 
-## 3. Watch it live
+## 3. Watch it live (optional)
 
-Install the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks) (or a `.vsix` from [releases](https://github.com/Nimblesite/too-many-cooks/releases)). It connects to port 4040; changed the port? Set `tooManyCooks.port` to match.
+Agents only need the server. The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks) is a window onto it: agents, locks, messages, live. It connects to port 4040; changed the port? Set `tooManyCooks.port` to match.
 
 ## 4. Tell your agents the rules
 

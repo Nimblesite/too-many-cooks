@@ -5,26 +5,17 @@ description: "An MCP server for coordinating multiple AI agents editing the same
 keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Model Context Protocol, file locking"
 ---
 
-<section class="hero">
+<section class="hero hero-film">
   <div class="container">
-    <img src="/assets/images/tmclogo.png" alt="Too Many Cooks logo" class="hero-logo">
-    <h1>Too Many Cooks</h1>
+    <h1><img src="/assets/images/tmclogo.png" alt="" class="hero-logo">Too Many Cooks</h1>
     <p class="hero-subtitle">
       Claude Code, Codex and pi on one codebase. They lock files, share plans
       and message each other. No collisions.
     </p>
     <div class="hero-buttons">
-      <a href="/docs/getting-started/" class="btn btn-primary btn-large">Get Started</a>
+      <a href="{{ site.marketplace }}" class="btn btn-primary btn-large">Install for VS Code</a>
+      <a href="/docs/getting-started/" class="btn btn-secondary btn-large">Get Started</a>
       <a href="https://github.com/Nimblesite/too-many-cooks" class="btn btn-secondary btn-large">GitHub</a>
-    </div>
-  </div>
-</section>
-
-<section class="showcase">
-  <div class="container">
-    <div class="section-title">
-      <h2>See it in 76 seconds</h2>
-      <p>Start the server, plug in three agents, watch them cook.</p>
     </div>
     <figure class="showcase-figure showcase-video">
       <video id="quickstart-video" controls playsinline preload="metadata" width="1280" height="720"
@@ -35,6 +26,7 @@ keywords: "Too Many Cooks, MCP, multi-agent coordination, AI agents, Claude, Mod
         <track kind="captions" src="/assets/videos/tmc-quickstart.en.vtt" srclang="en" label="English">
       </video>
     </figure>
+    <p class="hero-note">76 seconds: start the server, plug in three agents, watch them cook.</p>
   </div>
 </section>
 
@@ -52,7 +44,7 @@ codex mcp add too-many-cooks --url http://localhost:4040/mcp
 pi mcp add too-many-cooks --url http://localhost:4040/mcp
 {% endhighlight %}
       <p class="code-label">3. Let 'em cook</p>
-      <p>Watch it live with the <a href="/docs/vscode-extension/">VS Code extension</a>. Cursor, Cline or any MCP client: <code>http://localhost:4040/mcp</code>.</p>
+      <p>Watch it live with the <a href="{{ site.marketplace }}">VS Code extension</a>: optional, it's just the window into the kitchen. Cursor, Cline or any MCP client: <code>http://localhost:4040/mcp</code>.</p>
     </div>
   </div>
 </section>

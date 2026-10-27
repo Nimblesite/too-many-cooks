@@ -19,6 +19,7 @@ export const PATHS = {
   zhHowItWorks: '/zh/docs/how-it-works/',
   blog: '/blog/',
   blogPost: '/blog/0-16-the-server-just-starts/',
+  vscodeExtension: '/docs/vscode-extension/',
 };
 
 export const TOOL_DOC_PATHS = [
@@ -69,7 +70,20 @@ export const SELECTORS = {
   blogNavLink: 'nav a[href="/blog/"]',
   blogPostLink: '.post-list a.post-title',
   blogPostTitle: '.blog-post-header h1',
+  heroInstall: '.hero a.btn-primary',
+  heroVideo: '.hero #quickstart-video',
+  postCard: '.post-grid .post-card',
+  postCardCover: '.post-grid .post-card .post-cover',
+  postCardByline: '.post-grid .post-card .byline-name',
+  postByline: '.blog-post-header .byline-name',
+  postAuthorCard: '.blog-post-footer .author-card',
+  postCtaInstall: '.blog-post-footer .cta-band a.btn-primary',
+  startServerShot: 'img[src="/assets/images/vsix-start-local-server.png"]',
 };
+
+// The extension's Marketplace listing, the target of every install CTA.
+export const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks';
+export const AUTHOR = 'Christian Findlay';
 
 // Attributes and classes the site JavaScript toggles.
 export const ATTRIBUTES = {

@@ -1,0 +1,18 @@
+{#- Author, date and reading time for `bylinePost` (a collection item) or the current page. -#}
+{%- set bylineAuthor = bylinePost.data.author if bylinePost else author -%}
+{%- set bylineDate = bylinePost.date if bylinePost else date -%}
+{%- set bylineWords = (bylinePost.content if bylinePost else content) | striptags | wordcount -%}
+{%- set person = authors[bylineAuthor] -%}
+{%- set minutes = (bylineWords / 200) | round(0, "ceil") -%}
+<div class="byline">
+  {%- if bylineAuthor %}
+  <span class="byline-avatar" aria-hidden="true">{{ person.initials if person else bylineAuthor | first }}</span>
+  {%- endif %}
+  <span class="byline-text">
+    {%- if bylineAuthor %}<span class="byline-name" itemprop="author">{{ bylineAuthor }}</span>{% endif %}
+    <span class="byline-meta">
+      <time datetime="{{ bylineDate | isoDate }}">{{ bylineDate | dateFormat }}</time>
+      &middot; {{ minutes if minutes > 1 else 1 }} min read
+    </span>
+  </span>
+</div>

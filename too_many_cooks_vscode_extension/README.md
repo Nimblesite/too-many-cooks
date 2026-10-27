@@ -8,7 +8,7 @@
 Real-time dashboard for monitoring and managing multi-agent coordination.
 </p>
 
-[![Version](https://img.shields.io/badge/version-0.4.0-c46d3b)](https://github.com/Nimblesite/too-many-cooks)
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/Nimblesite.too-many-cooks?color=c46d3b)](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3b9b8f)](LICENSE)
 [![VSCode](https://img.shields.io/badge/vscode-%3E%3D1.85-1a1a1a)](https://code.visualstudio.com)
 
@@ -34,26 +34,21 @@ and what messages are being exchanged — all from your editor.
 
 <br>
 
-<h2 style="font-weight:700;letter-spacing:-0.02em;padding-bottom:0.5rem;border-bottom:2px solid #c46d3b;">Requirements</h2>
+<h2 style="font-weight:700;letter-spacing:-0.02em;padding-bottom:0.5rem;border-bottom:2px solid #c46d3b;">Start the Server</h2>
 
-The [**Too Many Cooks MCP server**](https://www.npmjs.com/package/too-many-cooks) must be running. Install and start it:
+**From VS Code:** click **TMC: Disconnected** in the status bar, pick **Start Local Server**. The extension ships the server; no Node.js needed.
 
-```bash
-npx too-many-cooks
-```
+<img src="https://raw.githubusercontent.com/Nimblesite/too-many-cooks/main/website/src/assets/images/vsix-start-local-server.png" alt="Start Local Server in the connection picker" width="800">
 
-Or install globally:
+**Or from a terminal:**
 
 ```bash
-npm install -g too-many-cooks
-too-many-cooks
+npm install -g too-many-cooks && too-many-cooks
 ```
 
-The server starts on `http://localhost:4040`. To use a different port:
+It listens on `http://localhost:4040` (`TMC_PORT` changes it). Already running? Run **Too Many Cooks: Connect to MCP Server**.
 
-```bash
-TMC_PORT=5050 npx too-many-cooks
-```
+> The extension is optional. Agents only talk to the server; the extension is your window onto it.
 
 <br>
 

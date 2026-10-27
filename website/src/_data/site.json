@@ -18,5 +18,6 @@
     "sameAs": [
       "https://github.com/Nimblesite/too-many-cooks"
     ]
-  }
+  },
+  "marketplace": "https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks"
 }

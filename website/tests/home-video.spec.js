@@ -1,5 +1,5 @@
 import { test, expect } from './coverage.setup.js';
-import { CONNECT_COMMANDS, PATHS, SELECTORS, STATUS_OK, VIDEO } from './support/constants.js';
+import { CONNECT_COMMANDS, MARKETPLACE_URL, PATHS, SELECTORS, STATUS_OK, VIDEO } from './support/constants.js';
 import { expectVisible, gotoExpectOk } from './support/page.js';
 
 /** A served asset: OK, of `type`, and real media rather than a Git LFS pointer. */
@@ -40,5 +40,22 @@ test.describe('Homepage quickstart film', () => {
     await gotoExpectOk(page, PATHS.home);
     const quickstart = page.locator(SELECTORS.quickstart);
     for (const command of CONNECT_COMMANDS) await expect(quickstart).toContainText(command);
+  });
+});
+
+// [WEB-VIDEO] The film leads the page, beside the install CTA.
+test.describe('Homepage hero', () => {
+  test('the hero holds the film and an Install for VS Code CTA to the Marketplace', async ({ page }) => {
+    await gotoExpectOk(page, PATHS.home);
+    await expectVisible(page.locator(SELECTORS.heroVideo));
+    await expect(page.locator(SELECTORS.heroInstall)).toHaveAttribute('href', MARKETPLACE_URL);
+  });
+
+  test('the extension docs show how to start the server from VS Code', async ({ page }) => {
+    await gotoExpectOk(page, PATHS.vscodeExtension);
+    const shot = page.locator(SELECTORS.startServerShot);
+    await expectVisible(shot);
+    // A missing file still renders an <img>: only a decoded image has a width.
+    expect(await shot.evaluate((img) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
   });
 });

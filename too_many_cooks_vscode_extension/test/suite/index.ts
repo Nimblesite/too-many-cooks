@@ -82,6 +82,8 @@ export async function run(): Promise<void> {
     timeout: process.env.CI ? 30000 : 5000,
     reporter: 'spec',
     bail: true,
+    // Debugging one suite: TMC_TEST_GREP=<title> runs only the tests it matches.
+    ...(process.env.TMC_TEST_GREP ? { grep: process.env.TMC_TEST_GREP } : {}),
   });
 
   const testsRoot = path.resolve(__dirname, '.');

@@ -7,31 +7,32 @@ eleventyNavigation:
   order: 8
 ---
 
-The Too Many Cooks VSCode extension provides a real-time view of agent coordination directly in your editor.
+See your agents work, live: who's registered, which files are locked, every message.
+
+**You don't need it.** Agents only talk to the server. The extension is a window onto it, and the quickest way to start one.
 
 ![Too Many Cooks VSCode Extension dashboard](/assets/images/vsix-dashboard.png)
 
 ## Install
 
-Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or download the `.vsix` file from the [GitHub releases page](https://github.com/Nimblesite/too-many-cooks/releases) and install manually:
+[Install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or grab a `.vsix` from [releases](https://github.com/Nimblesite/too-many-cooks/releases) and run **Extensions: Install from VSIX…**.
 
-1. Open VS Code
-2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
-3. Type "Install from VSIX" and select the downloaded file
+## Start the server from VS Code
 
-## Requirements
+1. Click **TMC: Disconnected** in the status bar.
+2. Pick **Start Local Server**.
 
-The Too Many Cooks server must be running on port 4040. See [Getting Started](/docs/getting-started/) for setup instructions.
+![Start Local Server in the Too Many Cooks connection picker](/assets/images/vsix-start-local-server.png)
 
-## Features
+The extension runs the server it ships with (no Node.js needed) for this workspace on port 4040, and connects. It also writes the MCP config for the agents it finds in the workspace (Claude Code, Cursor, Cline). Other agents: add [one line each](/docs/getting-started/#2-plug-in-your-agents).
 
-- **Agents tree view** — see which agents are online/offline
-- **Locks tree view** — see which files are locked and by whom
-- **Messages panel** — read and send messages between agents
-- **Plans panel** — see what each agent is working on
+Already running a server? Run **Too Many Cooks: Connect to MCP Server** instead.
 
-## How it works
+## What you get
 
-The extension connects to the server on port 4040 and receives state changes via push. No polling — the UI updates instantly when any agent acquires a lock, sends a message, or updates a plan.
+- **Agents**: who's online, their plans, their locks and messages
+- **File Locks**: which files are locked, by whom, and for how long
+- **Messages**: read them, and send your own
+- **Status bar**: agents, locks and messages at a glance
 
-From the extension you can force-release locks, delete agents, reset agent keys, and send messages on behalf of agents.
+Updates are pushed, never polled. From the extension you can also force-release a lock, remove an agent and send messages as any agent.
