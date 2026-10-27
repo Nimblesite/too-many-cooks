@@ -26,11 +26,16 @@ export const downloadVerified = async (url, name, expected) => {
   return bytes;
 };
 
+/** Windows' own bsdtar, by absolute path: under Git Bash, PATH finds Git's
+ *  GNU tar first, and GNU tar cannot read .zip. */
+const windowsTar = () => join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+
 /** Extractor for `name` on this host. GNU tar (Linux) cannot read .zip, so
  *  zips use unzip there; Windows' bundled bsdtar reads both formats. */
-const extractor = (name) => (name.endsWith(".zip") && process.platform !== "win32"
-  ? ["unzip", ["-q", name]]
-  : ["tar", ["-xf", name]]);
+const extractor = (name) => {
+  if (process.platform === "win32") { return [windowsTar(), ["-xf", name]]; }
+  return name.endsWith(".zip") ? ["unzip", ["-q", name]] : ["tar", ["-xf", name]];
+};
 
 /** Extract an archive into a fresh temp dir and return the dir. */
 export const extract = (name, bytes, prefix) => {
