@@ -13,7 +13,7 @@ import assert from 'node:assert';
 import type { AgentPlan, FileLock, Message } from '../../src/state/types';
 import type { StatusDecryptor } from '../../src/services/storeManager';
 import type { CloudTarget, LocalTarget } from '../../src/services/connectionTypes';
-import { makeFileLock, makeMessage, makePlan } from './testSupport';
+import { makeCloudTarget, makeFileLock, makeLocalTarget, makeMessage, makePlan, requireRecord } from './testSupport';
 
 /** Edge function URL (local Supabase). */
 const EDGE_FN_URL = 'http://127.0.0.1:54321/functions/v1/tmc-api';
@@ -78,6 +78,49 @@ async function edgeFnAvailable(): Promise<boolean> {
 /** Log skip message when edge functions unavailable. */
 const SKIP_MSG = '[SKIP] Edge functions or test workspace not available';
 
+/** Shape every StatusDecryptor method returns. */
+interface DecryptOutcome<T> {
+  readonly ok: boolean;
+  readonly value?: readonly T[];
+}
+
+/**
+ * Assert a decrypt result succeeded and return its first element.
+ * [SWITCHER-CLOUD-DECRYPT] All three decryptor methods share this contract.
+ */
+function requireDecrypted<T>(result: DecryptOutcome<T>, label: string): T {
+  assert.strictEqual(result.ok, true, `${label} decrypt must succeed`);
+  const first: T | undefined = result.value?.[0];
+  if (first === undefined) { throw new Error(`${label} decrypt returned no value`); }
+  return first;
+}
+
+/** Require a string field on a JSON record. */
+function requireStringField(record: Record<string, unknown>, key: string): string {
+  const value: unknown = record[key];
+  if (typeof value !== 'string') { throw new Error(`Expected string field: ${key}`); }
+  return value;
+}
+
+/** Every status record holds these arrays. */
+const STATUS_ARRAY_FIELDS: readonly string[] = ['agents', 'locks', 'plans', 'messages'];
+
+/** Assert each named field of a status record is an array. */
+function assertStatusArrays(record: Record<string, unknown>): void {
+  for (const key of STATUS_ARRAY_FIELDS) {
+    assert.ok(Array.isArray(record[key]), `Must have ${key} array`);
+  }
+}
+
+/** Read one status array as JSON records. */
+function statusItems(record: Record<string, unknown>, key: string): readonly Record<string, unknown>[] {
+  const value: unknown = record[key];
+  if (!Array.isArray(value)) { throw new Error(`Expected ${key} array`); }
+  const items: Record<string, unknown>[] = [];
+  value.forEach((entry: unknown): void => { items.push(requireRecord(entry, key)); });
+  return items;
+}
+
 describe('Cloud Connection Switcher E2E', () => {
   let available = false;
 
@@ -99,15 +142,13 @@ describe('Cloud Connection Switcher E2E', () => {
   // ─── Pure type tests (always run, no network) ──────────────────────
 
   it('ConnectionTarget types have all required fields and discriminate correctly', () => {
-    const cloud: CloudTarget = {
+    const cloud: CloudTarget = makeCloudTarget({
       apiKey: ANON_KEY,
       apiUrl: EDGE_FN_URL,
-      mode: 'cloud',
       passphrase: TEST_PASSPHRASE,
       tenantId: TENANT_ID,
-      transport: 'stdio',
       workspaceId: WORKSPACE_ID,
-    };
+    });
     assert.strictEqual(cloud.mode, 'cloud');
     assert.strictEqual(cloud.apiUrl, EDGE_FN_URL);
     assert.strictEqual(cloud.apiKey, ANON_KEY);
@@ -116,7 +157,7 @@ describe('Cloud Connection Switcher E2E', () => {
     assert.strictEqual(cloud.passphrase, TEST_PASSPHRASE);
     assert.strictEqual(cloud.transport, 'stdio');
 
-    const local: LocalTarget = { mode: 'local', port: DEFAULT_PORT, transport: 'http-streamable' };
+    const local: LocalTarget = makeLocalTarget();
     assert.strictEqual(local.mode, 'local');
     assert.strictEqual(local.port, DEFAULT_PORT);
     assert.strictEqual(local.transport, 'http-streamable');
@@ -151,31 +192,28 @@ describe('Cloud Connection Switcher E2E', () => {
     };
 
     // Decrypt messages
-    const msgResult = decryptor.decryptMessages([encMsg]);
-    assert.strictEqual(msgResult.ok, true);
-    assert.strictEqual(msgResult.value?.[0]?.content, 'DECRYPTED', 'Content decrypted');
-    assert.strictEqual(msgResult.value?.[0]?.fromAgent, 'a', 'fromAgent preserved');
-    assert.strictEqual(msgResult.value?.[0]?.toAgent, 'b', 'toAgent preserved');
-    assert.strictEqual(msgResult.value?.[0]?.id, 'msg-1', 'id preserved');
-    assert.strictEqual(msgResult.value?.[0]?.readAt, null, 'readAt preserved');
+    const msg = requireDecrypted(decryptor.decryptMessages([encMsg]), 'Message');
+    assert.strictEqual(msg.content, 'DECRYPTED', 'Content decrypted');
+    assert.strictEqual(msg.fromAgent, 'a', 'fromAgent preserved');
+    assert.strictEqual(msg.toAgent, 'b', 'toAgent preserved');
+    assert.strictEqual(msg.id, 'msg-1', 'id preserved');
+    assert.strictEqual(msg.readAt, null, 'readAt preserved');
 
     // Decrypt plans
-    const planResult = decryptor.decryptPlans([encPlan]);
-    assert.strictEqual(planResult.ok, true);
-    assert.strictEqual(planResult.value?.[0]?.goal, 'DEC_GOAL', 'Goal decrypted');
-    assert.strictEqual(planResult.value?.[0]?.currentTask, 'DEC_TASK', 'Task decrypted');
-    assert.strictEqual(planResult.value?.[0]?.agentName, 'p', 'agentName preserved');
-    assert.strictEqual(planResult.value?.[0]?.updatedAt, 2000, 'updatedAt preserved');
+    const plan = requireDecrypted(decryptor.decryptPlans([encPlan]), 'Plan');
+    assert.strictEqual(plan.goal, 'DEC_GOAL', 'Goal decrypted');
+    assert.strictEqual(plan.currentTask, 'DEC_TASK', 'Task decrypted');
+    assert.strictEqual(plan.agentName, 'p', 'agentName preserved');
+    assert.strictEqual(plan.updatedAt, 2000, 'updatedAt preserved');
 
     // Decrypt locks
-    const lockResult = decryptor.decryptLocks([encLock]);
-    assert.strictEqual(lockResult.ok, true);
-    assert.strictEqual(lockResult.value?.[0]?.reason, 'DEC_REASON', 'Reason decrypted');
-    assert.strictEqual(lockResult.value?.[0]?.filePath, '/f.ts', 'filePath preserved');
-    assert.strictEqual(lockResult.value?.[0]?.agentName, 'l', 'agentName preserved');
-    assert.strictEqual(lockResult.value?.[0]?.version, 1, 'version preserved');
-    assert.strictEqual(lockResult.value?.[0]?.acquiredAt, 3000, 'acquiredAt preserved');
-    assert.strictEqual(lockResult.value?.[0]?.expiresAt, 4000, 'expiresAt preserved');
+    const lock = requireDecrypted(decryptor.decryptLocks([encLock]), 'Lock');
+    assert.strictEqual(lock.reason, 'DEC_REASON', 'Reason decrypted');
+    assert.strictEqual(lock.filePath, '/f.ts', 'filePath preserved');
+    assert.strictEqual(lock.agentName, 'l', 'agentName preserved');
+    assert.strictEqual(lock.version, 1, 'version preserved');
+    assert.strictEqual(lock.acquiredAt, 3000, 'acquiredAt preserved');
+    assert.strictEqual(lock.expiresAt, 4000, 'expiresAt preserved');
   });
 
   it('StatusDecryptor failure returns ok=false and no value', () => {
@@ -204,22 +242,19 @@ describe('Cloud Connection Switcher E2E', () => {
     const agentName = `${TEST_RUN_ID}-agent`;
     const resp = await edgeCall('register', { name: agentName });
     assert.strictEqual(resp.ok, true, 'Register must succeed');
-    const value = resp.value as Record<string, unknown>;
+    const value = requireRecord(resp.value, 'register');
     assert.strictEqual(typeof value.agentName, 'string', 'Must return agentName');
     assert.strictEqual(typeof value.agentKey, 'string', 'Must return agentKey');
     assert.strictEqual(value.agentName, agentName, 'agentName must match');
-    assert.ok((value.agentKey as string).length > 0, 'agentKey must be non-empty');
+    assert.ok(requireStringField(value, 'agentKey').length > 0, 'agentKey must be non-empty');
 
     // Status must include the new agent
     const status = await edgeCall('status', {});
     assert.strictEqual(status.ok, true, 'Status must succeed');
-    const statusValue = status.value as Record<string, unknown>;
-    assert.ok(Array.isArray(statusValue.agents), 'Must have agents array');
-    assert.ok(Array.isArray(statusValue.locks), 'Must have locks array');
-    assert.ok(Array.isArray(statusValue.plans), 'Must have plans array');
-    assert.ok(Array.isArray(statusValue.messages), 'Must have messages array');
+    const statusValue = requireRecord(status.value, 'status');
+    assertStatusArrays(statusValue);
 
-    const agents = statusValue.agents as Array<Record<string, unknown>>;
+    const agents = statusItems(statusValue, 'agents');
     const found = agents.some((a) => a.agent_name === agentName);
     assert.ok(found, `Agent ${agentName} must appear in status`);
   });
@@ -236,7 +271,7 @@ describe('Cloud Connection Switcher E2E', () => {
     // Register agents
     const senderResp = await edgeCall('register', { name: sender });
     assert.strictEqual(senderResp.ok, true);
-    const senderKey = (senderResp.value as Record<string, unknown>).agentKey as string;
+    const senderKey = requireStringField(requireRecord(senderResp.value, 'register'), 'agentKey');
     await edgeCall('register', { name: receiver });
 
     // Send message
@@ -255,9 +290,9 @@ describe('Cloud Connection Switcher E2E', () => {
 
     // Verify via status
     const status = await edgeCall('status', {});
-    const sv = status.value as Record<string, unknown>;
-    const messages = sv.messages as Array<Record<string, unknown>>;
-    const plans = sv.plans as Array<Record<string, unknown>>;
+    const sv = requireRecord(status.value, 'status');
+    const messages = statusItems(sv, 'messages');
+    const plans = statusItems(sv, 'plans');
 
     assert.ok(messages.some((m) => m.content === msgContent), 'Message must be in status');
     assert.ok(plans.some((p) => p.goal === planGoal), 'Plan goal must be in status');
@@ -269,14 +304,13 @@ describe('Cloud Connection Switcher E2E', () => {
 
     const resetResp = await edgeCall('adminReset', {});
     assert.strictEqual(resetResp.ok, true, 'Reset must succeed');
-    const resetValue = resetResp.value as Record<string, unknown>;
+    const resetValue = requireRecord(resetResp.value, 'reset');
     assert.strictEqual(resetValue.reset, true, 'Reset value must be true');
 
     const status = await edgeCall('status', {});
-    const sv = status.value as Record<string, unknown>;
-    assert.strictEqual((sv.agents as unknown[]).length, 0, 'Agents empty after reset');
-    assert.strictEqual((sv.locks as unknown[]).length, 0, 'Locks empty after reset');
-    assert.strictEqual((sv.plans as unknown[]).length, 0, 'Plans empty after reset');
-    assert.strictEqual((sv.messages as unknown[]).length, 0, 'Messages empty after reset');
+    const sv = requireRecord(status.value, 'status');
+    for (const key of STATUS_ARRAY_FIELDS) {
+      assert.strictEqual(statusItems(sv, key).length, 0, `${key} empty after reset`);
+    }
   });
 });

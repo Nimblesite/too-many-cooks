@@ -5,7 +5,10 @@
 
 import {
   MCP_ENDPOINT,
+  assertAgentsInTree,
   assertEqual,
+  assertLocksInTree,
+  assertMessagesInTree,
   assertOk,
   directToolCall,
   dumpTree,
@@ -15,10 +18,12 @@ import {
   getTestAPI,
   hasChildWithLabel,
   initDirectMcpSession,
+  requireAgentChild,
   requireMessageItem,
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
+  waitForAgentChild,
   waitForAgentInTree,
   waitForCondition,
   waitForConnection,
@@ -38,6 +43,28 @@ const DIRECT_CLIENT_NAME = 'streaming-test-direct';
 
 suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   let directSession: string;
+
+  /** Update the plan of a directly-registered agent over raw HTTP. */
+  async function updatePlanDirect(agentKey: string, agentName: string, currentTask: string, goal: string): Promise<void> {
+    await directToolCall(BASE_URL, directSession, 'plan', {
+      action: 'update',
+      agent_key: agentKey,
+      agent_name: agentName,
+      current_task: currentTask,
+      goal,
+    });
+  }
+
+  /** Send a message from a directly-registered agent over raw HTTP. */
+  async function sendMessageDirect(agentKey: string, agentName: string, content: string, toAgent: string): Promise<void> {
+    await directToolCall(BASE_URL, directSession, 'message', {
+      action: 'send',
+      agent_key: agentKey,
+      agent_name: agentName,
+      content,
+      to_agent: toAgent,
+    });
+  }
 
   async function acquireLockDirect(
     agentKey: string,
@@ -100,8 +127,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
       '2 agents in tree via streaming',
     );
 
-    assertOk(getTestAPI().findAgentInTree(agent1Name), `${agent1Name} MUST still be in tree`);
-    assertOk(getTestAPI().findAgentInTree(agent2Name), `${agent2Name} MUST be in tree via streaming`);
+    assertAgentsInTree(getTestAPI(), [agent1Name, agent2Name], true);
   });
 
   // =========================================================================
@@ -119,8 +145,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   test('STREAM: Acquire second lock → both locks visible in tree', async () => {
     await acquireLockDirect(agent2Key, agent2Name, '/stream/utils.ts', 'Streaming test 2');
 
-    assertOk(getTestAPI().findLockInTree('/stream/test.ts'), '/stream/test.ts MUST still be in tree');
-    assertOk(getTestAPI().findLockInTree('/stream/utils.ts'), '/stream/utils.ts MUST be in tree via streaming');
+    assertLocksInTree(getTestAPI(), ['/stream/test.ts', '/stream/utils.ts'], true);
   });
 
   test('STREAM: Release lock via direct HTTP → lock DISAPPEARS from tree', async () => {
@@ -133,8 +158,8 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
 
     await waitForLockGone(getTestAPI(), '/stream/test.ts');
 
-    assertEqual(getTestAPI().findLockInTree('/stream/test.ts'), null, '/stream/test.ts MUST NOT be in tree');
-    assertOk(getTestAPI().findLockInTree('/stream/utils.ts'), '/stream/utils.ts MUST still be in tree');
+    assertLocksInTree(getTestAPI(), ['/stream/test.ts'], false);
+    assertLocksInTree(getTestAPI(), ['/stream/utils.ts'], true);
   });
 
   // =========================================================================
@@ -142,26 +167,11 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   // =========================================================================
 
   test('STREAM: Update plan via direct HTTP → plan APPEARS in agent children', async () => {
-    await directToolCall(BASE_URL, directSession, 'plan', {
-      action: 'update',
-      agent_key: agent1Key,
-      agent_name: agent1Name,
-      current_task: 'Proving streaming works',
-      goal: 'Stream all the things',
-    });
+    await updatePlanDirect(agent1Key, agent1Name, 'Proving streaming works', 'Stream all the things');
 
-    await waitForCondition(() => {
-      const agentItem = getTestAPI().findAgentInTree(agent1Name);
-      if (!agentItem) { return false; }
-      return hasChildWithLabel(agentItem, 'Stream all the things');
-    }, 'Plan to appear in agent children via streaming');
+    await waitForAgentChild(getTestAPI(), agent1Name, 'Stream all the things', 'Plan to appear in agent children via streaming');
 
-    const agentItem = getTestAPI().findAgentInTree(agent1Name);
-    assertOk(agentItem, `${agent1Name} MUST be in tree`);
-    assertOk(
-      hasChildWithLabel(requireTreeItem(agentItem, 'agentItem must exist'), 'Stream all the things'),
-      'Plan goal MUST appear in agent children via streaming',
-    );
+    requireAgentChild(getTestAPI(), agent1Name, 'Stream all the things');
   });
 
   // =========================================================================
@@ -169,13 +179,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   // =========================================================================
 
   test('STREAM: Send message via direct HTTP → message APPEARS in messages tree', async () => {
-    await directToolCall(BASE_URL, directSession, 'message', {
-      action: 'send',
-      agent_key: agent1Key,
-      agent_name: agent1Name,
-      content: 'Streamed message proof',
-      to_agent: agent2Name,
-    });
+    await sendMessageDirect(agent1Key, agent1Name, 'Streamed message proof', agent2Name);
 
     await waitForMessageInTree(getTestAPI(), 'Streamed message');
 
@@ -186,13 +190,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
   });
 
   test('STREAM: Broadcast message via direct HTTP → broadcast APPEARS in tree', async () => {
-    await directToolCall(BASE_URL, directSession, 'message', {
-      action: 'send',
-      agent_key: agent2Key,
-      agent_name: agent2Name,
-      content: 'STREAM BROADCAST to all',
-      to_agent: '*',
-    });
+    await sendMessageDirect(agent2Key, agent2Name, 'STREAM BROADCAST to all', '*');
 
     await waitForMessageInTree(getTestAPI(), 'STREAM BROADCAST');
 
@@ -227,7 +225,7 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
 
     // Agent MUST appear via streaming after reconnect
     await waitForAgentInTree(api, reconnectAgent);
-    assertOk(api.findAgentInTree(reconnectAgent), `${reconnectAgent} MUST appear via streaming after reconnect`);
+    assertAgentsInTree(api, [reconnectAgent], true);
   });
 
   // =========================================================================
@@ -249,27 +247,11 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
     await acquireLockDirect(rtKey, roundTripAgent, '/stream/roundtrip.ts', 'Full round trip');
 
     // Update plan via stream
-    await directToolCall(BASE_URL, directSession, 'plan', {
-      action: 'update',
-      agent_key: rtKey,
-      agent_name: roundTripAgent,
-      current_task: 'Round trip task',
-      goal: 'Round trip goal',
-    });
-    await waitForCondition(() => {
-      const item = getTestAPI().findAgentInTree(roundTripAgent);
-      if (!item) { return false; }
-      return hasChildWithLabel(item, 'Round trip goal');
-    }, 'Round trip plan in tree');
+    await updatePlanDirect(rtKey, roundTripAgent, 'Round trip task', 'Round trip goal');
+    await waitForAgentChild(getTestAPI(), roundTripAgent, 'Round trip goal', 'Round trip plan in tree');
 
     // Send message via stream
-    await directToolCall(BASE_URL, directSession, 'message', {
-      action: 'send',
-      agent_key: rtKey,
-      agent_name: roundTripAgent,
-      content: 'Round trip message proof',
-      to_agent: '*',
-    });
+    await sendMessageDirect(rtKey, roundTripAgent, 'Round trip message proof', '*');
     await waitForMessageInTree(getTestAPI(), 'Round trip message');
 
     // ALL operations verified at tree/DOM level via streaming
@@ -277,13 +259,11 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
     dumpTree('FINAL LOCKS', getTestAPI().getLocksTreeSnapshot());
     dumpTree('FINAL MESSAGES', getTestAPI().getMessagesTreeSnapshot());
 
-    assertOk(getTestAPI().findAgentInTree(roundTripAgent), 'Round trip agent in tree');
-    assertOk(getTestAPI().findLockInTree('/stream/roundtrip.ts'), 'Round trip lock in tree');
-    assertOk(getTestAPI().findMessageInTree('Round trip message'), 'Round trip message in tree');
+    assertAgentsInTree(getTestAPI(), [roundTripAgent], true);
+    assertLocksInTree(getTestAPI(), ['/stream/roundtrip.ts'], true);
+    assertMessagesInTree(getTestAPI(), ['Round trip message'], true);
 
-    const agentItem = getTestAPI().findAgentInTree(roundTripAgent);
-    assertOk(agentItem, 'Round trip agent MUST exist');
-    assertOk(hasChildWithLabel(requireTreeItem(agentItem, 'agentItem must exist'), 'Round trip goal'), 'Round trip plan in agent children');
-    assertOk(hasChildWithLabel(requireTreeItem(agentItem, 'agentItem must exist'), '/stream/roundtrip.ts'), 'Round trip lock in agent children');
+    const agentItem = requireAgentChild(getTestAPI(), roundTripAgent, 'Round trip goal');
+    assertOk(hasChildWithLabel(agentItem, '/stream/roundtrip.ts'), 'Round trip lock in agent children');
   });
 });

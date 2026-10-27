@@ -89,6 +89,19 @@ function expectedQuote(message: MessageRecord): string {
   return `${message.fromAgent} → ${target}: ${message.content}`;
 }
 
+/** Assert the clipboard still holds the sentinel after a command invocation. */
+async function assertClipboardUnchanged(assertion: string, command: string, ...args: readonly unknown[]): Promise<void> {
+  await writeClipboard(SENTINEL);
+  await vscode.commands.executeCommand(command, ...args);
+  assertEqual(await readClipboard(), SENTINEL, assertion);
+}
+
+/** Single-message quote cases: one direct message and one broadcast. */
+const QUOTE_CASES: readonly { readonly assertion: string; readonly message: MessageRecord; readonly name: string }[] = [
+  { assertion: 'single-message quote format', message: FIRST, name: 'copyMessageAsQuote formats "from → to: content"' },
+  { assertion: 'broadcast recipient becomes "all"', message: SECOND, name: 'copyMessageAsQuote renders broadcast target as "all"' },
+];
+
 function expectedFullLine(message: MessageRecord): string {
   const timestamp: string = new Date(message.createdAt).toISOString();
   const target: string = message.toAgent === BROADCAST ? BROADCAST_LABEL : message.toAgent;
@@ -113,23 +126,14 @@ suite('Copy Message Commands', () => {
     );
   });
 
-  test('copyMessageAsQuote formats "from → to: content"', async () => {
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_QUOTE, makeMessageItem(FIRST));
+  for (const quoteCase of QUOTE_CASES) {
+    test(quoteCase.name, async () => {
+      await writeClipboard(SENTINEL);
+      await vscode.commands.executeCommand(CMD_COPY_QUOTE, makeMessageItem(quoteCase.message));
 
-    assertEqual(await readClipboard(), expectedQuote(FIRST), 'single-message quote format');
-  });
-
-  test('copyMessageAsQuote renders broadcast target as "all"', async () => {
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_QUOTE, makeMessageItem(SECOND));
-
-    assertEqual(
-      await readClipboard(),
-      expectedQuote(SECOND),
-      'broadcast recipient becomes "all"',
-    );
-  });
+      assertEqual(await readClipboard(), expectedQuote(quoteCase.message), quoteCase.assertion);
+    });
+  }
 
   test('copyMessageId joins message ids', async () => {
     assertEqual(
@@ -178,39 +182,27 @@ suite('Copy Message Commands', () => {
   });
 
   test('invalid or missing selections leave the clipboard untouched', async () => {
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT);
-    assertEqual(await readClipboard(), SENTINEL, 'no item leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT, 'not-an-object');
-    assertEqual(await readClipboard(), SENTINEL, 'primitive item leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT, { other: 'x' });
-    assertEqual(await readClipboard(), SENTINEL, 'item without message leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
     const incomplete: unknown = { message: { content: 'c', fromAgent: 'a', id: 'i', toAgent: 't' } };
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT, incomplete);
-    assertEqual(await readClipboard(), SENTINEL, 'message missing createdAt leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT, { message: null });
-    assertEqual(await readClipboard(), SENTINEL, 'null message leaves clipboard alone');
+    const cases: readonly (readonly [string, readonly unknown[]])[] = [
+      ['no item leaves clipboard alone', []],
+      ['primitive item leaves clipboard alone', ['not-an-object']],
+      ['item without message leaves clipboard alone', [{ other: 'x' }]],
+      ['message missing createdAt leaves clipboard alone', [incomplete]],
+      ['null message leaves clipboard alone', [{ message: null }]],
+    ];
+    for (const [assertion, args] of cases) {
+      await assertClipboardUnchanged(assertion, CMD_COPY_CONTENT, ...args);
+    }
   });
 
   test('copyAgentName rejects null, missing, and non-string agent names', async () => {
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_AGENT_NAME, null);
-    assertEqual(await readClipboard(), SENTINEL, 'null item leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_AGENT_NAME, { other: 'x' });
-    assertEqual(await readClipboard(), SENTINEL, 'item without agentName leaves clipboard alone');
-
-    await writeClipboard(SENTINEL);
-    await vscode.commands.executeCommand(CMD_COPY_AGENT_NAME, { agentName: 42 });
-    assertEqual(await readClipboard(), SENTINEL, 'non-string agentName leaves clipboard alone');
+    const cases: readonly (readonly [string, readonly unknown[]])[] = [
+      ['null item leaves clipboard alone', [null]],
+      ['item without agentName leaves clipboard alone', [{ other: 'x' }]],
+      ['non-string agentName leaves clipboard alone', [{ agentName: 42 }]],
+    ];
+    for (const [assertion, args] of cases) {
+      await assertClipboardUnchanged(assertion, CMD_COPY_AGENT_NAME, ...args);
+    }
   });
 });

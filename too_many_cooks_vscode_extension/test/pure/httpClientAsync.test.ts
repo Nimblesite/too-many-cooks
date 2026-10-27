@@ -1,9 +1,10 @@
 /// Tests for httpClient async functions using a local HTTP server.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
 import { streamableHttpPost, postJsonRequest, checkServerAvailable } from '../../src/services/httpClient';
+import { useTestServer } from './testSupport';
 
 const TEST_PORT: number = 19876;
 const BASE_URL: string = `http://localhost:${String(TEST_PORT)}`;
@@ -52,13 +53,7 @@ async function stopTestServer(): Promise<void> {
 }
 
 describe('httpClient async functions', () => {
-  before(async (): Promise<void> => {
-    await startTestServer();
-  });
-
-  after(async (): Promise<void> => {
-    await stopTestServer();
-  });
+  useTestServer(startTestServer, stopTestServer);
 
   it('streamableHttpPost sends POST and returns response', async () => {
     const response: Response = await streamableHttpPost(

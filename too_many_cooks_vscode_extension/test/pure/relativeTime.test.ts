@@ -18,18 +18,42 @@ function ago(ms: number): number {
   return Date.now() - ms;
 }
 
-describe('Relative Time Formatting', () => {
-  it('formats day, hour, minute, and now ages in the long form', () => {
-    assert.strictEqual(getRelativeTime(ago(ONE_DAY_MS * AGE_MULTIPLIER)), '2d ago');
-    assert.strictEqual(getRelativeTime(ago(ONE_HOUR_MS * AGE_MULTIPLIER)), '2h ago');
-    assert.strictEqual(getRelativeTime(ago(ONE_MINUTE_MS * AGE_MULTIPLIER)), '2m ago');
-    assert.strictEqual(getRelativeTime(Date.now()), 'just now');
-  });
+/** One formatting function plus the exact strings it must produce. */
+interface RelativeFormatCase {
+  readonly day: string;
+  readonly format: (timestamp: number) => string;
+  readonly hour: string;
+  readonly minute: string;
+  readonly name: string;
+  readonly now: string;
+}
 
-  it('formats day, hour, minute, and now ages in the short form', () => {
-    assert.strictEqual(getRelativeTimeShort(ago(ONE_DAY_MS * AGE_MULTIPLIER)), '2d');
-    assert.strictEqual(getRelativeTimeShort(ago(ONE_HOUR_MS * AGE_MULTIPLIER)), '2h');
-    assert.strictEqual(getRelativeTimeShort(ago(ONE_MINUTE_MS * AGE_MULTIPLIER)), '2m');
-    assert.strictEqual(getRelativeTimeShort(Date.now()), 'now');
-  });
+const FORMAT_CASES: readonly RelativeFormatCase[] = [
+  {
+    day: '2d ago',
+    format: getRelativeTime,
+    hour: '2h ago',
+    minute: '2m ago',
+    name: 'formats day, hour, minute, and now ages in the long form',
+    now: 'just now',
+  },
+  {
+    day: '2d',
+    format: getRelativeTimeShort,
+    hour: '2h',
+    minute: '2m',
+    name: 'formats day, hour, minute, and now ages in the short form',
+    now: 'now',
+  },
+];
+
+describe('Relative Time Formatting', () => {
+  for (const formatCase of FORMAT_CASES) {
+    it(formatCase.name, () => {
+      assert.strictEqual(formatCase.format(ago(ONE_DAY_MS * AGE_MULTIPLIER)), formatCase.day);
+      assert.strictEqual(formatCase.format(ago(ONE_HOUR_MS * AGE_MULTIPLIER)), formatCase.hour);
+      assert.strictEqual(formatCase.format(ago(ONE_MINUTE_MS * AGE_MULTIPLIER)), formatCase.minute);
+      assert.strictEqual(formatCase.format(Date.now()), formatCase.now);
+    });
+  }
 });

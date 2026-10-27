@@ -15,10 +15,13 @@
 
 import {
   acquireLockToolCall,
+  assertAgentsInTree,
   assertEqual,
+  assertLocksInTree,
+  assertMessagesInTree,
   assertOk,
   callToolString,
-  dumpTree,
+  dumpAllTrees,
   ensureServerReady,
   extractKeyFromResult,
   getTestAPI,
@@ -30,10 +33,35 @@ import {
   waitForAgentGone,
   waitForAgentInTree,
   waitForCondition,
+  waitForEach,
   waitForLockGone,
   waitForLockInTree,
   waitForMessageInTree,
 } from './testHelpers';
+
+const ALICE_BROADCAST_MESSAGE = 'cascade-alice-broadcast';
+
+/** Messages the doomed agent sent or received; every one must cascade away. */
+const ALICE_TOUCHED_MESSAGES: readonly string[] = [
+  'cascade-alice-to-bob',
+  'cascade-alice-to-carol',
+  'cascade-bob-to-alice',
+  'cascade-carol-to-alice',
+  ALICE_BROADCAST_MESSAGE,
+];
+
+/** Unrelated conversation that must survive the delete untouched. */
+const UNRELATED_MESSAGES: readonly string[] = ['cascade-bob-to-dave-unrelated', 'cascade-dave-to-bob-unrelated'];
+
+/** Every cascade-test message, in the order the test seeds them. */
+const ALL_CASCADE_MESSAGES: readonly string[] = [...ALICE_TOUCHED_MESSAGES, ...UNRELATED_MESSAGES];
+
+/** Messages addressed to the doomed recipient in the orphan test. */
+const ORPHAN_MESSAGES: readonly string[] = ['orphan-msg-1', 'orphan-msg-2', 'orphan-msg-3'];
+const WITNESS_MESSAGE = 'orphan-witness-keepme';
+
+/** Every message the delete-all test seeds. */
+const ALL_DELETE_MESSAGES: readonly string[] = ['all-msg-a-to-b', 'all-msg-b-to-c', 'all-msg-c-to-a', 'all-broadcast-from-a'];
 
 interface RegisteredAgent {
   readonly name: string;
@@ -157,31 +185,19 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await sendMessage(dave, bob.name, 'cascade-dave-to-bob-unrelated');
 
     // Wait for all tree views to catch up so we have a real "before" snapshot.
-    await waitForLockInTree(api, '/src/alice/one.ts');
-    await waitForLockInTree(api, '/src/alice/two.ts');
-    await waitForLockInTree(api, '/src/dave/keepme.ts');
-    await waitForMessagesInTree([
-      'cascade-alice-to-bob',
-      'cascade-alice-to-carol',
-      'cascade-bob-to-alice',
-      'cascade-carol-to-alice',
-      'cascade-alice-broadcast',
-      'cascade-bob-to-dave-unrelated',
-      'cascade-dave-to-bob-unrelated',
-    ]);
+    await waitForEach(
+      ['/src/alice/one.ts', '/src/alice/two.ts', '/src/dave/keepme.ts'],
+      async (filePath: string): Promise<void> => { await waitForLockInTree(api, filePath); },
+    );
+    await waitForMessagesInTree(ALL_CASCADE_MESSAGES);
     await waitForCondition(() => api.getMessageCount() === 7, 'all 7 messages to land in the store');
     await waitForCondition(() => api.getPlans().length === 2, 'both plans to land in the store');
 
     // === BEFORE snapshot — sanity assertions ===
-    dumpTree('AGENTS-before', api.getAgentsTreeSnapshot());
-    dumpTree('LOCKS-before', api.getLocksTreeSnapshot());
-    dumpTree('MESSAGES-before', api.getMessagesTreeSnapshot());
+    dumpAllTrees(api, 'before');
 
     assertEqual(api.getAgentCount(), 4, 'before: 4 agents registered');
-    assertOk(api.findAgentInTree(alice.name) !== null, 'before: alice in agents tree');
-    assertOk(api.findAgentInTree(bob.name) !== null, 'before: bob in agents tree');
-    assertOk(api.findAgentInTree(carol.name) !== null, 'before: carol in agents tree');
-    assertOk(api.findAgentInTree(dave.name) !== null, 'before: dave in agents tree');
+    assertAgentsInTree(api, [alice.name, bob.name, carol.name, dave.name], true);
     assertEqual(countLocksHeldBy(alice.name), 2, 'before: alice holds 2 locks');
     assertEqual(countLocksHeldBy(dave.name), 1, 'before: dave holds 1 lock');
     assertEqual(api.getLockCount(), 3, 'before: 3 total locks');
@@ -190,36 +206,32 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     assertEqual(api.getPlans().length, 2, 'before: 2 plans total');
     assertEqual(countMessagesInvolving(alice.name), 5, 'before: alice in 5 messages (2 out + 2 in + 1 broadcast)');
     assertEqual(api.getMessageCount(), 7, 'before: 7 total messages');
-    assertOk(api.findMessageInTree('cascade-alice-broadcast') !== null, 'before: broadcast visible');
-    assertOk(api.findMessageInTree('cascade-bob-to-dave-unrelated') !== null, 'before: unrelated bob→dave visible');
+    assertMessagesInTree(api, [ALICE_BROADCAST_MESSAGE, ...UNRELATED_MESSAGES], true);
 
     // === ACT — delete alice through the VSIX admin path ===
     await api.deleteAgent(alice.name);
     await waitForAgentGone(api, alice.name);
-    await waitForLockGone(api, '/src/alice/one.ts');
-    await waitForLockGone(api, '/src/alice/two.ts');
+    await waitForEach(
+      ['/src/alice/one.ts', '/src/alice/two.ts'],
+      async (filePath: string): Promise<void> => { await waitForLockGone(api, filePath); },
+    );
     await waitForCondition(
       () => countMessagesInvolving(alice.name) === 0,
       'all messages involving alice to disappear',
     );
 
     // === AFTER snapshot — DOUBLE-DOWN assertions ===
-    dumpTree('AGENTS-after-alice-delete', api.getAgentsTreeSnapshot());
-    dumpTree('LOCKS-after-alice-delete', api.getLocksTreeSnapshot());
-    dumpTree('MESSAGES-after-alice-delete', api.getMessagesTreeSnapshot());
+    dumpAllTrees(api, 'after-alice-delete');
 
     // Agent gone
-    assertEqual(api.findAgentInTree(alice.name), null, 'after: alice not in agents tree');
+    assertAgentsInTree(api, [alice.name], false);
     assertEqual(api.getAgentCount(), 3, 'after: 3 agents remain');
     // Survivors still present
-    assertOk(api.findAgentInTree(bob.name) !== null, 'after: bob survives');
-    assertOk(api.findAgentInTree(carol.name) !== null, 'after: carol survives');
-    assertOk(api.findAgentInTree(dave.name) !== null, 'after: dave survives');
+    assertAgentsInTree(api, [bob.name, carol.name, dave.name], true);
     // Locks
     assertEqual(countLocksHeldBy(alice.name), 0, 'after: zero locks held by alice');
-    assertEqual(api.findLockInTree('/src/alice/one.ts'), null, 'after: /src/alice/one.ts NOT in locks tree');
-    assertEqual(api.findLockInTree('/src/alice/two.ts'), null, 'after: /src/alice/two.ts NOT in locks tree');
-    assertOk(api.findLockInTree('/src/dave/keepme.ts') !== null, 'after: dave\'s lock survives');
+    assertLocksInTree(api, ['/src/alice/one.ts', '/src/alice/two.ts'], false);
+    assertLocksInTree(api, ['/src/dave/keepme.ts'], true);
     assertEqual(api.getLockCount(), 1, 'after: 1 lock total (dave\'s)');
     // Plans
     assertOk(!planExistsFor(alice.name), 'after: alice has no plan');
@@ -227,13 +239,8 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     assertEqual(api.getPlans().length, 1, 'after: 1 plan total (bob\'s)');
     // Messages — both directions cleaned, broadcast cleaned, unrelated untouched
     assertEqual(countMessagesInvolving(alice.name), 0, 'after: ZERO messages touch alice (no orphans!)');
-    assertEqual(api.findMessageInTree('cascade-alice-to-bob'), null, 'after: outbound alice→bob gone');
-    assertEqual(api.findMessageInTree('cascade-alice-to-carol'), null, 'after: outbound alice→carol gone');
-    assertEqual(api.findMessageInTree('cascade-bob-to-alice'), null, 'after: inbound bob→alice gone');
-    assertEqual(api.findMessageInTree('cascade-carol-to-alice'), null, 'after: inbound carol→alice gone');
-    assertEqual(api.findMessageInTree('cascade-alice-broadcast'), null, 'after: alice broadcast gone');
-    assertOk(api.findMessageInTree('cascade-bob-to-dave-unrelated') !== null, 'after: unrelated bob→dave survives');
-    assertOk(api.findMessageInTree('cascade-dave-to-bob-unrelated') !== null, 'after: unrelated dave→bob survives');
+    assertMessagesInTree(api, ALICE_TOUCHED_MESSAGES, false);
+    assertMessagesInTree(api, UNRELATED_MESSAGES, true);
     assertEqual(api.getMessageCount(), 2, 'after: exactly 2 unrelated messages remain');
   });
 
@@ -244,23 +251,19 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
       witness = missingAgent('witness')] =
       await registerAgents(['orphan-sender', 'orphan-doomed-recipient', 'orphan-witness']);
 
-    await sendMessage(sender, doomed.name, 'orphan-msg-1');
-    await sendMessage(sender, doomed.name, 'orphan-msg-2');
-    await sendMessage(sender, doomed.name, 'orphan-msg-3');
-    await sendMessage(sender, witness.name, 'orphan-witness-keepme');
+    for (const content of ORPHAN_MESSAGES) {
+      await sendMessage(sender, doomed.name, content);
+    }
+    await sendMessage(sender, witness.name, WITNESS_MESSAGE);
 
-    await waitForMessagesInTree([
-      'orphan-msg-1', 'orphan-msg-2', 'orphan-msg-3', 'orphan-witness-keepme',
-    ]);
+    await waitForMessagesInTree([...ORPHAN_MESSAGES, WITNESS_MESSAGE]);
     await waitForCondition(() => api.getMessageCount() === 4, 'all 4 messages to land in the store');
 
     // BEFORE
     assertEqual(api.getMessageCount(), 4, 'before: 4 messages total');
     assertEqual(countMessagesInvolving(doomed.name), 3, 'before: 3 messages target the doomed agent');
-    assertOk(api.findAgentInTree(doomed.name) !== null, 'before: doomed agent present');
-    assertOk(api.findMessageInTree('orphan-msg-1') !== null, 'before: orphan-msg-1 visible in tree');
-    assertOk(api.findMessageInTree('orphan-msg-2') !== null, 'before: orphan-msg-2 visible in tree');
-    assertOk(api.findMessageInTree('orphan-msg-3') !== null, 'before: orphan-msg-3 visible in tree');
+    assertAgentsInTree(api, [doomed.name], true);
+    assertMessagesInTree(api, ORPHAN_MESSAGES, true);
 
     // ACT: delete the RECEIVER. Pre-fix this left messages orphaned with no
     // matching identity row — exactly what produced the user's screenshot.
@@ -272,12 +275,10 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     );
 
     // AFTER
-    assertEqual(api.findAgentInTree(doomed.name), null, 'after: doomed agent gone from tree');
+    assertAgentsInTree(api, [doomed.name], false);
     assertEqual(countMessagesInvolving(doomed.name), 0, 'after: no orphaned messages reference the dead recipient');
-    assertEqual(api.findMessageInTree('orphan-msg-1'), null, 'after: orphan-msg-1 cascade-deleted');
-    assertEqual(api.findMessageInTree('orphan-msg-2'), null, 'after: orphan-msg-2 cascade-deleted');
-    assertEqual(api.findMessageInTree('orphan-msg-3'), null, 'after: orphan-msg-3 cascade-deleted');
-    assertOk(api.findMessageInTree('orphan-witness-keepme') !== null, 'after: unrelated witness message survives');
+    assertMessagesInTree(api, ORPHAN_MESSAGES, false);
+    assertMessagesInTree(api, [WITNESS_MESSAGE], true);
     assertEqual(api.getMessageCount(), 1, 'after: exactly 1 message remains');
     assertEqual(api.getAgentCount(), 2, 'after: 2 agents survive');
   });
@@ -298,21 +299,17 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await updatePlan(b, 'plan-b-goal', 'plan-b-task');
     await updatePlan(c, 'plan-c-goal', 'plan-c-task');
 
-    await sendMessage(a, b.name, 'all-msg-a-to-b');
-    await sendMessage(b, c.name, 'all-msg-b-to-c');
-    await sendMessage(c, a.name, 'all-msg-c-to-a');
-    await sendMessage(a, '*', 'all-broadcast-from-a');
+    const [MSG_A_TO_B = '', MSG_B_TO_C = '', MSG_C_TO_A = '', BROADCAST_FROM_A = ''] = ALL_DELETE_MESSAGES;
+    await sendMessage(a, b.name, MSG_A_TO_B);
+    await sendMessage(b, c.name, MSG_B_TO_C);
+    await sendMessage(c, a.name, MSG_C_TO_A);
+    await sendMessage(a, '*', BROADCAST_FROM_A);
 
-    await waitForLockInTree(api, '/all/a1.ts');
-    await waitForLockInTree(api, '/all/a2.ts');
-    await waitForLockInTree(api, '/all/b1.ts');
-    await waitForLockInTree(api, '/all/c1.ts');
-    await waitForMessagesInTree([
-      'all-msg-a-to-b',
-      'all-msg-b-to-c',
-      'all-msg-c-to-a',
-      'all-broadcast-from-a',
-    ]);
+    await waitForEach(
+      ['/all/a1.ts', '/all/a2.ts', '/all/b1.ts', '/all/c1.ts'],
+      async (filePath: string): Promise<void> => { await waitForLockInTree(api, filePath); },
+    );
+    await waitForMessagesInTree(ALL_DELETE_MESSAGES);
     await waitForCondition(() => api.getMessageCount() === 4, 'all 4 messages to land in the store');
     await waitForCondition(() => api.getLockCount() === 4, 'all 4 locks to land in the store');
     await waitForCondition(() => api.getPlans().length === 3, 'all 3 plans to land in the store');
@@ -325,37 +322,27 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
 
     // ACT: delete-all through the VSIX command path.
     await api.deleteAllAgents();
-    await waitForAgentGone(api, a.name);
-    await waitForAgentGone(api, b.name);
-    await waitForAgentGone(api, c.name);
-    await waitForLockGone(api, '/all/a1.ts');
-    await waitForLockGone(api, '/all/b1.ts');
+    await waitForEach([a.name, b.name, c.name], async (name: string): Promise<void> => { await waitForAgentGone(api, name); });
+    await waitForEach(
+      ['/all/a1.ts', '/all/b1.ts'],
+      async (filePath: string): Promise<void> => { await waitForLockGone(api, filePath); },
+    );
     await waitForCondition(() => api.getMessageCount() === 0, 'all messages to drain');
 
     // AFTER — every assertion that can possibly fire, fires.
-    dumpTree('AGENTS-after-all', api.getAgentsTreeSnapshot());
-    dumpTree('LOCKS-after-all', api.getLocksTreeSnapshot());
-    dumpTree('MESSAGES-after-all', api.getMessagesTreeSnapshot());
+    dumpAllTrees(api, 'after-all');
 
     assertEqual(api.getAgentCount(), 0, 'after: zero agents');
-    assertEqual(api.findAgentInTree(a.name), null, 'after: a gone from tree');
-    assertEqual(api.findAgentInTree(b.name), null, 'after: b gone from tree');
-    assertEqual(api.findAgentInTree(c.name), null, 'after: c gone from tree');
+    assertAgentsInTree(api, [a.name, b.name, c.name], false);
     assertEqual(api.getLockCount(), 0, 'after: zero locks');
-    assertEqual(api.findLockInTree('/all/a1.ts'), null);
-    assertEqual(api.findLockInTree('/all/a2.ts'), null);
-    assertEqual(api.findLockInTree('/all/b1.ts'), null);
-    assertEqual(api.findLockInTree('/all/c1.ts'), null);
+    assertLocksInTree(api, ['/all/a1.ts', '/all/a2.ts', '/all/b1.ts', '/all/c1.ts'], false);
     assertEqual(api.getPlans().length, 0, 'after: zero plans');
     assertEqual(api.getMessageCount(), 0, 'after: zero messages');
-    assertEqual(api.findMessageInTree('all-msg-a-to-b'), null);
-    assertEqual(api.findMessageInTree('all-msg-b-to-c'), null);
-    assertEqual(api.findMessageInTree('all-msg-c-to-a'), null);
-    assertEqual(api.findMessageInTree('all-broadcast-from-a'), null);
+    assertMessagesInTree(api, ALL_DELETE_MESSAGES, false);
 
     // The broadcast sentinel '*' must NOT be visible as a deletable agent in
     // the UI, and the tree count must reflect that.
-    assertEqual(api.findAgentInTree('*'), null, 'after: broadcast sentinel never appears as an agent');
+    assertAgentsInTree(api, ['*'], false);
 
     // Re-registering after a full wipe must still work — and broadcasts must
     // still work, which proves the '*' sentinel survived the delete-all.
@@ -365,6 +352,6 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await waitForMessageInTree(api, 'after-wipe-broadcast');
     assertEqual(api.getAgentCount(), 1, 'post-wipe: 1 fresh agent');
     assertEqual(api.getMessageCount(), 1, 'post-wipe: 1 broadcast message');
-    assertOk(api.findMessageInTree('after-wipe-broadcast') !== null, 'post-wipe: broadcast lands');
+    assertMessagesInTree(api, ['after-wipe-broadcast'], true);
   });
 });

@@ -347,17 +347,16 @@ const shownErrorMessages: string[] = [];
 const shownInformationMessages: string[] = [];
 const shownWarningMessages: string[] = [];
 
-export function mockWarningMessage(response: string | undefined): void {
-  warningMessageResponses.push(response);
+/** Push one canned dialog answer onto its queue. */
+function queueAnswer(queue: (string | undefined)[], response: string | undefined): void {
+  queue.push(response);
 }
 
-export function mockQuickPick(response: string | undefined): void {
-  quickPickResponses.push(response);
-}
+export function mockWarningMessage(response: string | undefined): void { queueAnswer(warningMessageResponses, response); }
 
-export function mockInputBox(response: string | undefined): void {
-  inputBoxResponses.push(response);
-}
+export function mockQuickPick(response: string | undefined): void { queueAnswer(quickPickResponses, response); }
+
+export function mockInputBox(response: string | undefined): void { queueAnswer(inputBoxResponses, response); }
 
 export function installDialogMocks(): void {
   if (mocksInstalled) { return; }
@@ -550,6 +549,130 @@ export function requireMessageLabel(api: TestAPI, content: string, missingMessag
   return getLabel(requireMessageItem(api, content, missingMessage));
 }
 
+/**
+ * Assert a message row's label carries every fragment and its description the
+ * given preview text, returning the row.
+ * [TEST-MESSAGE-ROW] The messages tree contract every suite checks.
+ */
+export function assertMessageRow(
+  api: TestAPI,
+  snippet: string,
+  labelFragments: readonly string[],
+  descriptionFragment: string,
+): TreeItemSnapshot {
+  const item = requireMessageItem(api, snippet, `${snippet} MUST appear in tree`);
+  const label = getLabel(item);
+  for (const fragment of labelFragments) {
+    assertOk(label.includes(fragment), `Label MUST contain "${fragment}", got: ${label}`);
+  }
+  const description = getDescription(item);
+  assertOk(
+    description.includes(descriptionFragment),
+    `Description MUST contain "${descriptionFragment}", got: ${description}`,
+  );
+  return item;
+}
+
+/** Assert the agent row's plan child carries the goal label and task text. */
+export function assertPlanChild(api: TestAPI, agentName: string, goalLabel: string, task: string): TreeItemSnapshot {
+  const agentItem = api.findAgentInTree(agentName);
+  assertOk(agentItem, `${agentName} MUST be in tree`);
+  const row = requireTreeItem(agentItem, 'agentItem must exist');
+  assertOk(getChildren(row), 'Agent should have children');
+
+  const planChild = findChildByLabel(row, goalLabel);
+  assertOk(planChild, `Plan goal "${goalLabel}" MUST appear in agent children`);
+
+  const planRow = requireTreeItem(planChild, 'planChild must exist');
+  const planDesc = getDescription(planRow);
+  assertOk(planDesc.includes(task), `Plan description should contain task, got: ${planDesc}`);
+  return planRow;
+}
+
+/** Send a broadcast message from an agent and wait for it in the messages tree. */
+export async function sendBroadcastAndWait(
+  api: TestAPI,
+  agentName: string,
+  agentKey: string,
+  content: string,
+  snippet: string,
+): Promise<void> {
+  await sendMessageToolCall(api, agentName, agentKey, '*', content);
+  await waitForMessageInTree(api, snippet);
+}
+
+/** Assert a tree lookup found the item (present) or returned null (absent). */
+export function assertTreePresence(
+  found: TreeItemSnapshot | null,
+  present: boolean,
+  label: string,
+): void {
+  if (present) {
+    assertOk(found, `${label} MUST be in tree`);
+    return;
+  }
+  assertEqual(found, null, `${label} MUST NOT be in tree`);
+}
+
+/** Assert every item is found by `find` (present) or not found (absent). */
+function assertRowsInTree<T>(
+  items: readonly T[],
+  find: (item: T) => TreeItemSnapshot | null,
+  label: (item: T) => string,
+  present: boolean,
+): void {
+  for (const item of items) {
+    assertTreePresence(find(item), present, label(item));
+  }
+}
+
+/** Assert every named agent is present in (or absent from) the agents tree. */
+export function assertAgentsInTree(api: TestAPI, names: readonly string[], present: boolean): void {
+  assertRowsInTree(names, (name: string): TreeItemSnapshot | null => api.findAgentInTree(name), (name: string): string => name, present);
+}
+
+/** Assert every file path is present in (or absent from) the locks tree. */
+export function assertLocksInTree(api: TestAPI, filePaths: readonly string[], present: boolean): void {
+  assertRowsInTree(filePaths, (filePath: string): TreeItemSnapshot | null => api.findLockInTree(filePath), (filePath: string): string => filePath, present);
+}
+
+/** Assert every content snippet is present in (or absent from) the messages tree. */
+export function assertMessagesInTree(api: TestAPI, contents: readonly string[], present: boolean): void {
+  assertRowsInTree(contents, (content: string): TreeItemSnapshot | null => api.findMessageInTree(content), (content: string): string => content, present);
+}
+
+/** Find the agent's tree row and assert its children carry the given text. */
+export function requireAgentChild(api: TestAPI, agentName: string, text: string): TreeItemSnapshot {
+  const item = api.findAgentInTree(agentName);
+  assertOk(item, `${agentName} MUST be in tree`);
+  const row = requireTreeItem(item, 'agentItem must exist');
+  assertOk(hasChildWithLabel(row, text), `${agentName} children MUST include ${text}`);
+  return row;
+}
+
+/** Wait until the agent's tree row has a child whose label contains `text`. */
+export async function waitForAgentChild(
+  api: TestAPI,
+  agentName: string,
+  text: string,
+  message: string,
+): Promise<void> {
+  await waitForCondition(() => {
+    const item = api.findAgentInTree(agentName);
+    return typeof item === 'undefined' || item === null ? false : hasChildWithLabel(item, text);
+  }, message);
+}
+
+/**
+ * Run one async wait per item, sequentially.
+ * [TEST-WAIT-EACH] Single implementation of the "wait for every row" loops.
+ */
+export async function waitForEach<T>(items: readonly T[], wait: (item: T) => Promise<void>): Promise<void> {
+  for (const item of items) {
+    await wait(item);
+  }
+}
+
 export function getDescription(item: TreeItemSnapshot): string {
   return item.description ?? '';
 }
@@ -583,6 +706,13 @@ export async function openTooManyCooksPanel(): Promise<void> {
 
 export async function delay(ms: number): Promise<void> {
   await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
+}
+
+/** Dump the agents, locks, and messages trees under a shared label suffix. */
+export function dumpAllTrees(api: TestAPI, label: string): void {
+  dumpTree(`AGENTS-${label}`, api.getAgentsTreeSnapshot());
+  dumpTree(`LOCKS-${label}`, api.getLocksTreeSnapshot());
+  dumpTree(`MESSAGES-${label}`, api.getMessagesTreeSnapshot());
 }
 
 export function dumpTree(name: string, items: readonly TreeItemSnapshot[]): void {
@@ -744,6 +874,60 @@ export function makeAgentLockItem(filePath: string, agentName: string): AgentTre
     itemType: 'lock',
     label: filePath,
   });
+}
+
+const PLAN_CHILD_PREFIX = 'Goal:';
+
+/**
+ * Re-create an agent when the server lost it (e.g. WAL not checkpointed) and
+ * return a key that is valid against the current server state.
+ * [TEST-RECONNECT-RESTORE] Reused by every suite that rehydrates server state.
+ */
+export async function ensureAgentRegistered(
+  api: TestAPI,
+  name: string,
+  currentKey: string,
+): Promise<string> {
+  if (api.findAgentInTree(name)) { return currentKey; }
+  return extractKeyFromResult(await callToolString(api, 'register', { name }));
+}
+
+/** Re-acquire a lock when the server lost it. */
+export async function ensureLockHeld(
+  api: TestAPI,
+  filePath: string,
+  agentName: string,
+  agentKey: string,
+  reason: string,
+): Promise<void> {
+  if (api.findLockInTree(filePath)) { return; }
+  await acquireLockToolCall(api, filePath, agentName, agentKey, reason);
+}
+
+/** Re-send a message when the server lost it. */
+export async function ensureMessageSent(
+  api: TestAPI,
+  fromAgent: string,
+  agentKey: string,
+  toAgent: string,
+  snippet: string,
+  content: string,
+): Promise<void> {
+  if (api.findMessageInTree(snippet)) { return; }
+  await sendMessageToolCall(api, fromAgent, agentKey, toAgent, content);
+}
+
+/** Re-apply a plan when the server lost it. */
+export async function ensurePlanUpdated(
+  api: TestAPI,
+  agentName: string,
+  agentKey: string,
+  goal: string,
+  currentTask: string,
+): Promise<void> {
+  const item = api.findAgentInTree(agentName);
+  if (item && hasChildWithLabel(item, PLAN_CHILD_PREFIX)) { return; }
+  await updatePlanToolCall(api, agentName, agentKey, goal, currentTask);
 }
 
 /** Register an agent and wait for it to appear in the agents tree. */

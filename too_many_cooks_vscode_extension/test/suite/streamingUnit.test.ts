@@ -17,6 +17,39 @@ import { delay, initDirectMcpSession, MCP_ENDPOINT } from './testHelpers';
 // ============================================================================
 
 const ADMIN_CLIENT_NAME = 'streaming-unit-test';
+const SESSION_ID_HEADER = 'mcp-session-id';
+const STREAM_TIMEOUT_MS = 3000;
+const STREAM_SETTLE_MS = 500;
+const STREAM_WAIT_MS = 2000;
+const ADMIN_STREAM_START_MS = 1000;
+const STORE_WAIT_MS = 5000;
+const STORE_POLL_MS = 100;
+
+/** GET the admin event stream for a session, abortable by the caller. */
+async function openAdminEventStream(sessionId: string, signal: AbortSignal): Promise<Response> {
+  return await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
+    headers: { 'accept': MCP_HEADERS.accept, [SESSION_ID_HEADER]: sessionId },
+    method: 'GET',
+    signal,
+  });
+}
+
+/** Log a stream response's status and content-type under the given label. */
+function logStreamResponse(response: Response, label: string): void {
+  console.log(`[UNIT] ${label} status: ${response.status}`);
+  console.log(`[UNIT] ${label} content-type: ${response.headers.get('content-type')}`);
+}
+
+/**
+ * Describe a stream failure, or null when the caller aborted the stream.
+ * Logs the failure so a hung stream is diagnosable from the test output.
+ */
+function describeStreamFailure(err: unknown, controller: AbortController, prefix: string): string | null {
+  if (controller.signal.aborted) { return null; }
+  const message = `${prefix}: ${String(err)}`;
+  console.log(`[UNIT] ${message}`);
+  return message;
+}
 const MCP_CLIENT_NAME = 'streaming-unit-test-mcp';
 
 async function initAdminSessionDirect(): Promise<string> {
@@ -70,20 +103,12 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const sessionId = await initAdminSessionDirect();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => { controller.abort(); }, 3000);
+    const timeout = setTimeout(() => { controller.abort(); }, STREAM_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-        headers: {
-          'accept': 'application/json, text/event-stream',
-          'mcp-session-id': sessionId,
-        },
-        method: 'GET',
-        signal: controller.signal,
-      });
+      const response = await openAdminEventStream(sessionId, controller.signal);
 
-      console.log(`[UNIT] GET /admin/events status: ${response.status}`);
-      console.log(`[UNIT] GET /admin/events content-type: ${response.headers.get('content-type')}`);
+      logStreamResponse(response, 'GET /admin/events');
       console.log(`[UNIT] GET /admin/events headers:`);
       response.headers.forEach((value, key) => {
         console.log(`[UNIT]   ${key}: ${value}`);
@@ -130,16 +155,8 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const receivedChunks: string[] = [];
     let streamError: string | null = null;
 
-    const streamPromise = fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-      headers: {
-        'accept': 'application/json, text/event-stream',
-        'mcp-session-id': adminSessionId,
-      },
-      method: 'GET',
-      signal: controller.signal,
-    }).then(async (response) => {
-      console.log(`[UNIT] Stream response status: ${response.status}`);
-      console.log(`[UNIT] Stream content-type: ${response.headers.get('content-type')}`);
+    const streamPromise = openAdminEventStream(adminSessionId, controller.signal).then(async (response) => {
+      logStreamResponse(response, 'Stream response');
 
       if (!response.ok) {
         streamError = `Stream failed: ${response.status}`;
@@ -165,20 +182,14 @@ suite('Streaming Unit - Isolate Pipeline', () => {
           receivedChunks.push(chunk);
         }
       } catch (err: unknown) {
-        if (!controller.signal.aborted) {
-          streamError = `Stream read error: ${String(err)}`;
-          console.log(`[UNIT] ${streamError}`);
-        }
+        streamError = describeStreamFailure(err, controller, 'Stream read error') ?? streamError;
       }
     }).catch((err: unknown) => {
-      if (!controller.signal.aborted) {
-        streamError = `Fetch error: ${String(err)}`;
-        console.log(`[UNIT] ${streamError}`);
-      }
+      streamError = describeStreamFailure(err, controller, 'Fetch error') ?? streamError;
     });
 
     // Give the stream a moment to establish
-    await delay(500);
+    await delay(STREAM_SETTLE_MS);
 
     // Now trigger a state change by registering an agent
     const agentName = `unit-test-stream-${Date.now()}`;
@@ -187,7 +198,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
 
     // Wait for events to arrive
     console.log('[UNIT] Waiting for stream events...');
-    await delay(2000);
+    await delay(STREAM_WAIT_MS);
 
     // Abort the stream
     controller.abort();
@@ -303,7 +314,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     });
 
     // Wait for the session to initialize
-    await delay(1000);
+    await delay(ADMIN_STREAM_START_MS);
 
     console.log(`[UNIT] Logs after init: ${logs.length}`);
     for (const log of logs) {
@@ -331,7 +342,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     await registerAgentDirect(mcpSessionId, agentName);
 
     // Wait for event to arrive
-    await delay(2000);
+    await delay(STREAM_WAIT_MS);
 
     abortController.abort();
 
@@ -388,12 +399,12 @@ suite('Streaming Unit - Isolate Pipeline', () => {
 
     // Wait for the store to update via streaming
     const start = Date.now();
-    const waitTimeout = 5000;
+    const waitTimeout = STORE_WAIT_MS;
     while (Date.now() - start < waitTimeout) {
       if (sm.state.agents.some(a => a.agentName === agentName)) {
         break;
       }
-      await delay(100);
+      await delay(STORE_POLL_MS);
     }
 
     unsub();

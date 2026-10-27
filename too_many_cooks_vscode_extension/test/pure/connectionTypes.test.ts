@@ -6,76 +6,46 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import type {
-  AgentType,
-  CloudTarget,
-  ConnectionMode,
-  ConnectionTarget,
-  HttpStreamableConfig,
-  LocalTarget,
-  StdioConfig,
-  Transport,
-} from '../../src/services/connectionTypes';
+import { makeCloudTarget, makeLocalTarget } from './testSupport';
+import type { AgentType, CloudTarget, ConnectionMode, ConnectionTarget, HttpStreamableConfig, LocalTarget, StdioConfig, Transport } from '../../src/services/connectionTypes';
+
+const DEFAULT_PORT = 4040;
+
+/** Every MCP transport the connection targets support. */
+const TRANSPORT_CASES: readonly Transport[] = ['stdio', 'http-streamable'];
 
 describe('connectionTypes', () => {
   describe('LocalTarget', () => {
     it('has mode local and transport http-streamable', () => {
-      const target: LocalTarget = { mode: 'local', port: 4040, transport: 'http-streamable' };
+      const target: LocalTarget = makeLocalTarget();
       assert.strictEqual(target.mode, 'local');
       assert.strictEqual(target.transport, 'http-streamable');
-      assert.strictEqual(target.port, 4040);
+      assert.strictEqual(target.port, DEFAULT_PORT);
     });
   });
 
   describe('CloudTarget', () => {
-    it('supports stdio transport', () => {
-      const target: CloudTarget = {
-        mode: 'cloud',
-        apiUrl: 'https://api.example.com',
-        apiKey: 'key',
-        tenantId: 'tenant-1',
-        workspaceId: 'ws-1',
-        passphrase: 'secret',
-        transport: 'stdio',
-      };
-      assert.strictEqual(target.mode, 'cloud');
-      assert.strictEqual(target.transport, 'stdio');
-    });
-
-    it('supports http-streamable transport', () => {
-      const target: CloudTarget = {
-        mode: 'cloud',
-        apiUrl: 'https://api.example.com',
-        apiKey: 'key',
-        tenantId: 'tenant-1',
-        workspaceId: 'ws-1',
-        passphrase: 'secret',
-        transport: 'http-streamable',
-      };
-      assert.strictEqual(target.transport, 'http-streamable');
-    });
+    for (const transport of TRANSPORT_CASES) {
+      it(`supports ${transport} transport`, () => {
+        const target: CloudTarget = makeCloudTarget({ transport });
+        assert.strictEqual(target.mode, 'cloud');
+        assert.strictEqual(target.transport, transport);
+      });
+    }
   });
 
   describe('ConnectionTarget discriminated union', () => {
     it('narrows to LocalTarget by mode', () => {
-      const target: ConnectionTarget = { mode: 'local', port: 4040, transport: 'http-streamable' };
+      const target: ConnectionTarget = makeLocalTarget();
       if (target.mode === 'local') {
-        assert.strictEqual(target.port, 4040);
+        assert.strictEqual(target.port, DEFAULT_PORT);
       } else {
         assert.fail('Should be local');
       }
     });
 
     it('narrows to CloudTarget by mode', () => {
-      const target: ConnectionTarget = {
-        mode: 'cloud',
-        apiUrl: 'https://x.com',
-        apiKey: 'k',
-        tenantId: 't',
-        workspaceId: 'w',
-        passphrase: 'p',
-        transport: 'stdio',
-      };
+      const target: ConnectionTarget = makeCloudTarget({ apiKey: 'k', apiUrl: 'https://x.com', passphrase: 'p', tenantId: 't', workspaceId: 'w' });
       if (target.mode === 'cloud') {
         assert.strictEqual(target.apiUrl, 'https://x.com');
       } else {
@@ -85,15 +55,12 @@ describe('connectionTypes', () => {
   });
 
   describe('Transport type', () => {
-    it('accepts http-streamable', () => {
-      const t: Transport = 'http-streamable';
-      assert.strictEqual(t, 'http-streamable');
-    });
-
-    it('accepts stdio', () => {
-      const t: Transport = 'stdio';
-      assert.strictEqual(t, 'stdio');
-    });
+    for (const transport of TRANSPORT_CASES) {
+      it(`accepts ${transport}`, () => {
+        const t: Transport = transport;
+        assert.strictEqual(t, transport);
+      });
+    }
   });
 
   describe('ConnectionMode type', () => {

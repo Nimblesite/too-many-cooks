@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 
 import {
+  assertAgentsInTree,
   assertEqual,
   assertOk,
   getTestAPI,
@@ -30,6 +31,15 @@ const CMD_DELETE_ALL = 'tooManyCooks.deleteAllAgents';
 const CONFIRM_REMOVE = 'Remove';
 const CONFIRM_REMOVE_ALL = 'Remove All';
 const ZERO = 0;
+
+/** Reset server state and register one fresh agent, returning its name. */
+async function seedAgent(prefix: string): Promise<string> {
+  const api = getTestAPI();
+  await resetServerState();
+  const name: string = uniqueName(prefix);
+  await registerAgentAndWait(api, name);
+  return name;
+}
 
 /** Local E2E fixture: two fresh agents registered after a state reset. */
 async function prepareTwoAgents(
@@ -60,9 +70,7 @@ suite('Delete Agent Commands', () => {
 
   test('deleteAgent cancelled by user leaves the agent', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const name: string = uniqueName('keep');
-    await registerAgentAndWait(api, name);
+    const name: string = await seedAgent('keep');
 
     mockWarningMessage(undefined);
     await vscode.commands.executeCommand(CMD_DELETE_AGENT, makeAgentItem(name));
@@ -72,9 +80,7 @@ suite('Delete Agent Commands', () => {
 
   test('deleteAgent confirmed removes the agent', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const name: string = uniqueName('del');
-    await registerAgentAndWait(api, name);
+    const name: string = await seedAgent('del');
 
     mockWarningMessage(CONFIRM_REMOVE);
     await vscode.commands.executeCommand(CMD_DELETE_AGENT, makeAgentItem(name));
@@ -94,8 +100,7 @@ suite('Delete Agent Commands', () => {
 
     await waitForAgentGone(api, first);
     await waitForAgentGone(api, second);
-    assertEqual(api.findAgentInTree(first), null, 'first selected agent removed');
-    assertEqual(api.findAgentInTree(second), null, 'second selected agent removed');
+    assertAgentsInTree(api, [first, second], false);
   });
 
   test('deleteAllAgents with no agents is a no-op', async () => {
@@ -108,9 +113,7 @@ suite('Delete Agent Commands', () => {
 
   test('deleteAllAgents cancelled by user keeps agents', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const name: string = uniqueName('keep-all');
-    await registerAgentAndWait(api, name);
+    const name: string = await seedAgent('keep-all');
 
     mockWarningMessage(undefined);
     await vscode.commands.executeCommand(CMD_DELETE_ALL);
@@ -126,15 +129,12 @@ suite('Delete Agent Commands', () => {
     await vscode.commands.executeCommand(CMD_DELETE_ALL);
 
     await waitForCondition(() => api.getAgentCount() === ZERO, 'all agents removed');
-    assertEqual(api.findAgentInTree(first), null, 'first agent removed');
-    assertEqual(api.findAgentInTree(second), null, 'second agent removed');
+    assertAgentsInTree(api, [first, second], false);
   });
 
   test('deleteAgent surfaces a failure when the server is unreachable', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const name: string = uniqueName('fail');
-    await registerAgentAndWait(api, name);
+    const name: string = await seedAgent('fail');
 
     await pointAtUnreachablePort(api);
 

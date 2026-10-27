@@ -20,6 +20,22 @@ import {
 } from '../../src/state/modelParsers';
 import { assertFieldFallback, assertMatches, describeIsRecordSuite } from './testSupport';
 
+/** A nullable field reader: values that pass through, plus its rejection case. */
+interface NullableFieldCase {
+  readonly accepted: readonly unknown[];
+  readonly fallbackInvalid: unknown;
+  readonly key: string;
+  readonly name: string;
+  readonly reader: (record: Record<string, unknown>, key: string) => unknown;
+}
+
+/** Nullable reader cases: accepted values, null, and a wrong-typed fallback. */
+const NULLABLE_FIELD_CASES: readonly NullableFieldCase[] = [
+  { accepted: ['editing'], fallbackInvalid: 42, key: 'reason', name: 'nullableStringField returns string or null', reader: nullableStringField },
+  { accepted: [1000], fallbackInvalid: 'x', key: 'readAt', name: 'nullableNumberField returns number or null', reader: nullableNumberField },
+  { accepted: [true, false], fallbackInvalid: 'yes', key: 'flag', name: 'nullableBoolField returns boolean or null', reader: nullableBoolField },
+];
+
 describe('field helpers', () => {
   it('stringField returns string value', () => {
     assert.strictEqual(stringField({ name: 'test' }, 'name'), 'test');
@@ -46,24 +62,15 @@ describe('field helpers', () => {
     assertFieldFallback(boolField, 'active', 'yes', false);
   });
 
-  it('nullableStringField returns string or null', () => {
-    assert.strictEqual(nullableStringField({ reason: 'editing' }, 'reason'), 'editing');
-    assert.strictEqual(nullableStringField({ reason: null }, 'reason'), null);
-    assertFieldFallback(nullableStringField, 'reason', 42, null);
-  });
-
-  it('nullableNumberField returns number or null', () => {
-    assert.strictEqual(nullableNumberField({ readAt: 1000 }, 'readAt'), 1000);
-    assert.strictEqual(nullableNumberField({ readAt: null }, 'readAt'), null);
-    assertFieldFallback(nullableNumberField, 'readAt', 'x', null);
-  });
-
-  it('nullableBoolField returns boolean or null', () => {
-    assert.strictEqual(nullableBoolField({ flag: true }, 'flag'), true);
-    assert.strictEqual(nullableBoolField({ flag: false }, 'flag'), false);
-    assert.strictEqual(nullableBoolField({ flag: null }, 'flag'), null);
-    assertFieldFallback(nullableBoolField, 'flag', 'yes', null);
-  });
+  for (const fieldCase of NULLABLE_FIELD_CASES) {
+    it(fieldCase.name, () => {
+      for (const value of fieldCase.accepted) {
+        assert.strictEqual(fieldCase.reader({ [fieldCase.key]: value }, fieldCase.key), value);
+      }
+      assert.strictEqual(fieldCase.reader({ [fieldCase.key]: null }, fieldCase.key), null);
+      assertFieldFallback(fieldCase.reader, fieldCase.key, fieldCase.fallbackInvalid, null);
+    });
+  }
 });
 
 describeIsRecordSuite();

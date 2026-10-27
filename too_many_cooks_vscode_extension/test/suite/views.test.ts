@@ -4,22 +4,19 @@
 import * as vscode from 'vscode';
 import {
   assertEqual,
+  assertMessageRow,
   assertOk,
   callToolString,
   extractKeyFromResult,
   getChildren,
-  getDescription,
-  getLabel,
   getTestAPI,
   reconnectFreshAndReset,
-  requireMessageItem,
   requireMessageLabel,
-  requireTreeItem,
   restoreDialogMocks,
+  sendBroadcastAndWait,
   sendMessageToolCall,
   startAgentSuite,
   waitForExtensionActivation,
-  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -28,6 +25,13 @@ const VIEW_CONTAINER = 'workbench.view.extension.tooManyCooks';
 const CMD_AGENTS_FOCUS = 'tooManyCooksAgents.focus';
 const CMD_LOCKS_FOCUS = 'tooManyCooksLocks.focus';
 const CMD_MESSAGES_FOCUS = 'tooManyCooksMessages.focus';
+
+/** One focusable view: test name plus the command that reveals it. */
+const VIEW_CASES: readonly (readonly [string, string])[] = [
+  ['Agents view is accessible', CMD_AGENTS_FOCUS],
+  ['Locks view is accessible', CMD_LOCKS_FOCUS],
+  ['Messages view is accessible', CMD_MESSAGES_FOCUS],
+];
 
 /** Reveal the view container, then focus one of its views if focus is supported. */
 async function focusView(viewCommand: string): Promise<void> {
@@ -46,16 +50,10 @@ suite('Views', () => {
     await vscode.commands.executeCommand(VIEW_CONTAINER);
   });
 
-  test('Agents view is accessible', async () => {
-    await focusView(CMD_AGENTS_FOCUS);
-  });
-
-  test('Locks view is accessible', async () => {
-    await focusView(CMD_LOCKS_FOCUS);
-  });
-
-  test('Messages view is accessible', async () => {
-    await focusView(CMD_MESSAGES_FOCUS);
+  VIEW_CASES.forEach(([name, viewCommand]) => {
+    test(name, async () => {
+      await focusView(viewCommand);
+    });
   });
 });
 
@@ -67,21 +65,11 @@ suite('UI Bug Fixes', () => {
     const api = getTestAPI();
     const agentKey = requireKey();
 
-    await sendMessageToolCall(api, agentName, agentKey, '*', 'Test message for UI verification');
+    await sendBroadcastAndWait(api, agentName, agentKey, 'Test message for UI verification', 'Test message');
 
-    await waitForMessageInTree(api, 'Test message');
-
-    const msgItem = requireMessageItem(api, 'Test message', 'Message must appear in tree');
-
+    const msgItem = assertMessageRow(api, 'Test message', [agentName, '\u2192'], 'Test message');
     const children = getChildren(msgItem);
     assertEqual(children, undefined, 'BUG FIX: Message items must NOT have children');
-
-    const label = getLabel(msgItem);
-    assertOk(label.includes(agentName), `Label should include sender: ${label}`);
-    assertOk(label.includes('\u2192'), `Label should have arrow separator: ${label}`);
-
-    const description = getDescription(msgItem);
-    assertOk(description.includes('Test message'), `Description should be message content: ${description}`);
   });
 
   test('BUG FIX: Message format is "from → to | time [unread]"', async () => {
@@ -133,15 +121,8 @@ suite('UI Bug Fixes', () => {
     const api = getTestAPI();
     const agentKey = requireKey();
 
-    await sendMessageToolCall(api, agentName, agentKey, '*', 'Broadcast test message to everyone');
+    await sendBroadcastAndWait(api, agentName, agentKey, 'Broadcast test message to everyone', 'Broadcast test');
 
-    await waitForMessageInTree(api, 'Broadcast test');
-
-    const msgItem = requireMessageItem(api, 'Broadcast test', 'Broadcast message MUST appear in tree');
-    const label = getLabel(msgItem);
-    assertOk(label.includes('\u2192 all'), `Broadcast messages should show "→ all" in label, got: ${label}`);
-
-    const description = getDescription(requireTreeItem(msgItem, 'msgItem must exist'));
-    assertOk(description.includes('Broadcast test'), `Description should contain message content, got: ${description}`);
+    assertMessageRow(api, 'Broadcast test', ['\u2192 all'], 'Broadcast test');
   });
 });

@@ -3,10 +3,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { Store } from '../../src/state/store';
-import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../../src/state/types';
+import type { AgentIdentity, AgentPlan, AppAction, AppState, FileLock, Message } from '../../src/state/types';
 import { initialState } from '../../src/state/types';
 
-import { makeAgentIdentity, makeFileLock, makeMessage, makePlan, storeWith } from './testSupport';
+import { countState, makeAgentIdentity, makeFileLock, makeMessage, makePlan, describeCollectionActionCases, storeWith } from './testSupport';
+import type { CollectionActionCase, StateCollection } from './testSupport';
 
 const AGENT_1: AgentIdentity = makeAgentIdentity();
 const AGENT_2: AgentIdentity = makeAgentIdentity({ agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 });
@@ -19,6 +20,47 @@ const MSG_TO_AGENT_1: Message = makeMessage({ id: 'msg-2', fromAgent: 'agent-2',
 const MSG_BETWEEN_OTHERS: Message = makeMessage({ id: 'msg-3', fromAgent: 'agent-2', toAgent: '*', content: 'broadcast', createdAt: 1200 });
 
 const PLAN_1: AgentPlan = makePlan();
+
+/** Collection-replacing and item-appending actions, one case per action. */
+const COLLECTION_ACTION_CASES: readonly CollectionActionCase[] = [
+  { actions: [{ agents: [AGENT_1, AGENT_2], type: 'SetAgents' }], collection: 'agents', expected: 2, name: 'SetAgents replaces all agents' },
+  { actions: [{ agent: AGENT_1, type: 'AddAgent' }, { agent: AGENT_2, type: 'AddAgent' }], collection: 'agents', expected: 2, name: 'AddAgent appends an agent' },
+  { actions: [{ locks: [LOCK_1, LOCK_2], type: 'SetLocks' }], collection: 'locks', expected: 2, name: 'SetLocks replaces all locks' },
+  { actions: [{ lock: LOCK_1, type: 'UpsertLock' }], collection: 'locks', expected: 1, name: 'UpsertLock adds new lock' },
+  { actions: [{ messages: [MSG_1], type: 'SetMessages' }], collection: 'messages', expected: 1, name: 'SetMessages replaces all messages' },
+  { actions: [{ message: MSG_1, type: 'AddMessage' }], collection: 'messages', expected: 1, name: 'AddMessage appends a message' },
+  { actions: [{ plans: [PLAN_1], type: 'SetPlans' }], collection: 'plans', expected: 1, name: 'SetPlans replaces all plans' },
+  { actions: [{ plan: PLAN_1, type: 'UpsertPlan' }], collection: 'plans', expected: 1, name: 'UpsertPlan adds new plan' },
+];
+
+/** Upsert actions that must replace, not append, an item with the same key. */
+interface UpsertReplacementCase {
+  readonly collection: StateCollection;
+  readonly expected: unknown;
+  readonly name: string;
+  readonly read: (state: AppState) => unknown;
+  readonly setup: AppAction;
+  readonly update: AppAction;
+}
+
+const UPSERT_REPLACEMENT_CASES: readonly UpsertReplacementCase[] = [
+  {
+    collection: 'locks',
+    expected: 'refactoring',
+    name: 'UpsertLock replaces existing lock by filePath',
+    read: (state: AppState): unknown => state.locks[0]?.reason,
+    setup: { lock: LOCK_1, type: 'UpsertLock' },
+    update: { lock: { ...LOCK_1, reason: 'refactoring', version: 2 }, type: 'UpsertLock' },
+  },
+  {
+    collection: 'plans',
+    expected: 'Writing tests',
+    name: 'UpsertPlan replaces existing plan by agentName',
+    read: (state: AppState): unknown => state.plans[0]?.currentTask,
+    setup: { plan: PLAN_1, type: 'UpsertPlan' },
+    update: { plan: { ...PLAN_1, currentTask: 'Writing tests' }, type: 'UpsertPlan' },
+  },
+];
 
 describe('Store', () => {
   it('starts with initial state', () => {
@@ -52,19 +94,11 @@ describe('Store', () => {
   });
 });
 
+describe('Collection actions', () => {
+  describeCollectionActionCases(COLLECTION_ACTION_CASES);
+});
+
 describe('Agent actions', () => {
-  it('SetAgents replaces all agents', () => {
-    const store: Store = storeWith({ agents: [AGENT_1, AGENT_2], type: 'SetAgents' });
-    assert.strictEqual(store.getState().agents.length, 2);
-  });
-
-  it('AddAgent appends an agent', () => {
-    const store: Store = new Store();
-    store.dispatch({ agent: AGENT_1, type: 'AddAgent' });
-    store.dispatch({ agent: AGENT_2, type: 'AddAgent' });
-    assert.strictEqual(store.getState().agents.length, 2);
-  });
-
   it('RemoveAgent removes agent and associated locks and plans', () => {
     const store: Store = new Store();
     store.dispatch({ agents: [AGENT_1, AGENT_2], type: 'SetAgents' });
@@ -102,25 +136,6 @@ describe('Agent actions', () => {
 });
 
 describe('Lock actions', () => {
-  it('SetLocks replaces all locks', () => {
-    const store: Store = storeWith({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
-    assert.strictEqual(store.getState().locks.length, 2);
-  });
-
-  it('UpsertLock adds new lock', () => {
-    const store: Store = storeWith({ lock: LOCK_1, type: 'UpsertLock' });
-    assert.strictEqual(store.getState().locks.length, 1);
-  });
-
-  it('UpsertLock replaces existing lock by filePath', () => {
-    const store: Store = storeWith({ lock: LOCK_1, type: 'UpsertLock' });
-    const updated: FileLock = { ...LOCK_1, reason: 'refactoring', version: 2 };
-    store.dispatch({ lock: updated, type: 'UpsertLock' });
-    const state: AppState = store.getState();
-    assert.strictEqual(state.locks.length, 1);
-    assert.strictEqual(state.locks[0]?.reason, 'refactoring');
-  });
-
   it('RemoveLock removes lock by filePath', () => {
     const store: Store = new Store();
     store.dispatch({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
@@ -144,34 +159,15 @@ describe('Lock actions', () => {
 });
 
 describe('Message and plan actions', () => {
-  it('SetMessages replaces all messages', () => {
-    const store: Store = storeWith({ messages: [MSG_1], type: 'SetMessages' });
-    assert.strictEqual(store.getState().messages.length, 1);
-  });
-
-  it('AddMessage appends a message', () => {
-    const store: Store = storeWith({ message: MSG_1, type: 'AddMessage' });
-    assert.strictEqual(store.getState().messages.length, 1);
-  });
-
-  it('SetPlans replaces all plans', () => {
-    const store: Store = storeWith({ plans: [PLAN_1], type: 'SetPlans' });
-    assert.strictEqual(store.getState().plans.length, 1);
-  });
-
-  it('UpsertPlan adds new plan', () => {
-    const store: Store = storeWith({ plan: PLAN_1, type: 'UpsertPlan' });
-    assert.strictEqual(store.getState().plans.length, 1);
-  });
-
-  it('UpsertPlan replaces existing plan by agentName', () => {
-    const store: Store = storeWith({ plan: PLAN_1, type: 'UpsertPlan' });
-    const updated: AgentPlan = { ...PLAN_1, currentTask: 'Writing tests' };
-    store.dispatch({ plan: updated, type: 'UpsertPlan' });
-    const state: AppState = store.getState();
-    assert.strictEqual(state.plans.length, 1);
-    assert.strictEqual(state.plans[0]?.currentTask, 'Writing tests');
-  });
+  for (const upsertCase of UPSERT_REPLACEMENT_CASES) {
+    it(upsertCase.name, () => {
+      const store: Store = storeWith(upsertCase.setup);
+      store.dispatch(upsertCase.update);
+      const state: AppState = store.getState();
+      assert.strictEqual(countState(state, upsertCase.collection), 1, `${upsertCase.name} must not append`);
+      assert.strictEqual(upsertCase.read(state), upsertCase.expected, upsertCase.name);
+    });
+  }
 });
 
 describe('Connection and reset actions', () => {
