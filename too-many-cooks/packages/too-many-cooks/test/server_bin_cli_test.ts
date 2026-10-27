@@ -9,7 +9,6 @@
 import { after, describe, it } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
-import { rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
@@ -20,6 +19,7 @@ import {
   waitForExit,
   waitForServer,
   type SpawnedServer,
+  stopAndRemoveAll,
 } from "./support/server_process.js";
 
 const PORT_SHUTDOWN = 4091;
@@ -63,11 +63,8 @@ const expectExit = async (proc: ChildProcess, expected: number): Promise<void> =
   assert.strictEqual(code, expected);
 };
 
-after(() => {
-  for (const server of spawned) {
-    server.proc.kill();
-    rmSync(server.workspace, { recursive: true, force: true });
-  }
+after(async () => {
+  await stopAndRemoveAll(spawned);
 });
 
 describe("server --version contract", () => {

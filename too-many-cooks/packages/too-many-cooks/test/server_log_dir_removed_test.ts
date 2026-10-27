@@ -17,6 +17,7 @@ import {
   waitForExit,
   waitForServer,
   type SpawnedServer,
+  stopAndRemoveAll,
 } from "./support/server_process.js";
 
 const PORT = 4093;
@@ -32,11 +33,8 @@ const CRASH_MARKER = "Uncaught exception";
 describe("server survives its log directory being removed", () => {
   const spawned: SpawnedServer[] = [];
 
-  after(() => {
-    for (const s of spawned) {
-      s.proc.kill("SIGKILL");
-      rmSync(s.workspace, { recursive: true, force: true });
-    }
+  after(async () => {
+    await stopAndRemoveAll(spawned, "SIGKILL");
   });
 
   it("shuts down with exit 0 (no FATAL) on SIGTERM after logs/ is deleted", async () => {

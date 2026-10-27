@@ -3,7 +3,7 @@
 /// kill, wait for exit, and clean up the temp workspace.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 
 import { SERVER_BINARY, SERVER_NODE_ARGS } from "../../src/config.js";
 import { parseJsonRecord } from "./json.js";
@@ -15,6 +15,9 @@ export const ADMIN_RESET_PATH = "/admin/reset";
 
 /** Sentinel returned by waitForExit when the process never exits. */
 export const STILL_RUNNING = "still-running";
+
+/** How long a stopped server may take to exit before it is SIGKILLed. */
+const STOP_GRACE_MS = 5000;
 
 export const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,7 +107,9 @@ export const waitForExit = async (
   timeoutMs: number,
 ): Promise<number | null | typeof STILL_RUNNING> =>
   new Promise((resolve) => {
-    if (proc.exitCode !== null) {
+    // A signal-killed process has exitCode null but signalCode set: it has
+    // already exited and will never emit "exit" again.
+    if (proc.exitCode !== null || proc.signalCode !== null) {
       resolve(proc.exitCode);
       return;
     }
@@ -116,6 +121,37 @@ export const waitForExit = async (
       resolve(code);
     });
   });
+
+/** A spawned server (or just a process / just a workspace) to tear down. */
+export type Teardown = {
+  readonly proc?: ChildProcess | undefined;
+  readonly workspace?: string | undefined;
+};
+
+/** Stop a server, wait until it has really exited (SIGKILL after a grace
+ *  period), THEN remove its workspace. Removing the workspace while the server
+ *  still writes its shutdown logs races: rmSync fails with ENOTEMPTY on Linux. */
+export const stopAndRemove = async (
+  { proc, workspace }: Teardown,
+  signal: NodeJS.Signals = "SIGTERM",
+): Promise<void> => {
+  if (proc !== undefined) {
+    proc.kill(signal);
+    if ((await waitForExit(proc, STOP_GRACE_MS)) === STILL_RUNNING) {
+      proc.kill("SIGKILL");
+      await waitForExit(proc, STOP_GRACE_MS);
+    }
+  }
+  if (workspace !== undefined) { rmSync(workspace, { recursive: true, force: true }); }
+};
+
+/** stopAndRemove for every server in `servers`, concurrently. */
+export const stopAndRemoveAll = async (
+  servers: readonly Teardown[],
+  signal: NodeJS.Signals = "SIGTERM",
+): Promise<void> => {
+  await Promise.all(servers.map(async (s: Teardown): Promise<void> => { await stopAndRemove(s, signal); }));
+};
 
 export type AdminStatus = {
   readonly status: number;

@@ -6,15 +6,15 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
 import type { ChildProcess } from "node:child_process";
-import { rmSync } from "node:fs";
 
 import {
   STILL_RUNNING,
   fetchAdminStatus,
-  killServer,
   spawnServer,
   waitForExit,
   waitForServer,
+  stopAndRemove,
+  stopAndRemoveAll,
 } from "./support/server_process.js";
 import { getArrayField } from "./support/json.js";
 
@@ -79,11 +79,6 @@ const fetchStatus = async (port: number): Promise<{
   };
 };
 
-const cleanup = (proc: ChildProcess, workspace: string): void => {
-  killServer(proc);
-  rmSync(workspace, { recursive: true, force: true });
-};
-
 // ============================================================
 // Tests
 // ============================================================
@@ -92,7 +87,7 @@ describe("server starts and responds to /admin/status", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("returns 200 from /admin/status after startup", async () => {
     ({ proc, workspace } = await spawnOnPort(PORT_STATUS_RESPONDS));
@@ -110,7 +105,7 @@ describe("server starts on custom port via TMC_PORT", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("listens on port specified by TMC_PORT env var", async () => {
     ({ proc, workspace } = await spawnOnPort(PORT_CUSTOM));
@@ -133,11 +128,11 @@ describe("server does NOT kill an existing server on the same port — it steps 
   let firstWorkspace: string;
   let secondWorkspace: string;
 
-  after(() => {
-    secondProc.kill();
-    firstProc.kill();
-    rmSync(firstWorkspace, { recursive: true, force: true });
-    rmSync(secondWorkspace, { recursive: true, force: true });
+  after(async () => {
+    await stopAndRemoveAll([
+      { proc: secondProc, workspace: secondWorkspace },
+      { proc: firstProc, workspace: firstWorkspace },
+    ]);
   });
 
   it("loser of the port race exits non-zero while the owner stays alive", async () => {
@@ -184,7 +179,7 @@ describe("/admin/status returns correct initial state", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("fresh server has empty agents, locks, plans, and messages", async () => {
     ({ proc, workspace } = await spawnOnPort(PORT_INITIAL_STATE));

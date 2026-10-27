@@ -9,7 +9,7 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
 import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -19,6 +19,8 @@ import {
   spawnServer,
   waitForExit,
   waitForServer,
+  stopAndRemove,
+  stopAndRemoveAll,
 } from "./support/server_process.js";
 
 // ============================================================
@@ -62,10 +64,9 @@ describe("only one server may run per workspace folder", () => {
   let secondProc: ChildProcess | undefined;
   let workspace: string | undefined;
 
-  after(() => {
-    secondProc?.kill("SIGKILL");
-    firstProc?.kill("SIGKILL");
-    if (workspace !== undefined) { rmSync(workspace, { recursive: true, force: true }); }
+  after(async () => {
+    await stopAndRemoveAll([{ proc: secondProc }, { proc: firstProc }], "SIGKILL");
+    await stopAndRemove({ workspace });
   });
 
   it("a second server in the same folder refuses to start, leaving the first alive", async () => {

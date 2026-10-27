@@ -8,7 +8,6 @@
 
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert";
-import { rmSync } from "node:fs";
 
 import {
   ACCEPT_STREAMABLE,
@@ -19,7 +18,7 @@ import {
   SESSION_ID_HEADER,
   parseMcpPayload,
 } from "./support/mcp_http.js";
-import { buildBaseUrl, spawnServer, waitForServer, type SpawnedServer } from "./support/server_process.js";
+import { buildBaseUrl, spawnServer, stopAndRemove, waitForServer, type SpawnedServer } from "./support/server_process.js";
 import { isRecord } from "../src/json-guards.js";
 
 const PORT = 4094;
@@ -103,9 +102,8 @@ before(async () => {
   await waitForServer(BASE, READY_POLLS, POLL_INTERVAL_MS);
 });
 
-after(() => {
-  server?.proc.kill();
-  if (server !== undefined) { rmSync(server.workspace, { recursive: true, force: true }); }
+after(async () => {
+  await stopAndRemove({ proc: server?.proc, workspace: server?.workspace });
 });
 
 describe("MCP session HTTP edges", () => {

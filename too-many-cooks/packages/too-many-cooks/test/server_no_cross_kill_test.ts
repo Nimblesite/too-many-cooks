@@ -9,9 +9,8 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
-import { rmSync } from "node:fs";
 
-import { STILL_RUNNING, spawnServer, waitForExit } from "./support/server_process.js";
+import { STILL_RUNNING, spawnServer, stopAndRemove, stopAndRemoveAll, waitForExit } from "./support/server_process.js";
 
 // ============================================================
 // Constants
@@ -74,10 +73,9 @@ describe("server never kills a foreign process holding its port", () => {
   let workspace: string;
   let sentinelExited = false;
 
-  after(() => {
-    server.kill("SIGKILL");
-    sentinel.kill("SIGKILL");
-    rmSync(workspace, { recursive: true, force: true });
+  after(async () => {
+    await stopAndRemoveAll([{ proc: server }, { proc: sentinel }], "SIGKILL");
+    await stopAndRemove({ workspace });
   });
 
   it("foreign port owner survives and the TMC server steps aside", async () => {

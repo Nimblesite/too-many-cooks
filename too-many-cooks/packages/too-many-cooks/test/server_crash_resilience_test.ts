@@ -12,13 +12,14 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
 import type { ChildProcess } from "node:child_process";
-import { rmSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 import {
   ADMIN_STATUS_PATH,
   buildBaseUrl,
   spawnServer,
   waitForServer,
+  stopAndRemove,
 } from "./support/server_process.js";
 
 // ============================================================
@@ -59,9 +60,8 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
   let workspace: string;
   let stderr: readonly string[] = [];
 
-  after(() => {
-    proc.kill("SIGKILL");
-    rmSync(workspace, { recursive: true, force: true });
+  after(async () => {
+    await stopAndRemove({ proc, workspace }, "SIGKILL");
   });
 
   it("logs shutdown message to log file on SIGTERM", async () => {

@@ -21,6 +21,7 @@ import {
   spawnServer,
   waitForServer,
   type SpawnedServer,
+  stopAndRemoveAll,
 } from "./support/server_process.js";
 
 /** Repo root (this file lives in too-many-cooks/packages/too-many-cooks/test). */
@@ -88,11 +89,8 @@ describe("a release-stamped server reports the stamped version everywhere", () =
     await waitForServer(buildBaseUrl(PORT), WAIT_ATTEMPTS, WAIT_INTERVAL_MS);
   });
 
-  after(() => {
-    for (const s of spawned) {
-      s.proc.kill("SIGKILL");
-      rmSync(s.workspace, { recursive: true, force: true });
-    }
+  after(async () => {
+    await stopAndRemoveAll(spawned, "SIGKILL");
     rmSync(fakeRoot, { recursive: true, force: true });
   });
 
