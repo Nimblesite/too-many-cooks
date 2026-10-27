@@ -2,23 +2,21 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isRecord, parseStreamableHttpResponse } from '../../src/services/httpClient';
+import { parseStreamableHttpResponse } from '../../src/services/httpClient';
+import { describeIsRecordSuite } from './testSupport';
 
-describe('isRecord', () => {
-  it('returns true for plain objects', () => {
-    assert.strictEqual(isRecord({}), true);
-    assert.strictEqual(isRecord({ key: 'val' }), true);
-  });
+/** assert.throws predicate: any Error whose message contains the fragment. */
+function isErrorWith(fragment = ''): (err: unknown) => boolean {
+  return (err: unknown): boolean => err instanceof Error && err.message.includes(fragment);
+}
 
-  it('returns false for non-objects', () => {
-    assert.strictEqual(isRecord(null), false);
-    assert.strictEqual(isRecord([]), false);
-    assert.strictEqual(isRecord('string'), false);
-    assert.strictEqual(isRecord(42), false);
-    assert.strictEqual(isRecord(undefined), false);
-    assert.strictEqual(isRecord(true), false);
-  });
-});
+/** Assert a stream payload parses to a record carrying the given id. */
+function assertParsedId(streamText: string, expectedId: number): void {
+  const result: Record<string, unknown> = parseStreamableHttpResponse(streamText);
+  assert.strictEqual(result.id, expectedId);
+}
+
+describeIsRecordSuite();
 
 describe('parseStreamableHttpResponse', () => {
   it('parses direct JSON response', () => {
@@ -28,8 +26,7 @@ describe('parseStreamableHttpResponse', () => {
   });
 
   it('parses JSON with leading whitespace', () => {
-    const result: Record<string, unknown> = parseStreamableHttpResponse('  {"id":1}');
-    assert.strictEqual(result.id, 1);
+    assertParsedId('  {"id":1}', 1);
   });
 
   it('parses Streamable HTTP event-stream format', () => {
@@ -39,26 +36,20 @@ describe('parseStreamableHttpResponse', () => {
   });
 
   it('skips non-data stream lines', () => {
-    const streamText: string = 'event: message\nid: 123\ndata: {"id":1}\n\n';
-    const result: Record<string, unknown> = parseStreamableHttpResponse(streamText);
-    assert.strictEqual(result.id, 1);
+    assertParsedId('event: message\nid: 123\ndata: {"id":1}\n\n', 1);
   });
 
   it('throws for invalid JSON response', () => {
     assert.throws(
       (): void => { parseStreamableHttpResponse('not valid json at all'); },
-      (err: unknown): boolean => {
-        return err instanceof Error;
-      },
+      isErrorWith(),
     );
   });
 
   it('throws for empty stream with no parseable data', () => {
     assert.throws(
       (): void => { parseStreamableHttpResponse('event: message\nid: 123\n\n'); },
-      (err: unknown): boolean => {
-        return err instanceof Error && err.message.includes('Could not parse');
-      },
+      isErrorWith('Could not parse'),
     );
   });
 
@@ -72,14 +63,10 @@ describe('parseStreamableHttpResponse', () => {
   });
 
   it('skips unparseable stream data lines', () => {
-    const streamText: string = 'data: not-valid-json\ndata: {"id":2}\n\n';
-    const result: Record<string, unknown> = parseStreamableHttpResponse(streamText);
-    assert.strictEqual(result.id, 2);
+    assertParsedId('data: not-valid-json\ndata: {"id":2}\n\n', 2);
   });
 
   it('skips stream data lines that parse to non-records', () => {
-    const streamText: string = 'data: "just-a-string"\ndata: 42\ndata: {"id":3}\n\n';
-    const result: Record<string, unknown> = parseStreamableHttpResponse(streamText);
-    assert.strictEqual(result.id, 3);
+    assertParsedId('data: "just-a-string"\ndata: 42\ndata: {"id":3}\n\n', 3);
   });
 });

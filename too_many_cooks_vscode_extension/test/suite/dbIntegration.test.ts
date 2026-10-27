@@ -6,6 +6,7 @@ import {
   acquireLockToolCall,
   assertEqual,
   assertOk,
+  assertSeededStore,
   callToolString,
   dumpTree,
   ensureServerReady,
@@ -16,6 +17,7 @@ import {
   getLabel,
   getTestAPI,
   hasChildWithLabel,
+  requireMessageItem,
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
@@ -205,14 +207,13 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('MESSAGES after send', api.getMessagesTreeSnapshot());
 
-    const msgItem = api.findMessageInTree('Starting work');
-    assertOk(msgItem, 'Message MUST appear in tree');
+    const msgItem = requireMessageItem(api, 'Starting work', 'Message MUST appear in tree');
 
-    const msgLabel = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
+    const msgLabel = getLabel(msgItem);
     assertOk(msgLabel.includes(agent1Name), `Message label should contain sender, got: ${msgLabel}`);
     assertOk(msgLabel.includes(agent2Name), `Message label should contain recipient, got: ${msgLabel}`);
 
-    const msgDesc = getDescription(requireTreeItem(msgItem, 'msgItem must exist'));
+    const msgDesc = getDescription(msgItem);
     assertOk(msgDesc.includes('Starting work'), `Description should contain content preview, got: ${msgDesc}`);
   });
 
@@ -245,14 +246,13 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('MESSAGES after broadcast', api.getMessagesTreeSnapshot());
 
-    const broadcastMsg = api.findMessageInTree('BROADCAST');
-    assertOk(broadcastMsg, 'Broadcast message MUST appear in tree');
+    const broadcastMsg = requireMessageItem(api, 'BROADCAST', 'Broadcast message MUST appear in tree');
 
-    const label = getLabel(broadcastMsg!);
+    const label = getLabel(broadcastMsg);
     assertOk(label.includes(agent1Name), `Broadcast label should contain sender, got: ${label}`);
     assertOk(label.includes('all'), `Broadcast label should show "all" for recipient, got: ${label}`);
 
-    const desc = getDescription(broadcastMsg!);
+    const desc = getDescription(broadcastMsg);
     assertOk(desc.includes('BROADCAST'), `Description should contain message content, got: ${desc}`);
     assertEqual(api.getMessageTreeItemCount(), 4, 'Should have 4 messages after broadcast');
   });
@@ -277,10 +277,7 @@ suite('DB Integration - UI Verification', () => {
     const api = getTestAPI();
     await api.refreshStatus();
 
-    assertOk(api.getAgentCount() >= 2, `At least 2 agents, got ${api.getAgentCount()}`);
-    assertOk(api.getLockCount() >= 2, `At least 2 locks, got ${api.getLockCount()}`);
-    assertOk(api.getPlans().length >= 1, `At least 1 plan, got ${api.getPlans().length}`);
-    assertOk(api.getMessages().length >= 4, `At least 4 messages, got ${api.getMessages().length}`);
+    assertSeededStore(api);
     assertOk(api.getAgentsTreeSnapshot().length >= 2, `At least 2 agents in tree`);
     assertOk(api.getLockTreeItemCount() >= 2, `At least 2 locks in tree`);
     assertOk(api.getMessageTreeItemCount() >= 4, `At least 4 messages in tree`);
@@ -355,9 +352,6 @@ suite('DB Integration - UI Verification', () => {
       'state to be restored/recreated',
     );
 
-    assertOk(api.getAgentCount() >= 2, `At least 2 agents, got ${api.getAgentCount()}`);
-    assertOk(api.getLockCount() >= 2, `At least 2 locks, got ${api.getLockCount()}`);
-    assertOk(api.getPlans().length >= 1, `At least 1 plan, got ${api.getPlans().length}`);
-    assertOk(api.getMessages().length >= 4, `At least 4 messages, got ${api.getMessages().length}`);
+    assertSeededStore(api);
   });
 });

@@ -22,7 +22,7 @@ import {
   ensureServerReady,
   extractKeyFromResult,
   getTestAPI,
-  resetServerState,
+  resetAndDrainAgents,
   safeDisconnect,
   sendMessageToolCall,
   uniqueName,
@@ -130,10 +130,7 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
   });
 
   test('deleting a single agent cascades to its locks, plans, outbound, inbound, and broadcast messages — and leaves everyone else intact', async () => {
-    const api = getTestAPI();
-    await resetServerState();
-    await api.refreshStatus();
-    await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
+    const api = await resetAndDrainAgents();
 
     // Build a small graph: alice (doomed) interacts with bob, carol, dave.
     const [alice = missingAgent('alice'), bob = missingAgent('bob'),
@@ -163,13 +160,15 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await waitForLockInTree(api, '/src/alice/one.ts');
     await waitForLockInTree(api, '/src/alice/two.ts');
     await waitForLockInTree(api, '/src/dave/keepme.ts');
-    await waitForMessageInTree(api, 'cascade-alice-to-bob');
-    await waitForMessageInTree(api, 'cascade-alice-to-carol');
-    await waitForMessageInTree(api, 'cascade-bob-to-alice');
-    await waitForMessageInTree(api, 'cascade-carol-to-alice');
-    await waitForMessageInTree(api, 'cascade-alice-broadcast');
-    await waitForMessageInTree(api, 'cascade-bob-to-dave-unrelated');
-    await waitForMessageInTree(api, 'cascade-dave-to-bob-unrelated');
+    await waitForMessagesInTree([
+      'cascade-alice-to-bob',
+      'cascade-alice-to-carol',
+      'cascade-bob-to-alice',
+      'cascade-carol-to-alice',
+      'cascade-alice-broadcast',
+      'cascade-bob-to-dave-unrelated',
+      'cascade-dave-to-bob-unrelated',
+    ]);
     await waitForCondition(() => api.getMessageCount() === 7, 'all 7 messages to land in the store');
     await waitForCondition(() => api.getPlans().length === 2, 'both plans to land in the store');
 
@@ -239,10 +238,7 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
   });
 
   test('deleting the recipient of a message removes that message (the exact bug from the user\'s screenshot)', async () => {
-    const api = getTestAPI();
-    await resetServerState();
-    await api.refreshStatus();
-    await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
+    const api = await resetAndDrainAgents();
 
     const [sender = missingAgent('sender'), doomed = missingAgent('doomed'),
       witness = missingAgent('witness')] =
@@ -287,10 +283,7 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
   });
 
   test('deleteAllAgents wipes every agent, every lock, every plan, and every message in one shot', async () => {
-    const api = getTestAPI();
-    await resetServerState();
-    await api.refreshStatus();
-    await waitForCondition(() => api.getAgentCount() === 0, 'agents to drain after reset');
+    const api = await resetAndDrainAgents();
 
     // Stand up a small population with locks, plans, direct + broadcast msgs.
     const [a = missingAgent('a'), b = missingAgent('b'), c = missingAgent('c')] =
@@ -314,10 +307,12 @@ suite('Delete Agent — Referential Integrity (cascade proof)', () => {
     await waitForLockInTree(api, '/all/a2.ts');
     await waitForLockInTree(api, '/all/b1.ts');
     await waitForLockInTree(api, '/all/c1.ts');
-    await waitForMessageInTree(api, 'all-msg-a-to-b');
-    await waitForMessageInTree(api, 'all-msg-b-to-c');
-    await waitForMessageInTree(api, 'all-msg-c-to-a');
-    await waitForMessageInTree(api, 'all-broadcast-from-a');
+    await waitForMessagesInTree([
+      'all-msg-a-to-b',
+      'all-msg-b-to-c',
+      'all-msg-c-to-a',
+      'all-broadcast-from-a',
+    ]);
     await waitForCondition(() => api.getMessageCount() === 4, 'all 4 messages to land in the store');
     await waitForCondition(() => api.getLockCount() === 4, 'all 4 locks to land in the store');
     await waitForCondition(() => api.getPlans().length === 3, 'all 3 plans to land in the store');

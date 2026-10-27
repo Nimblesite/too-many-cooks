@@ -8,9 +8,8 @@ import {
   assertOk,
   callToolString,
   getTestAPI,
-  registerAgent,
   restoreDialogMocks,
-  safeDisconnect,
+  startAgentSuite,
   waitForExtensionActivation,
 } from './testHelpers';
 
@@ -105,21 +104,11 @@ suite('Extension Activation', () => {
 
 suite('Database Feature Verification', () => {
   const testId = Date.now();
-  const agentName = `feature-verify-${testId}`;
-  let agentKey = '';
-
-  suiteSetup(async () => {
-    const api = await activateAndConnect();
-    agentKey = await registerAgent(api, agentName);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { requireKey } = startAgentSuite(`feature-verify-${testId}`, activateAndConnect);
 
   test('CRITICAL: Admin tool MUST exist on database', async () => {
     const api = getTestAPI();
-    assertOk(agentKey.length > 0, 'Should have agent key from suiteSetup');
+    assertOk(requireKey().length > 0, 'Should have agent key from suiteSetup');
 
     try {
       const resultStr = await callToolString(api, 'admin', {

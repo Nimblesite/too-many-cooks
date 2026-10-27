@@ -26,6 +26,7 @@ import { resolveServerLaunch } from '../../src/services/serverResolver';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import type { ConnectionTarget } from '../../src/services/connectionTypes';
 import { checkServerAvailable, isRecord } from '../../src/services/httpClient';
+import { removeDir } from '../pure/testSupport';
 
 /** Port distinct from the suite's shared 4040 server, so the two never clash. */
 const TEST_PORT: number = 4141;
@@ -103,7 +104,7 @@ suite('Start Local Server spawns a real server (E2E)', () => {
 
   suiteTeardown(() => {
     if (manager !== null) { manager.disconnect(); manager = null; }
-    if (workspace !== null) { fs.rmSync(workspace, { recursive: true, force: true }); workspace = null; }
+    if (workspace !== null) { removeDir(workspace); workspace = null; }
   });
 
   test('production launch resolves the bundled, version-verified server binary — never npx', async () => {
@@ -129,7 +130,7 @@ suite('Start Local Server spawns a real server (E2E)', () => {
       assertOk(fs.existsSync(path.join(bundledWorkspace, '.too_many_cooks', 'data.db')), 'bundled DataProviderMigrate created the DB');
     } finally {
       bundled.disconnect();
-      fs.rmSync(bundledWorkspace, { recursive: true, force: true });
+      removeDir(bundledWorkspace);
     }
     assertEqual(bundled.getMode(), 'disconnected', 'mode is disconnected after disconnect');
     assertOk(await waitForServerDown(bundledUrl), 'disconnect terminated the bundled server (port stops responding)');

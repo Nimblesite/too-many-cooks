@@ -17,11 +17,12 @@ import {
   hasChildWithLabel,
   installDialogMocks,
   reconnectFresh,
-  registerAgent,
+  requireMessageItem,
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
   sendMessageToolCall,
+  startAgentSuite,
   updatePlanToolCall,
   waitForAgentGone,
   waitForAgentInTree,
@@ -37,21 +38,11 @@ restoreDialogMocks();
 // Lock State Coverage Tests
 suite('Lock State Coverage', () => {
   const testId = Date.now();
-  const agentName = `lock-cov-test-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    const api = await reconnectFresh();
-    agentKey = await registerAgent(api, agentName);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`lock-cov-test-${testId}`, reconnectFresh);
 
   test('Active lock appears in state and tree', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     await acquireLockAndWait(api, agentName, agentKey, '/test/lock/active.ts', 'Testing active lock');
 
@@ -65,7 +56,7 @@ suite('Lock State Coverage', () => {
 
   test('Lock shows agent name in tree description', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     const lockPath = '/test/lock/description.ts';
     await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing lock description');
@@ -80,21 +71,11 @@ suite('Lock State Coverage', () => {
 // Store Error Handling Coverage Tests
 suite('Store Error Handling Coverage', () => {
   const testId = Date.now();
-  const agentName = `store-err-test-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    const api = await reconnectFresh();
-    agentKey = await registerAgent(api, agentName);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`store-err-test-${testId}`, reconnectFresh);
 
   test('forceReleaseLock works on existing lock', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     await acquireLockAndWait(api, agentName, agentKey, '/test/force/release.ts', 'Will be force released');
 
@@ -135,9 +116,8 @@ suite('Store Error Handling Coverage', () => {
 
     await waitForMessageInTree(api, 'Test message via store');
 
-    const msgItem = api.findMessageInTree('Test message via store');
-    assertOk(msgItem, 'Message should appear in tree');
-    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
+    const msgItem = requireMessageItem(api, 'Test message via store', 'Message should appear in tree');
+    const label = getLabel(msgItem);
     assertOk(label.includes(senderName), 'Message should show sender');
     assertOk(label.includes(receiverName), 'Message should show receiver');
   });
@@ -199,22 +179,11 @@ suite('Extension Commands Coverage', () => {
 // Tree Provider Edge Cases
 suite('Tree Provider Edge Cases', () => {
   const testId = Date.now();
-  const agentName = `edge-case-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    const api = await ensureServerReady();
-
-    agentKey = await registerAgent(api, agentName);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`edge-case-${testId}`, ensureServerReady);
 
   test('Messages tree handles read messages correctly', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     const receiverName = `edge-receiver-${testId}`;
     const regResult = await callToolString(api, 'register', { name: receiverName });
@@ -239,7 +208,7 @@ suite('Tree Provider Edge Cases', () => {
 
   test('Agents tree shows summary counts correctly', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     await acquireLockAndWait(api, agentName, agentKey, '/edge/case/file.ts', 'Edge case lock');
 
@@ -251,7 +220,7 @@ suite('Tree Provider Edge Cases', () => {
 
   test('Plans appear correctly as agent children', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     await updatePlanToolCall(api, agentName, agentKey, 'Edge case goal', 'Testing edge cases');
 

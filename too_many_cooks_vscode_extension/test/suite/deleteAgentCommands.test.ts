@@ -16,6 +16,7 @@ import {
   pointAtUnreachablePort,
   reconnectToTestServer,
   registerAgentAndWait,
+  resetAndDrainAgents,
   resetServerState,
   setupDialogMockedSuite,
   teardownDialogMockedSuite,
@@ -29,6 +30,20 @@ const CMD_DELETE_ALL = 'tooManyCooks.deleteAllAgents';
 const CONFIRM_REMOVE = 'Remove';
 const CONFIRM_REMOVE_ALL = 'Remove All';
 const ZERO = 0;
+
+/** Local E2E fixture: two fresh agents registered after a state reset. */
+async function prepareTwoAgents(
+  prefixA: string,
+  prefixB: string,
+): Promise<readonly [string, string]> {
+  const api = getTestAPI();
+  await resetServerState();
+  const first: string = uniqueName(prefixA);
+  const second: string = uniqueName(prefixB);
+  await registerAgentAndWait(api, first);
+  await registerAgentAndWait(api, second);
+  return [first, second];
+}
 
 suite('Delete Agent Commands', () => {
   suiteSetup(setupDialogMockedSuite);
@@ -71,11 +86,7 @@ suite('Delete Agent Commands', () => {
 
   test('deleteAgent removes multiple selected agents in one confirmation', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const first: string = uniqueName('multi-a');
-    const second: string = uniqueName('multi-b');
-    await registerAgentAndWait(api, first);
-    await registerAgentAndWait(api, second);
+    const [first, second] = await prepareTwoAgents('multi-a', 'multi-b');
 
     mockWarningMessage(CONFIRM_REMOVE);
     const selection: unknown[] = [makeAgentItem(first), makeAgentItem(second)];
@@ -88,10 +99,7 @@ suite('Delete Agent Commands', () => {
   });
 
   test('deleteAllAgents with no agents is a no-op', async () => {
-    const api = getTestAPI();
-    await resetServerState();
-    await api.refreshStatus();
-    await waitForCondition(() => api.getAgentCount() === ZERO, 'agents to drain after reset');
+    const api = await resetAndDrainAgents();
 
     await vscode.commands.executeCommand(CMD_DELETE_ALL);
 
@@ -112,11 +120,7 @@ suite('Delete Agent Commands', () => {
 
   test('deleteAllAgents confirmed removes every agent', async () => {
     const api = getTestAPI();
-    await resetServerState();
-    const first: string = uniqueName('all-a');
-    const second: string = uniqueName('all-b');
-    await registerAgentAndWait(api, first);
-    await registerAgentAndWait(api, second);
+    const [first, second] = await prepareTwoAgents('all-a', 'all-b');
 
     mockWarningMessage(CONFIRM_REMOVE_ALL);
     await vscode.commands.executeCommand(CMD_DELETE_ALL);

@@ -4,7 +4,6 @@
 import * as vscode from 'vscode';
 import { AgentTreeItem } from '../../src/ui/tree/agentTreeItem';
 import { LockTreeItem } from '../../src/ui/tree/lockTreeItem';
-import type { FileLock } from '../../src/state/types';
 import {
   acquireLockAndWait,
   assertEqual,
@@ -12,14 +11,16 @@ import {
   callToolString,
   ensureServerReady,
   extractKeyFromResult,
-  getLabel,
   getTestAPI,
   installDialogMocks,
   mockInputBox,
   mockQuickPick,
   mockWarningMessage,
+  makeAgentLockItem,
+  makeAgentTreeItem,
+  makeLockTreeItem,
   registerAgent,
-  requireTreeItem,
+  requireMessageLabel,
   restoreDialogMocks,
   safeDisconnect,
   waitForAgentGone,
@@ -30,6 +31,23 @@ import {
 } from './testHelpers';
 
 restoreDialogMocks();
+
+interface DeleteLockCase {
+  readonly assertion: string;
+  readonly build: (filePath: string, owner: string) => vscode.TreeItem;
+  readonly label: string;
+  readonly lockPath: string;
+}
+
+/** deleteLock is reachable from both the lock row and the agent's lock child. */
+const DELETE_LOCK_CASES: readonly DeleteLockCase[] = [
+  {
+    assertion: 'Lock should be deleted via agent tree item',
+    build: makeAgentLockItem,
+    label: 'AgentTreeItem',
+    lockPath: '/cmd/delete/lock2.ts',
+  },
+];
 
 suite('Command Integration - Dialog Mocking', () => {
   const testId = Date.now();
@@ -68,20 +86,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     mockWarningMessage('Release');
 
-    const lock: FileLock = {
-      filePath: lockPath,
-      agentName,
-      acquiredAt: Date.now(),
-      expiresAt: Date.now() + 60000,
-      reason: 'test',
-      version: 1,
-    };
-    const lockItem = new LockTreeItem({
-      collapsibleState: vscode.TreeItemCollapsibleState.None,
-      isCategory: false,
-      label: lockPath,
-      lock,
-    });
+    const lockItem = makeLockTreeItem(lockPath, agentName);
 
     await vscode.commands.executeCommand('tooManyCooks.deleteLock', lockItem);
     await waitForLockGone(api, lockPath);
@@ -89,28 +94,22 @@ suite('Command Integration - Dialog Mocking', () => {
     assertEqual(api.findLockInTree(lockPath), null, 'Lock should be deleted');
   });
 
-  test('deleteLock command with AgentTreeItem - confirmed', async () => {
-    const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+  DELETE_LOCK_CASES.forEach((deleteLockCase) => {
+    test(`deleteLock command with ${deleteLockCase.label} - confirmed`, async () => {
+      const api = getTestAPI();
+      if (!agentKey) { throw new Error('agentKey not set'); }
 
-    const lockPath = '/cmd/delete/lock2.ts';
+      const lockPath = deleteLockCase.lockPath;
+      await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing delete from agent tree');
 
-    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing delete from agent tree');
+      mockWarningMessage('Release');
 
-    mockWarningMessage('Release');
+      const item = deleteLockCase.build(lockPath, agentName);
+      await vscode.commands.executeCommand('tooManyCooks.deleteLock', item);
+      await waitForLockGone(api, lockPath);
 
-    const agentItem = new AgentTreeItem({
-      agentName,
-      collapsibleState: vscode.TreeItemCollapsibleState.None,
-      filePath: lockPath,
-      itemType: 'lock',
-      label: lockPath,
+      assertEqual(api.findLockInTree(lockPath), null, deleteLockCase.assertion);
     });
-
-    await vscode.commands.executeCommand('tooManyCooks.deleteLock', agentItem);
-    await waitForLockGone(api, lockPath);
-
-    assertEqual(api.findLockInTree(lockPath), null, 'Lock should be deleted via agent tree item');
   });
 
   test('deleteLock command - no filePath shows error', async () => {
@@ -135,20 +134,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     mockWarningMessage(undefined);
 
-    const lock: FileLock = {
-      filePath: lockPath,
-      agentName,
-      acquiredAt: Date.now(),
-      expiresAt: Date.now() + 60000,
-      reason: 'test',
-      version: 1,
-    };
-    const lockItem = new LockTreeItem({
-      collapsibleState: vscode.TreeItemCollapsibleState.None,
-      isCategory: false,
-      label: lockPath,
-      lock,
-    });
+    const lockItem = makeLockTreeItem(lockPath, agentName);
 
     await vscode.commands.executeCommand('tooManyCooks.deleteLock', lockItem);
 
@@ -181,12 +167,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     mockWarningMessage('Remove');
 
-    const agentItem = new AgentTreeItem({
-      agentName: targetName,
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-      itemType: 'agent',
-      label: targetName,
-    });
+    const agentItem = makeAgentTreeItem(targetName);
 
     await vscode.commands.executeCommand('tooManyCooks.deleteAgent', agentItem);
     await waitForAgentGone(api, targetName);
@@ -215,12 +196,7 @@ suite('Command Integration - Dialog Mocking', () => {
 
     mockWarningMessage(undefined);
 
-    const agentItem = new AgentTreeItem({
-      agentName: targetName,
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-      itemType: 'agent',
-      label: targetName,
-    });
+    const agentItem = makeAgentTreeItem(targetName);
 
     await vscode.commands.executeCommand('tooManyCooks.deleteAgent', agentItem);
 
@@ -238,12 +214,7 @@ suite('Command Integration - Dialog Mocking', () => {
     mockQuickPick(senderName);
     mockInputBox('Test message with target');
 
-    const targetItem = new AgentTreeItem({
-      agentName: recipientName,
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-      itemType: 'agent',
-      label: recipientName,
-    });
+    const targetItem = makeAgentTreeItem(recipientName);
 
     await vscode.commands.executeCommand('tooManyCooks.sendMessage', targetItem);
     await waitForMessageInTree(api, 'Test message with target');
@@ -284,9 +255,7 @@ suite('Command Integration - Dialog Mocking', () => {
     await vscode.commands.executeCommand('tooManyCooks.sendMessage');
     await waitForMessageInTree(api, 'Broadcast test');
 
-    const msgItem = api.findMessageInTree('Broadcast test');
-    assertOk(msgItem, 'Broadcast should be in tree');
-    const label = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
+    const label = requireMessageLabel(api, 'Broadcast test', 'Broadcast should be in tree');
     assertOk(label.includes('all'), 'Should show "all" as recipient');
   });
 

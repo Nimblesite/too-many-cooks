@@ -15,6 +15,7 @@ import {
   getTestAPI,
   hasChildWithLabel,
   initDirectMcpSession,
+  requireMessageItem,
   requireTreeItem,
   restoreDialogMocks,
   safeDisconnect,
@@ -178,10 +179,9 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
 
     await waitForMessageInTree(getTestAPI(), 'Streamed message');
 
-    const msgItem = getTestAPI().findMessageInTree('Streamed message');
-    assertOk(msgItem, 'Message MUST appear in messages tree via streaming');
+    const msgItem = requireMessageItem(getTestAPI(), 'Streamed message', 'Message MUST appear in messages tree via streaming');
 
-    const msgLabel = getLabel(requireTreeItem(msgItem, 'msgItem must exist'));
+    const msgLabel = getLabel(msgItem);
     assertOk(msgLabel.includes(agent1Name), `Message label should contain sender, got: ${msgLabel}`);
   });
 
@@ -196,10 +196,9 @@ suite('Streaming - MCP Server Pushes ALL Changes to VSIX', () => {
 
     await waitForMessageInTree(getTestAPI(), 'STREAM BROADCAST');
 
-    const broadcastMsg = getTestAPI().findMessageInTree('STREAM BROADCAST');
-    assertOk(broadcastMsg, 'Broadcast MUST appear in tree via streaming');
+    const broadcastMsg = requireMessageItem(getTestAPI(), 'STREAM BROADCAST', 'Broadcast MUST appear in tree via streaming');
 
-    const label = getLabel(broadcastMsg!);
+    const label = getLabel(broadcastMsg);
     assertOk(label.includes('all'), `Broadcast should show "all" for recipient, got: ${label}`);
   });
 

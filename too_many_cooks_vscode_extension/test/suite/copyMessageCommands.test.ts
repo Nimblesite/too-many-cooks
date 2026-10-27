@@ -69,6 +69,13 @@ function makeMessageItem(message: MessageRecord): unknown {
   return { message };
 }
 
+/** Invoke a copy command over message items and return the clipboard text. */
+async function copySelection(command: string, ...messages: readonly MessageRecord[]): Promise<string> {
+  await writeClipboard(SENTINEL);
+  await vscode.commands.executeCommand(command, undefined, messages.map(makeMessageItem));
+  return await readClipboard();
+}
+
 async function writeClipboard(value: string): Promise<void> {
   await vscode.env.clipboard.writeText(value);
 }
@@ -99,12 +106,8 @@ suite('Copy Message Commands', () => {
   });
 
   test('copyMessageContent joins selected contents with blank lines', async () => {
-    await writeClipboard(SENTINEL);
-    const selection: unknown[] = [makeMessageItem(FIRST), makeMessageItem(SECOND)];
-    await vscode.commands.executeCommand(CMD_COPY_CONTENT, undefined, selection);
-
     assertEqual(
-      await readClipboard(),
+      await copySelection(CMD_COPY_CONTENT, FIRST, SECOND),
       `${FIRST.content}${SEPARATOR_BLANK_LINE}${SECOND.content}`,
       'selected message contents joined with blank lines',
     );
@@ -129,45 +132,37 @@ suite('Copy Message Commands', () => {
   });
 
   test('copyMessageId joins message ids', async () => {
-    await writeClipboard(SENTINEL);
-    const selection: unknown[] = [makeMessageItem(FIRST), makeMessageItem(SECOND)];
-    await vscode.commands.executeCommand(CMD_COPY_ID, undefined, selection);
-
-    assertEqual(await readClipboard(), `${FIRST.id}\n${SECOND.id}`, 'ids joined with newlines');
+    assertEqual(
+      await copySelection(CMD_COPY_ID, FIRST, SECOND),
+      `${FIRST.id}\n${SECOND.id}`,
+      'ids joined with newlines',
+    );
   });
 
   test('copyMessageSender deduplicates senders in order', async () => {
-    await writeClipboard(SENTINEL);
-    const selection: unknown[] = [
-      makeMessageItem(FIRST),
-      makeMessageItem(THIRD),
-      makeMessageItem(SECOND),
-    ];
-    await vscode.commands.executeCommand(CMD_COPY_SENDER, undefined, selection);
-
-    assertEqual(await readClipboard(), `${AGENT_ALICE}\n${AGENT_BOB}`, 'distinct senders only');
+    assertEqual(
+      await copySelection(CMD_COPY_SENDER, FIRST, THIRD, SECOND),
+      `${AGENT_ALICE}\n${AGENT_BOB}`,
+      'distinct senders only',
+    );
   });
 
   test('copyMessageRecipient deduplicates recipients and maps broadcast', async () => {
-    await writeClipboard(SENTINEL);
-    const selection: unknown[] = [
-      makeMessageItem(FIRST),
-      makeMessageItem(SECOND),
-      makeMessageItem(THIRD),
-    ];
-    await vscode.commands.executeCommand(CMD_COPY_RECIPIENT, undefined, selection);
-
-    assertEqual(await readClipboard(), `${AGENT_BOB}\n${BROADCAST_LABEL}`, 'bob then all');
+    assertEqual(
+      await copySelection(CMD_COPY_RECIPIENT, FIRST, SECOND, THIRD),
+      `${AGENT_BOB}\n${BROADCAST_LABEL}`,
+      'bob then all',
+    );
   });
 
   test('copyMessages writes the full timestamped format', async () => {
-    await writeClipboard(SENTINEL);
-    const selection: unknown[] = [makeMessageItem(FIRST), makeMessageItem(SECOND)];
-    await vscode.commands.executeCommand(CMD_COPY_MESSAGES, undefined, selection);
-
     const expected: string =
       `${expectedFullLine(FIRST)}${SEPARATOR_MESSAGES}${expectedFullLine(SECOND)}`;
-    assertEqual(await readClipboard(), expected, 'full message format');
+    assertEqual(
+      await copySelection(CMD_COPY_MESSAGES, FIRST, SECOND),
+      expected,
+      'full message format',
+    );
   });
 
   test('copyAgentName deduplicates agent names in order', async () => {

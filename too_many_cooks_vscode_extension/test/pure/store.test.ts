@@ -6,7 +6,7 @@ import { Store } from '../../src/state/store';
 import type { AgentIdentity, AgentPlan, AppState, FileLock, Message } from '../../src/state/types';
 import { initialState } from '../../src/state/types';
 
-import { makeAgentIdentity, makeFileLock, makeMessage, makePlan } from './testSupport';
+import { makeAgentIdentity, makeFileLock, makeMessage, makePlan, storeWith } from './testSupport';
 
 const AGENT_1: AgentIdentity = makeAgentIdentity();
 const AGENT_2: AgentIdentity = makeAgentIdentity({ agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 });
@@ -54,8 +54,7 @@ describe('Store', () => {
 
 describe('Agent actions', () => {
   it('SetAgents replaces all agents', () => {
-    const store: Store = new Store();
-    store.dispatch({ agents: [AGENT_1, AGENT_2], type: 'SetAgents' });
+    const store: Store = storeWith({ agents: [AGENT_1, AGENT_2], type: 'SetAgents' });
     assert.strictEqual(store.getState().agents.length, 2);
   });
 
@@ -104,20 +103,17 @@ describe('Agent actions', () => {
 
 describe('Lock actions', () => {
   it('SetLocks replaces all locks', () => {
-    const store: Store = new Store();
-    store.dispatch({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
+    const store: Store = storeWith({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
     assert.strictEqual(store.getState().locks.length, 2);
   });
 
   it('UpsertLock adds new lock', () => {
-    const store: Store = new Store();
-    store.dispatch({ lock: LOCK_1, type: 'UpsertLock' });
+    const store: Store = storeWith({ lock: LOCK_1, type: 'UpsertLock' });
     assert.strictEqual(store.getState().locks.length, 1);
   });
 
   it('UpsertLock replaces existing lock by filePath', () => {
-    const store: Store = new Store();
-    store.dispatch({ lock: LOCK_1, type: 'UpsertLock' });
+    const store: Store = storeWith({ lock: LOCK_1, type: 'UpsertLock' });
     const updated: FileLock = { ...LOCK_1, reason: 'refactoring', version: 2 };
     store.dispatch({ lock: updated, type: 'UpsertLock' });
     const state: AppState = store.getState();
@@ -134,16 +130,14 @@ describe('Lock actions', () => {
   });
 
   it('RenewLock updates expiresAt', () => {
-    const store: Store = new Store();
-    store.dispatch({ locks: [LOCK_1], type: 'SetLocks' });
+    const store: Store = storeWith({ locks: [LOCK_1], type: 'SetLocks' });
     const newExpiry: number = 999999;
     store.dispatch({ filePath: '/src/file1.ts', expiresAt: newExpiry, type: 'RenewLock' });
     assert.strictEqual(store.getState().locks[0]?.expiresAt, newExpiry);
   });
 
   it('RenewLock does not affect other locks', () => {
-    const store: Store = new Store();
-    store.dispatch({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
+    const store: Store = storeWith({ locks: [LOCK_1, LOCK_2], type: 'SetLocks' });
     store.dispatch({ filePath: '/src/file1.ts', expiresAt: 999999, type: 'RenewLock' });
     assert.strictEqual(store.getState().locks[1]?.expiresAt, 70000);
   });
@@ -151,32 +145,27 @@ describe('Lock actions', () => {
 
 describe('Message and plan actions', () => {
   it('SetMessages replaces all messages', () => {
-    const store: Store = new Store();
-    store.dispatch({ messages: [MSG_1], type: 'SetMessages' });
+    const store: Store = storeWith({ messages: [MSG_1], type: 'SetMessages' });
     assert.strictEqual(store.getState().messages.length, 1);
   });
 
   it('AddMessage appends a message', () => {
-    const store: Store = new Store();
-    store.dispatch({ message: MSG_1, type: 'AddMessage' });
+    const store: Store = storeWith({ message: MSG_1, type: 'AddMessage' });
     assert.strictEqual(store.getState().messages.length, 1);
   });
 
   it('SetPlans replaces all plans', () => {
-    const store: Store = new Store();
-    store.dispatch({ plans: [PLAN_1], type: 'SetPlans' });
+    const store: Store = storeWith({ plans: [PLAN_1], type: 'SetPlans' });
     assert.strictEqual(store.getState().plans.length, 1);
   });
 
   it('UpsertPlan adds new plan', () => {
-    const store: Store = new Store();
-    store.dispatch({ plan: PLAN_1, type: 'UpsertPlan' });
+    const store: Store = storeWith({ plan: PLAN_1, type: 'UpsertPlan' });
     assert.strictEqual(store.getState().plans.length, 1);
   });
 
   it('UpsertPlan replaces existing plan by agentName', () => {
-    const store: Store = new Store();
-    store.dispatch({ plan: PLAN_1, type: 'UpsertPlan' });
+    const store: Store = storeWith({ plan: PLAN_1, type: 'UpsertPlan' });
     const updated: AgentPlan = { ...PLAN_1, currentTask: 'Writing tests' };
     store.dispatch({ plan: updated, type: 'UpsertPlan' });
     const state: AppState = store.getState();
@@ -187,8 +176,7 @@ describe('Message and plan actions', () => {
 
 describe('Connection and reset actions', () => {
   it('SetConnectionStatus updates connection status', () => {
-    const store: Store = new Store();
-    store.dispatch({ status: 'connecting', type: 'SetConnectionStatus' });
+    const store: Store = storeWith({ status: 'connecting', type: 'SetConnectionStatus' });
     assert.strictEqual(store.getState().connectionStatus, 'connecting');
     store.dispatch({ status: 'connected', type: 'SetConnectionStatus' });
     assert.strictEqual(store.getState().connectionStatus, 'connected');

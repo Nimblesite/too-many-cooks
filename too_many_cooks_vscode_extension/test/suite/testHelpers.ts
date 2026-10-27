@@ -4,6 +4,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import type { TestAPI, TreeItemSnapshot } from '../../src/testApi';
+import type { FileLock } from '../../src/state/types';
+import { AgentTreeItem } from '../../src/ui/tree/agentTreeItem';
+import { LockTreeItem } from '../../src/ui/tree/lockTreeItem';
+import { makeFileLock } from '../pure/testSupport';
 
 const EXTENSION_ID = 'Nimblesite.too-many-cooks';
 const CI_TIMEOUT_MULTIPLIER = process.env.CI ? 10 : 1;
@@ -532,6 +536,20 @@ export function getLabel(item: TreeItemSnapshot): string {
   return item.label ?? '';
 }
 
+const MESSAGE_ITEM_REQUIRED = 'msgItem must exist';
+
+/** Find the tree row for a message content snippet, throwing when missing. */
+export function requireMessageItem(api: TestAPI, content: string, missingMessage: string): TreeItemSnapshot {
+  const item = api.findMessageInTree(content);
+  assertOk(item, missingMessage);
+  return requireTreeItem(item, MESSAGE_ITEM_REQUIRED);
+}
+
+/** Find the tree row for a message content snippet and return its label. */
+export function requireMessageLabel(api: TestAPI, content: string, missingMessage: string): string {
+  return getLabel(requireMessageItem(api, content, missingMessage));
+}
+
 export function getDescription(item: TreeItemSnapshot): string {
   return item.description ?? '';
 }
@@ -606,6 +624,73 @@ export function messagesTreeLeafStats(api: TestAPI): readonly [number, number] {
 
 const UNIQUE_NAME_RANDOM_BOUND = 100000;
 
+const AGENT_KEY_MISSING = 'Agent key unavailable - suite setup did not register an agent';
+
+/** Obtains a connected TestAPI during suite setup. */
+export type SuiteConnector = () => Promise<TestAPI>;
+
+/** Suite-scoped agent identity with a key captured during suite setup. */
+export interface AgentSuite {
+  readonly agentName: string;
+  readonly requireKey: () => string;
+}
+
+/**
+ * Register a suite-scoped agent and disconnect it on suite teardown.
+ * [TEST-SUITE-SESSION] Single implementation of the setup/teardown block that
+ * agent-backed suites used to copy-paste.
+ */
+export function startAgentSuite(prefix: string, connect: SuiteConnector): AgentSuite {
+  const agentName = uniqueName(prefix);
+  let captured: string | undefined;
+  suiteSetup(async () => {
+    captured = await registerAgent(await connect(), agentName);
+  });
+  suiteTeardown(async () => { await safeDisconnect(); });
+  return {
+    agentName,
+    requireKey: (): string => {
+      if (!captured) { throw new Error(AGENT_KEY_MISSING); }
+      return captured;
+    },
+  };
+}
+
+/** Reconnect from scratch and wipe server state. */
+export async function reconnectFreshAndReset(): Promise<TestAPI> {
+  const api = await reconnectFresh();
+  await resetServerState();
+  return api;
+}
+
+const SEEDED_MIN_AGENTS = 2;
+const SEEDED_MIN_LOCKS = 2;
+const SEEDED_MIN_PLANS = 1;
+const SEEDED_MIN_MESSAGES = 4;
+const AGENTS_DRAINED = 'agents to drain after reset';
+const NO_AGENTS = 0;
+
+/** Assert the store holds the full seeded agent/lock/plan/message graph. */
+export function assertSeededStore(api: TestAPI): void {
+  const agents = api.getAgentCount();
+  const locks = api.getLockCount();
+  const plans = api.getPlans().length;
+  const messages = api.getMessages().length;
+  assertOk(agents >= SEEDED_MIN_AGENTS, `At least ${SEEDED_MIN_AGENTS} agents, got ${agents}`);
+  assertOk(locks >= SEEDED_MIN_LOCKS, `At least ${SEEDED_MIN_LOCKS} locks, got ${locks}`);
+  assertOk(plans >= SEEDED_MIN_PLANS, `At least ${SEEDED_MIN_PLANS} plan, got ${plans}`);
+  assertOk(messages >= SEEDED_MIN_MESSAGES, `At least ${SEEDED_MIN_MESSAGES} messages, got ${messages}`);
+}
+
+/** Reset server state and wait until the store reports no agents. */
+export async function resetAndDrainAgents(): Promise<TestAPI> {
+  const api = getTestAPI();
+  await resetServerState();
+  await api.refreshStatus();
+  await waitForCondition(() => api.getAgentCount() === NO_AGENTS, AGENTS_DRAINED);
+  return api;
+}
+
 /** Build a run-unique name from a prefix plus timestamp/random suffix. */
 export function uniqueName(prefix: string): string {
   return `${prefix}-${String(Date.now())}-${String(Math.floor(Math.random() * UNIQUE_NAME_RANDOM_BOUND))}`;
@@ -614,6 +699,51 @@ export function uniqueName(prefix: string): string {
 /** Duck-typed tree item carrying only an agentName, as used by VSIX commands. */
 export function makeAgentItem(agentName: string): unknown {
   return { agentName };
+}
+
+const LOCK_TTL_MS = 60000;
+const TEST_LOCK_REASON = 'test';
+
+/** File lock fixture with a live expiry window. */
+export function makeLiveLock(filePath: string, agentName: string): FileLock {
+  return makeFileLock({
+    filePath,
+    agentName,
+    acquiredAt: Date.now(),
+    expiresAt: Date.now() + LOCK_TTL_MS,
+    reason: TEST_LOCK_REASON,
+  });
+}
+
+/** Lock tree item backed by a real lock, for command-handler tests. */
+export function makeLockTreeItem(filePath: string, agentName: string): LockTreeItem {
+  return new LockTreeItem({
+    collapsibleState: vscode.TreeItemCollapsibleState.None,
+    isCategory: false,
+    label: filePath,
+    lock: makeLiveLock(filePath, agentName),
+  });
+}
+
+/** Agent row tree item, as the agents tree renders one agent. */
+export function makeAgentTreeItem(agentName: string): AgentTreeItem {
+  return new AgentTreeItem({
+    agentName,
+    collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+    itemType: 'agent',
+    label: agentName,
+  });
+}
+
+/** Agent child row that points at a lock file. */
+export function makeAgentLockItem(filePath: string, agentName: string): AgentTreeItem {
+  return new AgentTreeItem({
+    agentName,
+    collapsibleState: vscode.TreeItemCollapsibleState.None,
+    filePath,
+    itemType: 'lock',
+    label: filePath,
+  });
 }
 
 /** Register an agent and wait for it to appear in the agents tree. */
