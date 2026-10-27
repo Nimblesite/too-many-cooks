@@ -56,6 +56,16 @@ const spawnTracked = (opts: { port: number; captureStderr: boolean; env?: NodeJS
   return server;
 };
 
+/** Runs the bin with `args`; asserts exit 0 printing exactly `expected`. */
+const assertVersionOutput = async (
+  args: readonly string[],
+  expected: string,
+): Promise<void> => {
+  const run = spawnVersionBin(args);
+  await expectExit(run.proc, EXIT_OK);
+  assert.strictEqual(run.stdout.join(""), `${expected}\n`);
+};
+
 /** Assert the process exited with `expected` inside the timeout. */
 const expectExit = async (proc: ChildProcess, expected: number): Promise<void> => {
   const code: number | null | typeof STILL_RUNNING = await waitForExit(proc, EXIT_TIMEOUT_MS);
@@ -69,21 +79,15 @@ after(async () => {
 
 describe("server --version contract", () => {
   it("prints name and version then exits 0", async () => {
-    const run = spawnVersionBin(["--version"]);
-    await expectExit(run.proc, EXIT_OK);
-    assert.strictEqual(run.stdout.join(""), `${VERSION_LINE}\n`);
+    await assertVersionOutput(["--version"], VERSION_LINE);
   });
 
   it("-V is an alias for --version", async () => {
-    const run = spawnVersionBin(["-V"]);
-    await expectExit(run.proc, EXIT_OK);
-    assert.strictEqual(run.stdout.join(""), `${VERSION_LINE}\n`);
+    await assertVersionOutput(["-V"], VERSION_LINE);
   });
 
   it("--version --json prints the exact deploy-toolkit manifest", async () => {
-    const run = spawnVersionBin(["--version", "--json"]);
-    await expectExit(run.proc, EXIT_OK);
-    assert.strictEqual(run.stdout.join(""), `${VERSION_JSON_LINE}\n`);
+    await assertVersionOutput(["--version", "--json"], VERSION_JSON_LINE);
   });
 });
 

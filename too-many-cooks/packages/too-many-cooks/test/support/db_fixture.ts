@@ -90,6 +90,8 @@ export type AgentDbHandle = {
 export type AgentsDbHandle = {
   readonly db: () => TooManyCooksDb;
   readonly agents: () => readonly RegisteredAgent[];
+  /** `agents()[index]`, failing the test when absent. */
+  readonly agentAt: (index: number) => RegisteredAgent;
 };
 
 /** Per-test db plus `agentLabels.length` registered agents, in order. */
@@ -105,7 +107,19 @@ export const bindAgentsDb = (
   return {
     db: testDb.db,
     agents: (): readonly RegisteredAgent[] => requireAgents(current, dbPath),
+    agentAt: (index: number): RegisteredAgent =>
+      requireAgentAt(requireAgents(current, dbPath), index),
   };
+};
+
+/** `agents[index]`, failing the test when absent. */
+export const requireAgentAt = (
+  agents: readonly RegisteredAgent[],
+  index: number,
+): RegisteredAgent => {
+  const agent = agents[index];
+  assert.ok(agent !== undefined, `no agent at index ${String(index)}`);
+  return agent;
 };
 
 /** Asserts the agent list is bound and returns it. */
@@ -137,12 +151,7 @@ export const bindAgentDb = (
   const agentsDb = bindAgentsDb(dbPath, [agentLabel]);
   return {
     db: agentsDb.db,
-    agent: (): RegisteredAgent => {
-      const agents = agentsDb.agents();
-      const only = agents[0];
-      assert.ok(only !== undefined, `no agent bound for ${dbPath}`);
-      return only;
-    },
+    agent: (): RegisteredAgent => agentsDb.agentAt(0),
   };
 };
 
@@ -157,6 +166,19 @@ export const registerAgent = async (
     throw new Error("expected ok");
   }
   return result.value;
+};
+
+/** Db plus the bound agent's credentials ([DEDUP-DESLOP]). */
+export type AgentActor = {
+  readonly db: TooManyCooksDb;
+  readonly agentName: string;
+  readonly agentKey: string;
+};
+
+/** Snapshot of a bound agent handle as a flat actor ([DEDUP-DESLOP]). */
+export const agentActor = (handle: AgentDbHandle): AgentActor => {
+  const { agentName, agentKey } = handle.agent();
+  return { db: handle.db(), agentName, agentKey };
 };
 
 /** Registers two agents; returns them in registration order. */

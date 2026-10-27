@@ -26,53 +26,52 @@ export const parseJsonRecord = (text: string): Record<string, unknown> => {
   return parsed;
 };
 
+/** Type guard: value is a string. */
+const isString = (value: unknown): value is string => typeof value === "string";
+
+/** Type guard: value is a number. */
+const isNumber = (value: unknown): value is number => typeof value === "number";
+
+/** Type guard: value is an array of unknown elements. */
+const isArray = (value: unknown): value is unknown[] => Array.isArray(value);
+
+/** Reads required field `key`, narrowed by `guard`; throws when it fails. */
+const readField = <T>(
+  record: Record<string, unknown>,
+  key: string,
+  kind: string,
+  guard: (value: unknown) => value is T,
+): T => {
+  const value = record[key];
+  if (!guard(value)) {
+    throw new Error(`Expected field "${key}" to be a ${kind}, got: ${snippet(value)}`);
+  }
+  return value;
+};
+
 /** Reads a required string field; throws descriptively when absent/wrong. */
 export const getStringField = (
   record: Record<string, unknown>,
   key: string,
-): string => {
-  const value = record[key];
-  if (typeof value !== "string") {
-    throw new Error(`Expected field "${key}" to be a string, got: ${snippet(value)}`);
-  }
-  return value;
-};
+): string => readField(record, key, "string", isString);
 
 /** Reads a required number field; throws descriptively when absent/wrong. */
 export const getNumberField = (
   record: Record<string, unknown>,
   key: string,
-): number => {
-  const value = record[key];
-  if (typeof value !== "number") {
-    throw new Error(`Expected field "${key}" to be a number, got: ${snippet(value)}`);
-  }
-  return value;
-};
+): number => readField(record, key, "number", isNumber);
 
 /** Reads a required record field; throws descriptively when absent/wrong. */
 export const getRecordField = (
   record: Record<string, unknown>,
   key: string,
-): Record<string, unknown> => {
-  const value = record[key];
-  if (!isRecord(value)) {
-    throw new Error(`Expected field "${key}" to be a record, got: ${snippet(value)}`);
-  }
-  return value;
-};
+): Record<string, unknown> => readField(record, key, "record", isRecord);
 
 /** Reads a required array field; throws descriptively when absent/wrong. */
 export const getArrayField = (
   record: Record<string, unknown>,
   key: string,
-): unknown[] => {
-  const value = record[key];
-  if (!Array.isArray(value)) {
-    throw new Error(`Expected field "${key}" to be an array, got: ${snippet(value)}`);
-  }
-  return value;
-};
+): unknown[] => readField(record, key, "array", isArray);
 
 /** Reads a required array-of-records field; throws when any element differs. */
 export const getRecordArrayField = (

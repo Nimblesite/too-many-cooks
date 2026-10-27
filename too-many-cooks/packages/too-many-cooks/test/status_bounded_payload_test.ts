@@ -32,8 +32,7 @@ describe("status tool bounded payload (#41/#42)", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
 
   it("bounds payload, drops bodies, and reports counts even with a large message history", async () => {
-    const db = testDb.db();
-    const conn: TooManyCooksDb = db;
+    const conn: TooManyCooksDb = testDb.db();
     const sender = await registerAgent(conn, "bounded-sender");
     const reader = await registerAgent(conn, "bounded-reader");
 
@@ -79,8 +78,7 @@ describe("status tool bounded payload (#41/#42)", () => {
   });
 
   it("recent excludes already-read messages and other agents' direct messages", async () => {
-    const db = testDb.db();
-    const conn: TooManyCooksDb = db;
+    const conn: TooManyCooksDb = testDb.db();
     const alice = await registerAgent(conn, "bounded-alice");
     const bob = await registerAgent(conn, "bounded-bob");
     const carol = await registerAgent(conn, "bounded-carol");

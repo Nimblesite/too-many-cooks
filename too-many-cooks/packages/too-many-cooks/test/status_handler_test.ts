@@ -11,30 +11,45 @@ import {
   parseToolJson,
   statusMessagesOverview,
 } from "./support/handlers.js";
-import { getArrayField } from "./support/json.js";
+import { assertArrayFieldCount } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_status_handler.db";
+
+/** Expected agent/lock/plan counts plus message-overview counts. */
+type StatusCounts = {
+  readonly agents: number;
+  readonly locks: number;
+  readonly plans: number;
+  readonly total: number;
+  readonly unread: number;
+  readonly recent: number;
+};
 
 describe("status handler", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
 
-  it("returns empty status for fresh db", async () => {
-    const db = testDb.db();
-    const handler = createStatusHandler(db, createTestLogger());
-    const result = await handler({}, {});
+  /** Runs the status handler with `args` and asserts every count. */
+  const assertStatusCounts = async (
+    args: Record<string, unknown>,
+    expected: StatusCounts,
+  ): Promise<void> => {
+    const handler = createStatusHandler(testDb.db(), createTestLogger());
+    const result = await handler(args, {});
     assert.strictEqual(result.isError, false);
     const parsed = parseToolJson(result);
-    assert.strictEqual(Array.isArray(parsed.agents), true);
-    assert.strictEqual(Array.isArray(parsed.locks), true);
-    assert.strictEqual(Array.isArray(parsed.plans), true);
-    assert.strictEqual(getArrayField(parsed, "agents").length, 0);
-    assert.strictEqual(getArrayField(parsed, "locks").length, 0);
+    assertArrayFieldCount(parsed, "agents", expected.agents);
+    assertArrayFieldCount(parsed, "locks", expected.locks);
+    assertArrayFieldCount(parsed, "plans", expected.plans);
     // [STATUS-BOUNDED] Issues #41/#42: messages is a bounded overview, not a flat array.
     const messages = statusMessagesOverview(result);
-    assert.strictEqual(messages.total, 0);
-    assert.strictEqual(messages.unread, 0);
+    assert.strictEqual(messages.total, expected.total);
+    assert.strictEqual(messages.unread, expected.unread);
     assert.strictEqual(Array.isArray(messages.recent), true);
-    assert.strictEqual(messages.recent.length, 0);
+    assert.strictEqual(messages.recent.length, expected.recent);
+  };
+
+  it("returns empty status for fresh db", async () => {
+    await assertStatusCounts({}, { agents: 0, locks: 0, plans: 0, total: 0, unread: 0, recent: 0 });
   });
 
   it("returns populated status after registrations and actions", async () => {
@@ -52,20 +67,13 @@ describe("status handler", () => {
     // Send messages
     await db.sendMessage(agent1.agentName, agent1.agentKey, agent2.agentName, "hello");
 
-    const handler = createStatusHandler(db, createTestLogger());
     // [MSG-PRIVACY] Issue #11: the direct message (reg1 -> reg2) is only visible
     // to its recipient, so query status as reg2 to see it.
-    const result = await handler({ agent_key: agent2.agentKey }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
-    assert.strictEqual(getArrayField(parsed, "agents").length, 2);
-    assert.strictEqual(getArrayField(parsed, "locks").length, 1);
-    assert.strictEqual(getArrayField(parsed, "plans").length, 1);
     // [STATUS-BOUNDED] Issues #41/#42: the reg1 -> reg2 direct message is one
     // unread header in reg2's bounded overview.
-    const messages = statusMessagesOverview(result);
-    assert.strictEqual(messages.total, 1);
-    assert.strictEqual(messages.unread, 1);
-    assert.strictEqual(messages.recent.length, 1);
+    await assertStatusCounts(
+      { agent_key: agent2.agentKey },
+      { agents: 2, locks: 1, plans: 1, total: 1, unread: 1, recent: 1 },
+    );
   });
 });

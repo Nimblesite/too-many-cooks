@@ -18,16 +18,34 @@ const noopSetSession = (): void => { /* noop */ };
 describe("register handler", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
 
-  it("registers a new agent with name", async () => {
-    const db = testDb.db();
+  /** Registers `name` through a capturing handler; returns payload + session. */
+  const registerByName = async (
+    name: string,
+  ): Promise<{
+    readonly parsed: Record<string, unknown>;
+    readonly session: SessionIdentity | null;
+  }> => {
     const capture = createSessionCapture();
-    const handler = registerHandlerFor(db, capture.setSession);
-    const result = await handler({ name: "test-agent" }, {});
+    const handler = registerHandlerFor(testDb.db(), capture.setSession);
+    const result = await handler({ name }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    return { parsed: parseToolJson(result), session: capture.session() };
+  };
+
+  /** Runs the register handler expecting a tool error; returns its payload. */
+  const expectHandlerError = async (
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => {
+    const handler = registerHandlerFor(testDb.db(), noopSetSession);
+    const result = await handler(args, {});
+    assert.strictEqual(result.isError, true);
+    return parseToolJson(result);
+  };
+
+  it("registers a new agent with name", async () => {
+    const { parsed, session } = await registerByName("test-agent");
     assert.strictEqual(parsed.agent_name, "test-agent");
     assert.strictEqual(typeof parsed.agent_key, "string");
-    const session: SessionIdentity | null = capture.session();
     assert.notStrictEqual(session, null);
     if (session !== null) {
       assert.strictEqual(session.agentName, "test-agent");
@@ -35,11 +53,10 @@ describe("register handler", () => {
   });
 
   it("reconnects with existing key", async () => {
-    const db = testDb.db();
-    const { agentKey } = await registerAgent(db, "reconnect-agent");
+    const { agentKey } = await registerAgent(testDb.db(), "reconnect-agent");
 
     const capture = createSessionCapture();
-    const handler = registerHandlerFor(db, capture.setSession);
+    const handler = registerHandlerFor(testDb.db(), capture.setSession);
     const result = await handler({ key: agentKey }, {});
     assert.strictEqual(result.isError, false);
     const parsed = parseToolJson(result);
@@ -49,40 +66,24 @@ describe("register handler", () => {
   });
 
   it("fails when both name and key provided", async () => {
-    const db = testDb.db();
-    const handler = registerHandlerFor(db, noopSetSession);
-    const result = await handler({ name: "agent", key: "some-key" }, {});
-    assert.strictEqual(result.isError, true);
-    const parsed = parseToolJson(result);
+    const parsed = await expectHandlerError({ name: "agent", key: "some-key" });
     assert.strictEqual(typeof parsed.error, "string");
   });
 
   it("fails when neither name nor key provided", async () => {
-    const db = testDb.db();
-    const handler = registerHandlerFor(db, noopSetSession);
-    const result = await handler({}, {});
-    assert.strictEqual(result.isError, true);
-    const parsed = parseToolJson(result);
+    const parsed = await expectHandlerError({});
     assert.strictEqual(typeof parsed.error, "string");
   });
 
   it("fails reconnect with invalid key", async () => {
-    const db = testDb.db();
-    const handler = registerHandlerFor(db, noopSetSession);
-    const result = await handler({ key: "nonexistent-key" }, {});
-    assert.strictEqual(result.isError, true);
+    await expectHandlerError({ key: "nonexistent-key" });
   });
 
   it("re-registers an already registered name", async () => {
-    const db = testDb.db();
-    await registerAgent(db, "duplicate-agent");
+    await registerAgent(testDb.db(), "duplicate-agent");
 
-    const capture = createSessionCapture();
-    const handler = registerHandlerFor(db, capture.setSession);
-    const result = await handler({ name: "duplicate-agent" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = parseToolJson(result);
+    const { parsed, session } = await registerByName("duplicate-agent");
     assert.strictEqual(parsed.agent_name, "duplicate-agent");
-    assert.notStrictEqual(capture.session(), null);
+    assert.notStrictEqual(session, null);
   });
 });

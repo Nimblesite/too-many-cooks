@@ -5,8 +5,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import { errEnvelope, okEnvelope } from "./support/fake_cloud_api.js";
-import { bindCloudContract } from "./support/cloud_contract.js";
+import { errEnvelope } from "./support/fake_cloud_api.js";
+import {
+  type CloudContract,
+  bindCloudContract,
+  expectErrEnvelope,
+  requireIndex,
+  scriptedOk,
+  scriptedVoid,
+} from "./support/cloud_contract.js";
 
 const ERR_CODE = "VALIDATION_ERROR";
 const ERR_MSG = "nope";
@@ -15,55 +22,75 @@ const UNKNOWN_MSG = "Unknown API error";
 const OVERVIEW_LIMIT = 5;
 
 /** Fake cloud API, db-under-test and transport assertion ([CLOUD-API-CONTRACT]). */
-const contract = bindCloudContract();
-const { cloud, assertTransport } = contract;
+const contract: CloudContract = bindCloudContract();
+const { assertTransport } = contract;
 
 describe("db-cloud message endpoint contract", () => {
   it("sendMessage returns id; non-string value maps to empty string", async () => {
     const db = contract.db();
-    cloud.script("sendMessage", 200, okEnvelope("mid-1"));
-    const result = await db.sendMessage("a", "k", "b", "hi");
-    if (!result.ok) { assert.fail("sendMessage failed"); }
-    assert.strictEqual(result.value, "mid-1");
-    assertTransport("sendMessage", { fromAgent: "a", fromKey: "k", toAgent: "b", content: "hi" });
+    const value = await scriptedOk(
+      contract,
+      "sendMessage",
+      "mid-1",
+      async () => await db.sendMessage("a", "k", "b", "hi"),
+      "sendMessage failed",
+    );
+    assert.strictEqual(value, "mid-1");
+    assertTransport("sendMessage", { content: "hi", fromAgent: "a", fromKey: "k", toAgent: "b" });
 
-    cloud.script("sendMessage", 200, okEnvelope({ id: "mid-1" }));
-    const fallback = await db.sendMessage("a", "k", "b", "hi");
-    if (!fallback.ok) { assert.fail("sendMessage fallback failed"); }
-    assert.strictEqual(fallback.value, "");
+    const fallback = await scriptedOk(
+      contract,
+      "sendMessage",
+      { id: "mid-1" },
+      async () => await db.sendMessage("a", "k", "b", "hi"),
+      "sendMessage fallback failed",
+    );
+    assert.strictEqual(fallback, "");
   });
 
   it("getMessages forwards the unreadOnly option and maps message records", async () => {
     const db = contract.db();
-    cloud.script("getMessages", 200, okEnvelope([
-      { id: "m1", from_agent: "a", to_agent: "b", content: "hello", created_at: 9 },
-      { id: "m2", from_agent: "c", to_agent: "b", content: "again", created_at: 10, read_at: 11 },
-    ]));
-    const result = await db.getMessages("b", "k", { unreadOnly: true });
-    if (!result.ok) { assert.fail("getMessages failed"); }
-    assert.deepStrictEqual(result.value, [
+    const value = await scriptedOk(
+      contract,
+      "getMessages",
+      [
+        { id: "m1", from_agent: "a", to_agent: "b", content: "hello", created_at: 9 },
+        { id: "m2", from_agent: "c", to_agent: "b", content: "again", created_at: 10, read_at: 11 },
+      ],
+      async () => await db.getMessages("b", "k", { unreadOnly: true }),
+      "getMessages failed",
+    );
+    assert.deepStrictEqual(value, [
       { id: "m1", fromAgent: "a", toAgent: "b", content: "hello", createdAt: 9, readAt: undefined },
       { id: "m2", fromAgent: "c", toAgent: "b", content: "again", createdAt: 10, readAt: 11 },
     ]);
-    assertTransport("getMessages", { agentName: "b", agentKey: "k", unreadOnly: true });
+    assertTransport("getMessages", { agentKey: "k", agentName: "b", unreadOnly: true });
 
-    cloud.script("getMessages", 200, okEnvelope(null));
-    const noOpts = await db.getMessages("b", "k");
-    if (!noOpts.ok) { assert.fail("getMessages no-opts failed"); }
-    assert.deepStrictEqual(noOpts.value, []);
-    assertTransport("getMessages", { agentName: "b", agentKey: "k" });
+    const noOpts = await scriptedOk(
+      contract,
+      "getMessages",
+      null,
+      async () => await db.getMessages("b", "k"),
+      "getMessages no-opts failed",
+    );
+    assert.deepStrictEqual(noOpts, []);
+    assertTransport("getMessages", { agentKey: "k", agentName: "b" });
   });
 
   it("getMessageOverview maps total/unread/recent headers", async () => {
     const db = contract.db();
-    cloud.script("getMessageOverview", 200, okEnvelope({
-      total: 3,
-      unread: 1,
-      recent: [{ id: "m1", from_agent: "a", to_agent: "*", created_at: 4, read_at: 5 }],
-    }));
-    const result = await db.getMessageOverview("a", OVERVIEW_LIMIT);
-    if (!result.ok) { assert.fail("getMessageOverview failed"); }
-    assert.deepStrictEqual(result.value, {
+    const value = await scriptedOk(
+      contract,
+      "getMessageOverview",
+      {
+        total: 3,
+        unread: 1,
+        recent: [{ id: "m1", from_agent: "a", to_agent: "*", created_at: 4, read_at: 5 }],
+      },
+      async () => await db.getMessageOverview("a", OVERVIEW_LIMIT),
+      "getMessageOverview failed",
+    );
+    assert.deepStrictEqual(value, {
       total: 3,
       unread: 1,
       recent: [{ id: "m1", fromAgent: "a", toAgent: "*", createdAt: 4, readAt: 5 }],
@@ -73,17 +100,21 @@ describe("db-cloud message endpoint contract", () => {
 
   it("markRead and listAllMessages hit their endpoints", async () => {
     const db = contract.db();
-    cloud.script("markRead", 200, okEnvelope(null));
-    const marked = await db.markRead("m1", "b", "k");
-    assert.strictEqual(marked.ok, true);
-    assertTransport("markRead", { messageId: "m1", agentName: "b", agentKey: "k" });
+    await scriptedVoid(
+      contract,
+      "markRead",
+      async () => await db.markRead("m1", "b", "k"),
+      { agentKey: "k", agentName: "b", messageId: "m1" },
+    );
 
-    cloud.script("listAllMessages", 200, okEnvelope([{ id: "m9", from_agent: "x", to_agent: "y", content: "body", created_at: 1 }]));
-    const all = await db.listAllMessages();
-    if (!all.ok) { assert.fail("listAllMessages failed"); }
-    const firstMessage = all.value[0];
-    if (firstMessage === undefined) { assert.fail("no messages returned"); }
-    assert.strictEqual(firstMessage.content, "body");
+    const all = await scriptedOk(
+      contract,
+      "listAllMessages",
+      [{ id: "m9", from_agent: "x", to_agent: "y", content: "body", created_at: 1 }],
+      async () => await db.listAllMessages(),
+      "listAllMessages failed",
+    );
+    assert.strictEqual(requireIndex(all, 0, "no messages returned").content, "body");
     assertTransport("listAllMessages", {});
   });
 });
@@ -91,106 +122,132 @@ describe("db-cloud message endpoint contract", () => {
 describe("db-cloud plan and admin endpoint contract", () => {
   it("updatePlan posts exact args; getPlan maps null and records", async () => {
     const db = contract.db();
-    cloud.script("updatePlan", 200, okEnvelope(null));
-    const updated = await db.updatePlan("a", "k", "goal", "task");
-    assert.strictEqual(updated.ok, true);
-    assertTransport("updatePlan", { agentName: "a", agentKey: "k", goal: "goal", currentTask: "task" });
+    await scriptedVoid(
+      contract,
+      "updatePlan",
+      async () => await db.updatePlan("a", "k", "goal", "task"),
+      { agentKey: "k", agentName: "a", currentTask: "task", goal: "goal" },
+    );
 
-    cloud.script("getPlan", 200, okEnvelope(null));
-    const none = await db.getPlan("a");
-    if (!none.ok) { assert.fail("getPlan null failed"); }
-    assert.strictEqual(none.value, null);
+    const none = await scriptedOk(
+      contract,
+      "getPlan",
+      null,
+      async () => await db.getPlan("a"),
+      "getPlan null failed",
+    );
+    assert.strictEqual(none, null);
     assertTransport("getPlan", { agentName: "a" });
 
-    cloud.script("getPlan", 200, okEnvelope({ agent_name: "a", goal: "g", current_task: "t", updated_at: 8 }));
-    const plan = await db.getPlan("a");
-    if (!plan.ok) { assert.fail("getPlan record failed"); }
-    assert.deepStrictEqual(plan.value, { agentName: "a", goal: "g", currentTask: "t", updatedAt: 8 });
+    const plan = await scriptedOk(
+      contract,
+      "getPlan",
+      { agent_name: "a", goal: "g", current_task: "t", updated_at: 8 },
+      async () => await db.getPlan("a"),
+      "getPlan record failed",
+    );
+    assert.deepStrictEqual(plan, { agentName: "a", goal: "g", currentTask: "t", updatedAt: 8 });
 
-    cloud.script("listPlans", 200, okEnvelope([{ agent_name: "a", goal: "g", current_task: "t", updated_at: 8 }]));
-    const plans = await db.listPlans();
-    if (!plans.ok) { assert.fail("listPlans failed"); }
-    assert.strictEqual(plans.value.length, 1);
-    const firstPlan = plans.value[0];
-    if (firstPlan === undefined) { assert.fail("no plans returned"); }
-    assert.strictEqual(firstPlan.goal, "g");
+    const plans = await scriptedOk(
+      contract,
+      "listPlans",
+      [{ agent_name: "a", goal: "g", current_task: "t", updated_at: 8 }],
+      async () => await db.listPlans(),
+      "listPlans failed",
+    );
+    assert.strictEqual(plans.length, 1);
+    assert.strictEqual(requireIndex(plans, 0, "no plans returned").goal, "g");
     assertTransport("listPlans", {});
   });
 
   it("admin endpoints post exact args and parse values", async () => {
     const db = contract.db();
-    cloud.script("adminDeleteLock", 200, okEnvelope(null));
-    assert.strictEqual((await db.adminDeleteLock("/x")).ok, true);
-    assertTransport("adminDeleteLock", { filePath: "/x" });
+    await scriptedVoid(contract, "adminDeleteLock", async () => await db.adminDeleteLock("/x"), { filePath: "/x" });
+    await scriptedVoid(contract, "adminDeleteAgent", async () => await db.adminDeleteAgent("a"), { agentName: "a" });
 
-    cloud.script("adminDeleteAgent", 200, okEnvelope(null));
-    assert.strictEqual((await db.adminDeleteAgent("a")).ok, true);
-    assertTransport("adminDeleteAgent", { agentName: "a" });
-
-    cloud.script("adminResetKey", 200, okEnvelope({ agent_name: "a", agent_key: "k2" }));
-    const resetKey = await db.adminResetKey("a");
-    if (!resetKey.ok) { assert.fail("adminResetKey failed"); }
-    assert.deepStrictEqual(resetKey.value, { agentName: "a", agentKey: "k2" });
+    const resetKey = await scriptedOk(
+      contract,
+      "adminResetKey",
+      { agent_name: "a", agent_key: "k2" },
+      async () => await db.adminResetKey("a"),
+      "adminResetKey failed",
+    );
+    assert.deepStrictEqual(resetKey, { agentName: "a", agentKey: "k2" });
     assertTransport("adminResetKey", { agentName: "a" });
 
-    cloud.script("adminSendMessage", 200, okEnvelope("m-admin"));
-    const sent = await db.adminSendMessage("sys", "a", "hello");
-    if (!sent.ok) { assert.fail("adminSendMessage failed"); }
-    assert.strictEqual(sent.value, "m-admin");
-    assertTransport("adminSendMessage", { fromAgent: "sys", toAgent: "a", content: "hello" });
+    const sent = await scriptedOk(
+      contract,
+      "adminSendMessage",
+      "m-admin",
+      async () => await db.adminSendMessage("sys", "a", "hello"),
+      "adminSendMessage failed",
+    );
+    assert.strictEqual(sent, "m-admin");
+    assertTransport("adminSendMessage", { content: "hello", fromAgent: "sys", toAgent: "a" });
 
-    cloud.script("adminReset", 200, okEnvelope(null));
-    assert.strictEqual((await db.adminReset()).ok, true);
-    assertTransport("adminReset", {});
+    await scriptedVoid(contract, "adminReset", async () => await db.adminReset(), {});
   });
 });
 
 describe("db-cloud error envelope handling", () => {
   it("propagates the exact DbError code and message", async () => {
     const db = contract.db();
-    cloud.script("register", 422, errEnvelope(ERR_CODE, ERR_MSG));
-    const result = await db.register("dup");
-    if (result.ok) { assert.fail("expected error"); }
-    assert.deepStrictEqual(result.error, { code: ERR_CODE, message: ERR_MSG });
+    contract.cloud.script("register", 422, errEnvelope(ERR_CODE, ERR_MSG));
+    await expectErrEnvelope(
+      async () => await db.register("dup"),
+      { code: ERR_CODE, message: ERR_MSG },
+    );
   });
 
   it("falls back to NETWORK_ERROR/Unknown API error without an error object", async () => {
     const db = contract.db();
-    cloud.script("register", 200, { ok: false });
-    const result = await db.register("dup");
-    if (result.ok) { assert.fail("expected error"); }
-    assert.deepStrictEqual(result.error, { code: NETWORK_CODE, message: UNKNOWN_MSG });
+    contract.cloud.script("register", 200, { ok: false });
+    await expectErrEnvelope(
+      async () => await db.register("dup"),
+      { code: NETWORK_CODE, message: UNKNOWN_MSG },
+    );
   });
 
   it("rejects non-envelope JSON payloads with the network fallback", async () => {
     const db = contract.db();
-    cloud.script("listAgents", 200, ["not", "an", "envelope"]);
-    const result = await db.listAgents();
-    if (result.ok) { assert.fail("expected error"); }
-    assert.deepStrictEqual(result.error, { code: NETWORK_CODE, message: UNKNOWN_MSG });
+    contract.cloud.script("listAgents", 200, ["not", "an", "envelope"]);
+    await expectErrEnvelope(
+      async () => await db.listAgents(),
+      { code: NETWORK_CODE, message: UNKNOWN_MSG },
+    );
   });
 
   it("maps non-record values through empty-record defaults", async () => {
     const db = contract.db();
-    cloud.script("register", 200, okEnvelope("scalar"));
-    const reg = await db.register("x");
-    if (!reg.ok) { assert.fail("register scalar failed"); }
-    assert.deepStrictEqual(reg.value, { agentName: "", agentKey: "" });
+    const reg = await scriptedOk(
+      contract,
+      "register",
+      "scalar",
+      async () => await db.register("x"),
+      "register scalar failed",
+    );
+    assert.deepStrictEqual(reg, { agentName: "", agentKey: "" });
 
-    cloud.script("getPlan", 200, okEnvelope(undefined));
-    const plan = await db.getPlan("x");
-    if (!plan.ok) { assert.fail("getPlan undefined failed"); }
-    assert.strictEqual(plan.value, null);
+    const plan = await scriptedOk(
+      contract,
+      "getPlan",
+      undefined,
+      async () => await db.getPlan("x"),
+      "getPlan undefined failed",
+    );
+    assert.strictEqual(plan, null);
 
-    cloud.script("listPlans", 200, okEnvelope([
-      { agent_name: "ok", goal: "g", current_task: "t", updated_at: 1 },
-      7,
-    ]));
-    const plans = await db.listPlans();
-    if (!plans.ok) { assert.fail("listPlans mixed failed"); }
-    assert.strictEqual(plans.value.length, 2);
-    const secondPlan = plans.value[1];
-    if (secondPlan === undefined) { assert.fail("expected two plans"); }
-    assert.deepStrictEqual(secondPlan, { agentName: "", goal: "", currentTask: "", updatedAt: 0 });
+    const plans = await scriptedOk(
+      contract,
+      "listPlans",
+      [
+        { agent_name: "ok", goal: "g", current_task: "t", updated_at: 1 },
+        7,
+      ],
+      async () => await db.listPlans(),
+      "listPlans mixed failed",
+    );
+    assert.strictEqual(plans.length, 2);
+    assert.deepStrictEqual(requireIndex(plans, 1, "expected two plans"), { agentName: "", goal: "", currentTask: "", updatedAt: 0 });
   });
 });

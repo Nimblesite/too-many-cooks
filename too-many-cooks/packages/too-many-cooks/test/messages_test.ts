@@ -22,6 +22,19 @@ import {
 } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_messages.db";
+const SEEDED_CONTENT = "Test message";
+
+/** One post-first-read case: the unreadOnly option and the inbox size it yields. */
+type UnreadCase = {
+  readonly name: string;
+  readonly unreadOnly: boolean;
+  readonly expected: number;
+};
+
+const UNREAD_CASES: readonly UnreadCase[] = [
+  { name: "getMessages auto-marks messages as read", unreadOnly: true, expected: 0 },
+  { name: "getMessages with unreadOnly=false returns all messages", unreadOnly: false, expected: 1 },
+];
 
 describe("messages", () => {
   let db: TooManyCooksDb | undefined;
@@ -87,35 +100,27 @@ describe("messages", () => {
     assertFieldSetEquals(messages, (m) => m.content, ["Message 1", "Message 2"]);
   });
 
-  it("getMessages auto-marks messages as read", async () => {
+  /** Runs one post-first-read case against the bound agent's inbox. */
+  const runUnreadCase = async (testCase: UnreadCase): Promise<void> => {
     const d = requireDb(db);
-    await d.sendMessage(senderName, senderKey, receiverName, "Test message");
+    await d.sendMessage(senderName, senderKey, receiverName, SEEDED_CONTENT);
 
     // First fetch marks as read
     await d.getMessages(receiverName, receiverKey);
 
-    // Second fetch with unreadOnly=true should return empty
+    // A second fetch with the case's unreadOnly option returns exactly `expected`
     const messages = expectOk(
-      await d.getMessages(receiverName, receiverKey, { unreadOnly: true }),
+      await d.getMessages(receiverName, receiverKey, { unreadOnly: testCase.unreadOnly }),
       "get must be ok",
     );
-    assert.strictEqual(messages.length, 0);
-  });
+    assert.strictEqual(messages.length, testCase.expected);
+  };
 
-  it("getMessages with unreadOnly=false returns all messages", async () => {
-    const d = requireDb(db);
-    await d.sendMessage(senderName, senderKey, receiverName, "Test message");
-
-    // First fetch marks as read
-    await d.getMessages(receiverName, receiverKey);
-
-    // Second fetch with unreadOnly=false should still return message
-    const messages = expectOk(
-      await d.getMessages(receiverName, receiverKey, { unreadOnly: false }),
-      "get must be ok",
-    );
-    assert.strictEqual(messages.length, 1);
-  });
+  for (const testCase of UNREAD_CASES) {
+    it(testCase.name, async () => {
+      await runUnreadCase(testCase);
+    });
+  }
 
   it("getMessages fails with invalid credentials", async () => {
     const d = requireDb(db);

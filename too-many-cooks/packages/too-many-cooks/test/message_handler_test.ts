@@ -10,11 +10,10 @@ import {
 import {
   agentSession,
   messageHandlerFor,
-  parseToolJson,
   runToolErr,
   runToolOk,
 } from "./support/handlers.js";
-import { assertDefined } from "./support/assertions.js";
+import { assertNonNullish } from "./support/assertions.js";
 import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_message_handler.db";
@@ -33,15 +32,30 @@ describe("message handler", () => {
 
   const db = (): TooManyCooksDb => agentsDb.db();
 
-  const agentAt = (index: number): RegisteredAgent => {
-    const agent = agentsDb.agents()[index];
-    assertDefined(agent, `agent ${String(index)}`);
-    return agent;
-  };
+  const agentAt = (index: number): RegisteredAgent => agentsDb.agentAt(index);
 
   const sessionFor = (index: number): SessionGetter => agentSession(agentAt(index));
 
   const unauthenticated = (): SessionGetter => () => null;
+
+  /** Sends `content` from the sender to the recipient through the tool. */
+  const sendFromSender = async (
+    content: string,
+  ): Promise<Record<string, unknown>> =>
+    await runToolOk(
+      messageHandlerFor(db(), sessionFor(SENDER)),
+      { action: "send", to_agent: agentAt(RECIPIENT).agentName, content },
+    );
+
+  /** Reads the recipient's inbox through the tool, asserting success. */
+  const recipientInbox = async (): Promise<Array<Record<string, unknown>>> => {
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
+      { action: "get" },
+    );
+    assert.strictEqual(Array.isArray(parsed.messages), true);
+    return getRecordArrayField(parsed, "messages");
+  };
 
   const errorCases: readonly MessageErrorCase[] = [
     { name: "fails when action is missing", args: (): Record<string, unknown> => ({}) },
@@ -67,33 +81,22 @@ describe("message handler", () => {
   ];
 
   it("send succeeds between agents", async () => {
-    const parsed = await runToolOk(
-      messageHandlerFor(db(), sessionFor(SENDER)),
-      { action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "hello" },
-    );
+    const parsed = await sendFromSender("hello");
     assert.strictEqual(parsed.sent, true);
     assert.strictEqual(typeof parsed.message_id, "string");
   });
 
   it("get returns messages for agent", async () => {
-    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
-    await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "test msg" }, {});
+    await sendFromSender("test msg");
 
-    const parsed = await runToolOk(
-      messageHandlerFor(db(), sessionFor(RECIPIENT)),
-      { action: "get" },
-    );
-    assert.strictEqual(Array.isArray(parsed.messages), true);
-    const messages = getRecordArrayField(parsed, "messages");
+    const messages = await recipientInbox();
     assert.ok(messages.length > 0);
-    const first = messages[0];
-    assertDefined(first, "first inbox message");
+    const first = assertNonNullish(messages[0], "first inbox message");
     assert.strictEqual(first.content, "test msg");
   });
 
   it("get with unread_only false returns all", async () => {
-    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
-    await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "msg1" }, {});
+    await sendFromSender("msg1");
 
     const parsed = await runToolOk(
       messageHandlerFor(db(), sessionFor(RECIPIENT)),
@@ -103,9 +106,8 @@ describe("message handler", () => {
   });
 
   it("mark_read succeeds for valid message", async () => {
-    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
-    const sendResult = await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "to mark" }, {});
-    const messageId = getStringField(parseToolJson(sendResult), "message_id");
+    const sendResult = await sendFromSender("to mark");
+    const messageId = getStringField(sendResult, "message_id");
 
     const parsed = await runToolOk(
       messageHandlerFor(db(), sessionFor(RECIPIENT)),

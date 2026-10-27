@@ -29,7 +29,7 @@ import {
   type ClientInfo,
 } from "./mcp_http.js";
 import { removeTree } from "./fs_helpers.js";
-import { getRecordArrayField, getStringField, parseJsonRecord } from "./json.js";
+import { getArrayField, getRecordArrayField, getStringField, parseJsonRecord } from "./json.js";
 import { assertDefined } from "./assertions.js";
 
 const HEALTH_CHECK_ATTEMPTS = 10;
@@ -154,6 +154,22 @@ export const bindIntegrationLifecycle = (
 
 export type Agent = { readonly name: string; readonly key: string };
 
+/** Binds a server fixture for the calling file's describe block ([DEDUP-DESLOP]). */
+export const bindIntegrationSuite = (
+  port: number,
+  tmpPrefix: string,
+): IntegrationSuite =>
+  bindIntegrationLifecycle(createIntegrationServer(port, tmpPrefix));
+
+/** Calls `tool` with `action` and returns its array field `field`. */
+export const callToolArrayField = async (
+  client: McpHttpClient,
+  tool: string,
+  action: string,
+  field: string,
+): Promise<readonly unknown[]> =>
+  getArrayField(await callToolJson(client, tool, { action }), field);
+
 /** Registers `count` agents concurrently; returns their name/key pairs. */
 export const registerAgents = async (
   client: McpHttpClient,
@@ -196,6 +212,17 @@ export const registerSingleAgent = async (
   const agent = agents[0];
   assertDefined(agent, label);
   return agent;
+};
+
+/** Calls `tool` raw and asserts the server reported a tool error. */
+export const assertToolCallFails = async (
+  client: McpHttpClient,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> => {
+  const result = await client.callToolRaw(tool, args);
+  assert.strictEqual(result.isError, true);
+  return result;
 };
 
 /** Calls a tool and parses its JSON payload ([DEDUP-DESLOP]). */

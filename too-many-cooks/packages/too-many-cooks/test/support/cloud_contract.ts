@@ -8,8 +8,11 @@
 import assert from "node:assert";
 import { after, before } from "node:test";
 
+import type { Err, Success } from "too-many-cooks-core";
+
 import { createCloudDb } from "../../src/db-cloud.js";
-import { FakeCloudApi } from "./fake_cloud_api.js";
+import { expectErr, expectOk } from "./assertions.js";
+import { FakeCloudApi, okEnvelope } from "./fake_cloud_api.js";
 
 /** API key the cloud db is created with. */
 export const CLOUD_API_KEY = "test-api-key-123";
@@ -70,4 +73,50 @@ export const assertTransport = (
   assert.strictEqual(req.headers["x-workspace-id"], CLOUD_WORKSPACE_ID);
   assert.strictEqual(req.headers["content-type"], CLOUD_CONTENT_TYPE);
   assert.deepStrictEqual(req.body, expectedBody);
+};
+
+/** HTTP status the fake cloud API returns for a scripted success. */
+export const CLOUD_OK_STATUS = 200;
+
+/** Scripts `endpoint` with `payload`, runs `call`, returns its Ok value. */
+export const scriptedOk = async <T, E>(
+  contract: CloudContract,
+  endpoint: string,
+  payload: unknown,
+  call: () => Promise<Success<T> | Err<E>>,
+  message: string,
+): Promise<T> => {
+  contract.cloud.script(endpoint, CLOUD_OK_STATUS, okEnvelope(payload));
+  return expectOk(await call(), message);
+};
+
+/** Scripts `endpoint` to acknowledge, runs `call`, asserts the transport. */
+export const scriptedVoid = async (
+  contract: CloudContract,
+  endpoint: string,
+  call: () => Promise<{ readonly ok: boolean }>,
+  expectedBody: unknown,
+): Promise<void> => {
+  contract.cloud.script(endpoint, CLOUD_OK_STATUS, okEnvelope(null));
+  assert.strictEqual((await call()).ok, true);
+  contract.assertTransport(endpoint, expectedBody);
+};
+
+/** Runs `call` expecting an error Result and asserts its exact DbError. */
+export const expectErrEnvelope = async <E>(
+  call: () => Promise<Success<unknown> | Err<E>>,
+  expected: E,
+): Promise<void> => {
+  assert.deepStrictEqual(expectErr(await call(), "expected error"), expected);
+};
+
+/** `values[index]`, failing the test with `message` when absent. */
+export const requireIndex = <T>(
+  values: readonly T[],
+  index: number,
+  message: string,
+): T => {
+  const item = values[index];
+  if (item === undefined) { assert.fail(message); }
+  return item;
 };

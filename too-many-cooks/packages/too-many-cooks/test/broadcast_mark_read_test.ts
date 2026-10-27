@@ -3,15 +3,14 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import type { SessionGetter, ToolCallback } from "too-many-cooks-core";
-import { type RegisteredAgent, bindAgentsDb } from "./support/db_fixture.js";
+import type { CallToolResult, SessionGetter, ToolCallback } from "too-many-cooks-core";
+import { bindAgentsDb } from "./support/db_fixture.js";
 import {
   agentSession,
   messageHandlerFor,
   parseToolJson,
   sendBroadcast,
 } from "./support/handlers.js";
-import { assertDefined } from "./support/assertions.js";
 import { getRecordArrayField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_broadcast_mark_read.db";
@@ -27,13 +26,8 @@ const THIRD = 2;
 describe("broadcast mark_read bug (issue #7)", () => {
   const agentsDb = bindAgentsDb(TEST_DB_PATH, AGENT_LABELS);
 
-  const agentAt = (index: number): RegisteredAgent => {
-    const agent = agentsDb.agents()[index];
-    assertDefined(agent, `agent ${String(index)}`);
-    return agent;
-  };
-
-  const sessionFor = (index: number): SessionGetter => agentSession(agentAt(index));
+  const sessionFor = (index: number): SessionGetter =>
+    agentSession(agentsDb.agentAt(index));
 
   const senderHandler = (): ToolCallback =>
     messageHandlerFor(agentsDb.db(), sessionFor(SENDER));
@@ -50,6 +44,16 @@ describe("broadcast mark_read bug (issue #7)", () => {
     return getRecordArrayField(parseToolJson(result), "messages");
   };
 
+  /** Marks `messageId` read through `handler`; asserts it succeeded. */
+  const markReadVia = async (
+    handler: ToolCallback,
+    messageId: string,
+  ): Promise<CallToolResult> => {
+    const result = await handler({ action: "mark_read", message_id: messageId }, {});
+    assert.strictEqual(result.isError, false, "mark_read must succeed");
+    return result;
+  };
+
   it("mark_read succeeds on a broadcast message", async () => {
     const broadcastId = await sendBroadcast(
       senderHandler(),
@@ -60,7 +64,7 @@ describe("broadcast mark_read bug (issue #7)", () => {
     assert.ok(messages.some((m) => m.id === broadcastId), "broadcast should appear in get");
 
     // THIS IS THE BUG: mark_read on a broadcast used to return NOT_FOUND
-    const markResult = await receiverHandler()({ action: "mark_read", message_id: broadcastId }, {});
+    const markResult = await markReadVia(receiverHandler(), broadcastId);
     assert.strictEqual(markResult.isError, false, "mark_read on broadcast must succeed, not return NOT_FOUND");
     assert.strictEqual(parseToolJson(markResult).marked, true);
   });
@@ -71,7 +75,7 @@ describe("broadcast mark_read bug (issue #7)", () => {
     const firstInbox = await inboxOf(receiverHandler());
     assert.ok(firstInbox.some((m) => m.id === broadcastId), "broadcast visible on first get");
 
-    await receiverHandler()({ action: "mark_read", message_id: broadcastId }, {});
+    await markReadVia(receiverHandler(), broadcastId);
 
     // unread_only (default) must NOT bring the read broadcast back
     const secondInbox = await inboxOf(receiverHandler());
@@ -85,9 +89,10 @@ describe("broadcast mark_read bug (issue #7)", () => {
     const broadcastId = await sendBroadcast(senderHandler(), "multi-reader broadcast");
 
     await inboxOf(receiverHandler());
-    await receiverHandler()({ action: "mark_read", message_id: broadcastId }, {});
+    await markReadVia(receiverHandler(), broadcastId);
 
-    const thirdInbox = await inboxOf(messageHandlerFor(agentsDb.db(), sessionFor(THIRD)));
+    const thirdHandler = messageHandlerFor(agentsDb.db(), sessionFor(THIRD));
+    const thirdInbox = await inboxOf(thirdHandler);
     assert.ok(
       thirdInbox.some((m) => m.id === broadcastId),
       "broadcast must still be visible to agents who haven't read it",

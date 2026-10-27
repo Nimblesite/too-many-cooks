@@ -65,6 +65,64 @@ const LOCK_VERSION = 1;
 /** Default lock timeout. */
 const LOCK_TIMEOUT = 60000;
 
+/** Number of entities the "list" round-trip tests seed. */
+const SEEDED_PAIR = 2;
+
+/** `key`'s value in `map` as a successful single-row read. */
+const lookup = <K, V>(map: Map<K, V>, key: K) => success(map.get(key) ?? null);
+
+/** Every value in `map` as a successful list read. */
+const allValues = <K, V>(map: Map<K, V>) => success([...map.values()]);
+
+/** Result-bearing read of `db`'s lock on LOCK_FILE, asserted non-null. */
+const requireLock = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<FileLock> => assertNonNullish(
+  expectOk(await db.queryLock(LOCK_FILE), `${label} query must be ok`),
+  `${label} lock must exist`,
+);
+
+/** Result-bearing read of alice's plan through `db`, asserted non-null. */
+const requirePlan = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<AgentPlan> => assertNonNullish(
+  expectOk(await db.getPlan(AGENT_ALICE), `${label} plan must be ok`),
+  `${label} plan must exist`,
+);
+
+/** Seeds alice's message, plan and lock through `db`. */
+const seedAlice = async (db: TooManyCooksDb): Promise<void> => {
+  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
+  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
+  await db.acquireLock(LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT);
+};
+
+/** Asserts `values` holds exactly `count` entries, none equal to a plaintext. */
+const assertAllCiphertext = (
+  values: readonly string[],
+  plaintexts: readonly string[],
+  count: number,
+): void => {
+  assert.equal(values.length, count);
+  for (const value of values) {
+    for (const plaintext of plaintexts) {
+      assert.notEqual(value, plaintext);
+    }
+  }
+};
+
+/** Asserts `values` holds every expected plaintext. */
+const assertIncludesAll = (
+  values: readonly string[],
+  expected: readonly string[],
+): void => {
+  for (const item of expected) {
+    assert.ok(values.includes(item));
+  }
+};
+
 /**
  * In-memory db that stores values AS-IS (ciphertext when used behind middleware).
  * Simulates a real cloud database that never sees plaintext.
@@ -106,11 +164,8 @@ const createStorageDb = (): TooManyCooksDb => {
       locks.delete(fp);
       return success(undefined);
     },
-    queryLock: async (fp) => {
-      const lock = locks.get(fp);
-      return success(lock ?? null);
-    },
-    listLocks: async () => success([...locks.values()]),
+    queryLock: async (fp) => lookup(locks, fp),
+    listLocks: async () => allValues(locks),
     sendMessage: async (from, _key, to, content) =>
       success(pushMessage(from, to, content)),
     getMessages: async (an) => {
@@ -126,11 +181,8 @@ const createStorageDb = (): TooManyCooksDb => {
       });
       return success(undefined);
     },
-    getPlan: async (an) => {
-      const plan = plans.get(an);
-      return success(plan ?? null);
-    },
-    listPlans: async () => success([...plans.values()]),
+    getPlan: async (an) => lookup(plans, an),
+    listPlans: async () => allValues(plans),
     listAllMessages: async () => success([...messages]),
     close: async () => success(undefined),
     adminSendMessage: async (from, to, content) =>
@@ -168,18 +220,59 @@ const soleBobMessage = async (
   label: string,
 ): Promise<Message> => assertNonNullish((await bobInboxThrough(db, SINGLE_MESSAGE))[0], label);
 
+/** Asserts `content` is ciphertext in `storageDb`, plaintext through `db`. */
+const assertMessageRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+  content: string,
+): Promise<Message> => {
+  const rawMsg = await soleBobMessage(storageDb, "raw message");
+  assert.notEqual(rawMsg.content, content);
+
+  const decMsg = await soleBobMessage(db, "decrypted message");
+  assert.equal(decMsg.content, content);
+  assert.equal(decMsg.fromAgent, AGENT_ALICE);
+  assert.equal(decMsg.toAgent, AGENT_BOB);
+  return decMsg;
+};
+
+/** Asserts alice's plan is ciphertext in `storageDb` and plaintext through `db`. */
+const assertPlanRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+): Promise<void> => {
+  const rawPlan = await requirePlan(storageDb, "raw");
+  assert.notEqual(rawPlan.goal, PLAN_GOAL);
+  assert.notEqual(rawPlan.currentTask, PLAN_TASK);
+  assert.equal(rawPlan.agentName, AGENT_ALICE);
+
+  const decPlan = await requirePlan(db, "dec");
+  assert.equal(decPlan.goal, PLAN_GOAL);
+  assert.equal(decPlan.currentTask, PLAN_TASK);
+  assert.equal(decPlan.agentName, AGENT_ALICE);
+};
+
+/** Asserts alice's lock is ciphertext in `storageDb` and plaintext through `db`. */
+const assertLockRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+): Promise<void> => {
+  const rawLock = await requireLock(storageDb, "raw");
+  assert.notEqual(rawLock.reason, LOCK_REASON);
+  assert.equal(rawLock.agentName, AGENT_ALICE);
+
+  const decLock = await requireLock(db, "dec");
+  assert.equal(decLock.reason, LOCK_REASON);
+  assert.equal(decLock.filePath, LOCK_FILE);
+  assert.equal(decLock.agentName, AGENT_ALICE);
+};
+
 test("message round-trip: send encrypted, retrieve decrypted", async () => {
   const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
-  const rawMsg = await soleBobMessage(storageDb, "raw message");
-  assert.notEqual(rawMsg.content, MSG_CONTENT);
-
-  const decMsg = await soleBobMessage(db, "decrypted message");
-  assert.equal(decMsg.content, MSG_CONTENT);
-  assert.equal(decMsg.fromAgent, AGENT_ALICE);
-  assert.equal(decMsg.toAgent, AGENT_BOB);
+  await assertMessageRoundTrip(storageDb, db, MSG_CONTENT);
 });
 
 test("plan round-trip: update encrypted, retrieve decrypted", async () => {
@@ -187,21 +280,7 @@ test("plan round-trip: update encrypted, retrieve decrypted", async () => {
 
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
 
-  const rawPlan = assertNonNullish(
-    expectOk(await storageDb.getPlan(AGENT_ALICE), "raw plan must be ok"),
-    "raw plan must exist",
-  );
-  assert.notEqual(rawPlan.goal, PLAN_GOAL);
-  assert.notEqual(rawPlan.currentTask, PLAN_TASK);
-  assert.equal(rawPlan.agentName, AGENT_ALICE);
-
-  const decPlan = assertNonNullish(
-    expectOk(await db.getPlan(AGENT_ALICE), "dec plan must be ok"),
-    "dec plan must exist",
-  );
-  assert.equal(decPlan.goal, PLAN_GOAL);
-  assert.equal(decPlan.currentTask, PLAN_TASK);
-  assert.equal(decPlan.agentName, AGENT_ALICE);
+  await assertPlanRoundTrip(storageDb, db);
 });
 
 test("lock round-trip: acquire encrypted reason, query decrypted", async () => {
@@ -211,20 +290,7 @@ test("lock round-trip: acquire encrypted reason, query decrypted", async () => {
     LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
   );
 
-  const rawLock = assertNonNullish(
-    expectOk(await storageDb.queryLock(LOCK_FILE), "raw query must be ok"),
-    "raw lock must exist",
-  );
-  assert.notEqual(rawLock.reason, LOCK_REASON);
-  assert.equal(rawLock.agentName, AGENT_ALICE);
-
-  const decLock = assertNonNullish(
-    expectOk(await db.queryLock(LOCK_FILE), "dec query must be ok"),
-    "dec lock must exist",
-  );
-  assert.equal(decLock.reason, LOCK_REASON);
-  assert.equal(decLock.filePath, LOCK_FILE);
-  assert.equal(decLock.agentName, AGENT_ALICE);
+  await assertLockRoundTrip(storageDb, db);
 });
 
 test("listLocks round-trip: multiple locks encrypted, listed decrypted", async () => {
@@ -240,18 +306,11 @@ test("listLocks round-trip: multiple locks encrypted, listed decrypted", async (
   );
 
   const rawLocks = expectOk(await storageDb.listLocks(), "raw list must be ok");
-  const expectedLockCount = 2;
-  assert.equal(rawLocks.length, expectedLockCount);
-  for (const lock of rawLocks) {
-    assert.notEqual(lock.reason, LOCK_REASON);
-    assert.notEqual(lock.reason, secondReason);
-  }
+  assertAllCiphertext(rawLocks.map((l) => l.reason ?? ""), [LOCK_REASON, secondReason], SEEDED_PAIR);
 
   const decLocks = expectOk(await db.listLocks(), "dec list must be ok");
-  assert.equal(decLocks.length, expectedLockCount);
-  const reasons = decLocks.map((l) => l.reason);
-  assert.ok(reasons.includes(LOCK_REASON));
-  assert.ok(reasons.includes(secondReason));
+  assert.equal(decLocks.length, SEEDED_PAIR);
+  assertIncludesAll(decLocks.map((l) => l.reason ?? ""), [LOCK_REASON, secondReason]);
 });
 
 test("listPlans round-trip: multiple plans encrypted, listed decrypted", async () => {
@@ -263,15 +322,10 @@ test("listPlans round-trip: multiple plans encrypted, listed decrypted", async (
   await db.updatePlan(AGENT_BOB, BOB_KEY, bobGoal, bobTask);
 
   const rawPlans = expectOk(await storageDb.listPlans(), "raw list must be ok");
-  const expectedPlanCount = 2;
-  assert.equal(rawPlans.length, expectedPlanCount);
-  for (const plan of rawPlans) {
-    assert.notEqual(plan.goal, PLAN_GOAL);
-    assert.notEqual(plan.goal, bobGoal);
-  }
+  assertAllCiphertext(rawPlans.map((p) => p.goal), [PLAN_GOAL, bobGoal], SEEDED_PAIR);
 
   const decPlans = expectOk(await db.listPlans(), "dec list must be ok");
-  assert.equal(decPlans.length, expectedPlanCount);
+  assert.equal(decPlans.length, SEEDED_PAIR);
   const alicePlan = decPlans.find((p) => p.agentName === AGENT_ALICE);
   const bobPlan = decPlans.find((p) => p.agentName === AGENT_BOB);
   assert.ok(alicePlan !== undefined);
@@ -293,21 +347,14 @@ test("listAllMessages round-trip: all messages encrypted, listed decrypted", asy
     await storageDb.listAllMessages(),
     "raw list must be ok",
   );
-  const expectedMsgCount = 2;
-  assert.equal(rawMessages.length, expectedMsgCount);
-  for (const msg of rawMessages) {
-    assert.notEqual(msg.content, MSG_CONTENT);
-    assert.notEqual(msg.content, secondContent);
-  }
+  assertAllCiphertext(rawMessages.map((m) => m.content), [MSG_CONTENT, secondContent], SEEDED_PAIR);
 
   const decMessages = expectOk(
     await db.listAllMessages(),
     "dec list must be ok",
   );
-  assert.equal(decMessages.length, expectedMsgCount);
-  const contents = decMessages.map((m) => m.content);
-  assert.ok(contents.includes(MSG_CONTENT));
-  assert.ok(contents.includes(secondContent));
+  assert.equal(decMessages.length, SEEDED_PAIR);
+  assertIncludesAll(decMessages.map((m) => m.content), [MSG_CONTENT, secondContent]);
 });
 
 test("adminSendMessage round-trip: admin message encrypted, retrieved decrypted", async () => {
@@ -316,11 +363,7 @@ test("adminSendMessage round-trip: admin message encrypted, retrieved decrypted"
   const adminContent = "System maintenance at 3am UTC";
   await db.adminSendMessage(AGENT_ALICE, AGENT_BOB, adminContent);
 
-  const rawMsg = await soleBobMessage(storageDb, "raw message");
-  assert.notEqual(rawMsg.content, adminContent);
-
-  const decMsg = await soleBobMessage(db, "decrypted message");
-  assert.equal(decMsg.content, adminContent);
+  await assertMessageRoundTrip(storageDb, db, adminContent);
 });
 
 test("key rotation: old ciphertext decryptable with keychain", async () => {
@@ -345,26 +388,16 @@ test("key rotation: old ciphertext decryptable with keychain", async () => {
 test("routing fields remain plaintext through encryption", async () => {
   const { storageDb, db } = createEncryptedDb();
 
-  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
-  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
-  await db.acquireLock(
-    LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
-  );
+  await seedAlice(db);
 
   const msg = await soleBobMessage(storageDb, "raw message");
   assert.equal(msg.fromAgent, AGENT_ALICE);
   assert.equal(msg.toAgent, AGENT_BOB);
 
-  const rawPlan = assertNonNullish(
-    expectOk(await storageDb.getPlan(AGENT_ALICE), "raw plan must be ok"),
-    "raw plan must exist",
-  );
+  const rawPlan = await requirePlan(storageDb, "raw");
   assert.equal(rawPlan.agentName, AGENT_ALICE);
 
-  const rawLock = assertNonNullish(
-    expectOk(await storageDb.queryLock(LOCK_FILE), "raw lock must be ok"),
-    "raw lock must exist",
-  );
+  const rawLock = await requireLock(storageDb, "raw");
   assert.equal(rawLock.filePath, LOCK_FILE);
   assert.equal(rawLock.agentName, AGENT_ALICE);
 });
@@ -372,11 +405,7 @@ test("routing fields remain plaintext through encryption", async () => {
 test("server never sees plaintext content", async () => {
   const { storageDb, db } = createEncryptedDb();
 
-  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
-  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
-  await db.acquireLock(
-    LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
-  );
+  await seedAlice(db);
 
   const rawMessages = expectOk(
     await storageDb.listAllMessages(),

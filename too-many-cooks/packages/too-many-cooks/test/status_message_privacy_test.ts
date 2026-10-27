@@ -5,10 +5,38 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { bindTestDb, registerAgent } from "./support/db_fixture.js";
-import { statusOverviewFor } from "./support/handlers.js";
+import { type MessagesOverview, statusOverviewFor } from "./support/handlers.js";
 
 const TEST_DB_PATH = ".test_status_message_privacy.db";
 const BROADCAST = "*";
+
+/** True when `overview` has a recent header whose `field` equals `value`. */
+const recentHas = (
+  overview: MessagesOverview,
+  field: string,
+  value: string,
+): boolean => overview.recent.some((m) => m[field] === value);
+
+/** One expectation about a `to_agent` header in an agent's recent slice. */
+type RecentCase = {
+  readonly subject: string;
+  readonly expected: boolean;
+  readonly message: string;
+};
+
+/** Asserts every case against `overview`'s recent `to_agent` headers. */
+const assertRecentToAgent = (
+  overview: MessagesOverview,
+  cases: readonly RecentCase[],
+): void => {
+  for (const testCase of cases) {
+    assert.strictEqual(
+      recentHas(overview, "to_agent", testCase.subject),
+      testCase.expected,
+      testCase.message,
+    );
+  }
+};
 
 describe("status tool message privacy (#11)", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
@@ -41,28 +69,13 @@ describe("status tool message privacy (#11)", () => {
     await db.sendMessage(alice.agentName, alice.agentKey, bob.agentName, "direct-to-bob");
     await db.sendMessage(alice.agentName, alice.agentKey, BROADCAST, "hello-everyone");
 
-    const bobOverview = await statusOverviewFor(db, bob.agentKey);
-    assert.strictEqual(
-      bobOverview.recent.some((m) => m.to_agent === bob.agentName),
-      true,
-      "Bob must see his own direct message header",
-    );
-    assert.strictEqual(
-      bobOverview.recent.some((m) => m.to_agent === BROADCAST),
-      true,
-      "Bob must see the broadcast header",
-    );
-
-    const carolOverview = await statusOverviewFor(db, carol.agentKey);
-    assert.strictEqual(
-      carolOverview.recent.some((m) => m.to_agent === bob.agentName),
-      false,
-      "Carol must NOT see Bob's direct message",
-    );
-    assert.strictEqual(
-      carolOverview.recent.some((m) => m.to_agent === BROADCAST),
-      true,
-      "Carol must see the broadcast header",
-    );
+    assertRecentToAgent(await statusOverviewFor(db, bob.agentKey), [
+      { subject: bob.agentName, expected: true, message: "Bob must see his own direct message header" },
+      { subject: BROADCAST, expected: true, message: "Bob must see the broadcast header" },
+    ]);
+    assertRecentToAgent(await statusOverviewFor(db, carol.agentKey), [
+      { subject: bob.agentName, expected: false, message: "Carol must NOT see Bob's direct message" },
+      { subject: BROADCAST, expected: true, message: "Carol must see the broadcast header" },
+    ]);
   });
 });

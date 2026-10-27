@@ -9,27 +9,27 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import { resetServerViaAdmin } from "./support/server_process.js";
+import { buildBaseUrl, resetServerViaAdmin } from "./support/server_process.js";
+import { type McpHttpClient, clientFactory, type ClientInfo } from "./support/mcp_http.js";
 import {
-  ACCEPT_STREAMABLE,
-  MCP_PATH,
-  McpHttpClient,
-  type ClientInfo,
-} from "./support/mcp_http.js";
-import {
-  SseEventCollector,
+  type SseEventCollector,
   extractEventType,
   parseJsonRecord,
 } from "./support/sse.js";
 import { getRecordField, getStringField } from "./support/json.js";
-import { bindSpawnedServer } from "./support/streaming.js";
+import {
+  bindSpawnedServer,
+  connectAgentEventsStream,
+  firstStreamEvent,
+  firstStreamEventJson,
+} from "./support/streaming.js";
 
 // ============================================================
 // Named Constants
 // ============================================================
 
 const TEST_PORT = 4046;
-const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
+const BASE_URL = buildBaseUrl(TEST_PORT);
 const DEFAULT_EVENT_TIMEOUT_MS = 3000;
 const TMP_PREFIX = "/tmp/tmc-agent-streaming-";
 
@@ -70,8 +70,7 @@ type StreamContext = {
   readonly key1: string;
 };
 
-const newClient = (): McpHttpClient =>
-  new McpHttpClient({ baseUrl: BASE_URL, clientInfo: CLIENT_INFO });
+const newClient = clientFactory(BASE_URL, CLIENT_INFO);
 
 /** Resets the server and initializes two fresh clients ([DEDUP-DESLOP]). */
 const freshAgentClients = async (): Promise<AgentClients> => {
@@ -92,24 +91,15 @@ const registerPair = async (clients: AgentClients): Promise<string> => {
   return getStringField(reg1, "agent_key");
 };
 
-/** Opens the agent's GET /mcp notification stream. */
-const connectAgentStream = async (
-  sessionId: string,
-): Promise<SseEventCollector> =>
-  SseEventCollector.open({
-    url: `${BASE_URL}${MCP_PATH}`,
-    headers: { Accept: ACCEPT_STREAMABLE, "mcp-session-id": sessionId },
-  });
-
 /** Waits for one event, closes the stream, asserts its type. */
 const expectStreamEvent = async (
   stream: SseEventCollector,
   expected: string,
 ): Promise<void> => {
-  const events = await stream.waitForEvents(1, DEFAULT_EVENT_TIMEOUT_MS);
-  stream.close();
-  assert.strictEqual(events.length > 0, true);
-  assert.strictEqual(extractEventType(events[0] ?? ""), expected);
+  assert.strictEqual(
+    extractEventType(await firstStreamEvent(stream, DEFAULT_EVENT_TIMEOUT_MS)),
+    expected,
+  );
 };
 
 /** Fresh clients + pair registration + open stream + trigger + expect event. */
@@ -119,7 +109,7 @@ const withStreamEvent = async (
 ): Promise<void> => {
   const clients = await freshAgentClients();
   const key1 = await registerPair(clients);
-  const stream = await connectAgentStream(clients.listener.getSessionId());
+  const stream = await connectAgentEventsStream(BASE_URL, clients.listener.getSessionId());
   await trigger({ sender: clients.sender, key1 });
   await expectStreamEvent(stream, expected);
 };
@@ -183,7 +173,7 @@ describe("agent_streaming_e2e_test", () => {
       reason: TEST_LOCK_REASON,
     });
 
-    const stream = await connectAgentStream(clients.listener.getSessionId());
+    const stream = await connectAgentEventsStream(BASE_URL, clients.listener.getSessionId());
 
     // Release the lock
     await clients.sender.callTool("lock", {
@@ -199,17 +189,12 @@ describe("agent_streaming_e2e_test", () => {
     const clients = await freshAgentClients();
     await registerPair(clients);
 
-    const stream = await connectAgentStream(clients.listener.getSessionId());
+    const stream = await connectAgentEventsStream(BASE_URL, clients.listener.getSessionId());
 
     // Register agent3 to trigger a notification
     await clients.sender.callTool("register", { name: AGENT_3_NAME });
 
-    const events = await stream.waitForEvents(1, DEFAULT_EVENT_TIMEOUT_MS);
-    stream.close();
-
-    assert.strictEqual(events.length > 0, true);
-
-    const eventJson = parseJsonRecord(events[0] ?? "");
+    const eventJson = await firstStreamEventJson(stream, DEFAULT_EVENT_TIMEOUT_MS);
 
     // Verify JSON-RPC envelope
     assert.strictEqual(eventJson.jsonrpc, JSON_RPC_VERSION);

@@ -7,16 +7,34 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert";
 
-import { resetServerViaAdmin } from "./support/server_process.js";
-import { McpHttpClient, type ClientInfo } from "./support/mcp_http.js";
+import { buildBaseUrl, resetServerViaAdmin } from "./support/server_process.js";
+import { type McpHttpClient, clientFactory, type ClientInfo } from "./support/mcp_http.js";
 import { type SseEventCollector, extractEventType, parseJsonRecord } from "./support/sse.js";
 import { getStringField, isRecord } from "./support/json.js";
-import { bindSpawnedServer, connectAdminEventsStream } from "./support/streaming.js";
+import {
+  bindSpawnedServer,
+  connectAdminEventsStream,
+  eventWaiter,
+  firstStreamEvent,
+  firstStreamEventJson,
+} from "./support/streaming.js";
 
 const TEST_PORT = 4043;
-const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
+const BASE_URL = buildBaseUrl(TEST_PORT);
 const EVENT_TIMEOUT_MS = 1000;
 const TMP_PREFIX = "/tmp/tmc-streaming-e2e-";
+const TEST_FILE_PATH = "/stream/e2e.dart";
+const ROUND_TRIP_FILE_PATH = "/roundtrip/test.dart";
+const SECOND_AGENT = "stream-all-2";
+const CONCURRENT_AGENT_COUNT = 5;
+const BROADCAST = "*";
+const ROUND_TRIP_STEP_COUNT = 5;
+
+const EVENT_AGENT_REGISTERED = "agent_registered";
+const EVENT_LOCK_ACQUIRED = "lock_acquired";
+const EVENT_LOCK_RELEASED = "lock_released";
+const EVENT_PLAN_UPDATED = "plan_updated";
+const EVENT_MESSAGE_SENT = "message_sent";
 
 const ADMIN_CLIENT_INFO: ClientInfo = { name: "streaming-e2e-test", version: "1.0.0" };
 const MCP_CLIENT_INFO: ClientInfo = { name: "streaming-e2e-mcp", version: "1.0.0" };
@@ -29,14 +47,17 @@ const MCP_CLIENT_INFO: ClientInfo = { name: "streaming-e2e-mcp", version: "1.0.0
 const connectAdminStream = async (): Promise<SseEventCollector> =>
   connectAdminEventsStream(BASE_URL, ADMIN_CLIENT_INFO);
 
-/** Waits for events with this suite's shorter timeout budget. */
-const waitForEvents = async (
-  stream: SseEventCollector,
-  count: number,
-): Promise<string[]> => stream.waitForEvents(count, EVENT_TIMEOUT_MS);
+/** Registers `name` through `client`; returns the parsed payload. */
+const registerOn = async (
+  client: McpHttpClient,
+  name: string,
+): Promise<Record<string, unknown>> =>
+  parseJsonRecord(await client.callTool("register", { name }));
 
-const newMcpClient = (): McpHttpClient =>
-  new McpHttpClient({ baseUrl: BASE_URL, clientInfo: MCP_CLIENT_INFO });
+/** Waits for events with this suite's shorter timeout budget. */
+const waitForEvents = eventWaiter(EVENT_TIMEOUT_MS);
+
+const newMcpClient = clientFactory(BASE_URL, MCP_CLIENT_INFO);
 
 const adminPost = async (
   path: string,
@@ -47,6 +68,87 @@ const adminPost = async (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+};
+
+/** One streamed tool call: what it does, the event it must emit, and why. */
+type StreamStep = {
+  readonly label: string;
+  readonly expectedEvent: string;
+  readonly call: () => Promise<unknown>;
+};
+
+/** The parameters a lock+plan+message+release scenario runs with. */
+type StreamScenario = {
+  readonly key: string;
+  readonly filePath: string;
+  readonly toAgent: string;
+  readonly content: string;
+  readonly goal: string;
+  readonly currentTask: string;
+  readonly lockReason: string;
+};
+
+/** The four streamed tool steps every scenario exercises, in order. */
+const toolSteps = (
+  client: McpHttpClient,
+  scenario: StreamScenario,
+): readonly StreamStep[] => [
+  {
+    label: "MUST get stream event for lock acquire",
+    expectedEvent: EVENT_LOCK_ACQUIRED,
+    call: async (): Promise<unknown> => await client.callTool("lock", {
+      action: "acquire",
+      file_path: scenario.filePath,
+      agent_key: scenario.key,
+      reason: scenario.lockReason,
+    }),
+  },
+  {
+    label: "MUST get stream event for plan update",
+    expectedEvent: EVENT_PLAN_UPDATED,
+    call: async (): Promise<unknown> => await client.callTool("plan", {
+      action: "update",
+      agent_key: scenario.key,
+      goal: scenario.goal,
+      current_task: scenario.currentTask,
+    }),
+  },
+  {
+    label: "MUST get stream event for message send",
+    expectedEvent: EVENT_MESSAGE_SENT,
+    call: async (): Promise<unknown> => await client.callTool("message", {
+      action: "send",
+      agent_key: scenario.key,
+      to_agent: scenario.toAgent,
+      content: scenario.content,
+    }),
+  },
+  {
+    label: "MUST get stream event for lock release",
+    expectedEvent: EVENT_LOCK_RELEASED,
+    call: async (): Promise<unknown> => await client.callTool("lock", {
+      action: "release",
+      file_path: scenario.filePath,
+      agent_key: scenario.key,
+    }),
+  },
+];
+
+/** Runs every step; returns the event types each one produced. */
+const runStreamedSteps = async (
+  stream: SseEventCollector,
+  steps: readonly StreamStep[],
+): Promise<readonly string[]> => {
+  const seen: string[] = [];
+  for (const step of steps) {
+    await step.call();
+    const events = await waitForEvents(stream, 1);
+    assert.ok(events.length > 0, step.label);
+    const types: readonly string[] = events.map((event) => extractEventType(event) ?? "");
+    assert.ok(types.includes(step.expectedEvent), step.label);
+    seen.push(...types);
+  }
+  return seen;
 };
 
 describe("Streaming E2E - Events Over Streamable HTTP", () => {
@@ -64,23 +166,11 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     const stream = await connectAdminStream();
 
     // 2. Register agent via MCP tool call
-    const regResult = await mcpClient.callTool("register", {
-      name: "stream-agent-1",
-    });
-    const regJson = parseJsonRecord(regResult);
+    const regJson = await registerOn(mcpClient, "stream-agent-1");
     assert.strictEqual(regJson.agent_name, "stream-agent-1");
 
     // 3. ASSERT: stream event arrives
-    const events = await waitForEvents(stream, 1);
-    stream.close();
-
-    assert.ok(
-      events.length >= 1,
-      "MUST receive at least 1 stream event after register",
-    );
-    // Verify event contains notification data
-    const firstEvent = events[0];
-    assert.ok(firstEvent !== undefined);
+    const firstEvent = await firstStreamEvent(stream, EVENT_TIMEOUT_MS);
     assert.ok(
       firstEvent.includes("notifications/message"),
       "Stream event MUST be an MCP logging notification",
@@ -91,14 +181,10 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     const stream = await connectAdminStream();
 
     // Register 2 agents
-    const reg1 = parseJsonRecord(
-      await mcpClient.callTool("register", { name: "stream-all-1" }),
-    );
+    const reg1 = await registerOn(mcpClient, "stream-all-1");
     const key1 = getStringField(reg1, "agent_key");
 
-    parseJsonRecord(
-      await mcpClient.callTool("register", { name: "stream-all-2" }),
-    );
+    await registerOn(mcpClient, SECOND_AGENT);
 
     // Wait for register events
     const regEvents = await waitForEvents(stream, 2);
@@ -107,55 +193,15 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
       "MUST get events for both registrations",
     );
 
-    // Acquire lock
-    await mcpClient.callTool("lock", {
-      action: "acquire",
-      file_path: "/stream/e2e.dart",
-      agent_key: key1,
-      reason: "e2e test",
-    });
-
-    // Wait for lock event
-    const lockEvents = await waitForEvents(stream, 1);
-    assert.ok(lockEvents.length > 0, "MUST get stream event for lock acquire");
-
-    // Update plan
-    await mcpClient.callTool("plan", {
-      action: "update",
-      agent_key: key1,
-      goal: "Stream e2e goal",
-      current_task: "Testing streaming",
-    });
-
-    // Wait for plan event
-    const planEvents = await waitForEvents(stream, 1);
-    assert.ok(planEvents.length > 0, "MUST get stream event for plan update");
-
-    // Send message
-    await mcpClient.callTool("message", {
-      action: "send",
-      agent_key: key1,
-      to_agent: "stream-all-2",
+    await runStreamedSteps(stream, toolSteps(mcpClient, {
+      key: key1,
+      filePath: TEST_FILE_PATH,
+      toAgent: SECOND_AGENT,
       content: "streaming e2e test message",
-    });
-
-    // Wait for message event
-    const msgEvents = await waitForEvents(stream, 1);
-    assert.ok(msgEvents.length > 0, "MUST get stream event for message send");
-
-    // Release lock
-    await mcpClient.callTool("lock", {
-      action: "release",
-      file_path: "/stream/e2e.dart",
-      agent_key: key1,
-    });
-
-    // Wait for release event
-    const releaseEvents = await waitForEvents(stream, 1);
-    assert.ok(
-      releaseEvents.length > 0,
-      "MUST get stream event for lock release",
-    );
+      goal: "Stream e2e goal",
+      currentTask: "Testing streaming",
+      lockReason: "e2e test",
+    }));
 
     stream.close();
   });
@@ -164,15 +210,10 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     const stream = await connectAdminStream();
 
     // Register agent
-    await mcpClient.callTool("register", { name: "payload-check" });
-
-    const events = await waitForEvents(stream, 1);
-    stream.close();
-
-    assert.ok(events.length > 0);
+    await registerOn(mcpClient, "payload-check");
 
     // Parse the stream data as JSON-RPC notification
-    const eventJson = parseJsonRecord(events[0] ?? "");
+    const eventJson = await firstStreamEventJson(stream, EVENT_TIMEOUT_MS);
     assert.strictEqual(eventJson.jsonrpc, "2.0");
     assert.strictEqual(eventJson.method, "notifications/message");
 
@@ -189,7 +230,7 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     assert.ok("timestamp" in data);
     assert.strictEqual(
       data.event,
-      "agent_registered",
+      EVENT_AGENT_REGISTERED,
       "Event type MUST be agent_registered for register",
     );
   });
@@ -200,7 +241,7 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     const stream2 = await connectAdminStream();
 
     // Register agent
-    await mcpClient.callTool("register", { name: "multi-stream-test" });
+    await registerOn(mcpClient, "multi-stream-test");
 
     // Both clients MUST receive the event
     const events1 = await waitForEvents(stream1, 1);
@@ -217,30 +258,25 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
     const stream = await connectAdminStream();
 
     // Register 5 agents concurrently
-    const agentCount = 5;
-    const regPromises = Array.from({ length: agentCount }, async (_, i) =>
+    const regPromises = Array.from({ length: CONCURRENT_AGENT_COUNT }, async (_, i) =>
       mcpClient.callTool("register", { name: `concurrent-${String(i)}` }),
     );
     await Promise.all(regPromises);
 
     // MUST receive events for all 5 registrations
-    const events = await waitForEvents(stream, agentCount);
+    const events = await waitForEvents(stream, CONCURRENT_AGENT_COUNT);
     stream.close();
 
     assert.ok(
-      events.length >= agentCount,
-      `MUST receive ${String(agentCount)} events for ` +
-        `${String(agentCount)} concurrent registrations`,
+      events.length >= CONCURRENT_AGENT_COUNT,
+      `MUST receive ${String(CONCURRENT_AGENT_COUNT)} events for ` +
+        `${String(CONCURRENT_AGENT_COUNT)} concurrent registrations`,
     );
   });
 
   it("admin REST push delivers events to stream", async () => {
     // Register via MCP first so agents exist
-    const reg = parseJsonRecord(
-      await mcpClient.callTool("register", {
-        name: "admin-push-agent",
-      }),
-    );
+    const reg = await registerOn(mcpClient, "admin-push-agent");
 
     const stream = await connectAdminStream();
 
@@ -263,83 +299,42 @@ describe("Streaming E2E - Events Over Streamable HTTP", () => {
 
   it("full round trip: register, lock, plan, message all stream as events", async () => {
     const stream = await connectAdminStream();
-    const allEvents: string[] = [];
 
     // Register
-    const reg = parseJsonRecord(
-      await mcpClient.callTool("register", {
-        name: "roundtrip-agent",
-      }),
-    );
+    const reg = await registerOn(mcpClient, "roundtrip-agent");
     const key = getStringField(reg, "agent_key");
-    allEvents.push(...(await waitForEvents(stream, 1)));
+    const registerEvents = await waitForEvents(stream, 1);
 
-    // Lock
-    await mcpClient.callTool("lock", {
-      action: "acquire",
-      file_path: "/roundtrip/test.dart",
-      agent_key: key,
-      reason: "roundtrip",
-    });
-    allEvents.push(...(await waitForEvents(stream, 1)));
-
-    // Plan
-    await mcpClient.callTool("plan", {
-      action: "update",
-      agent_key: key,
-      goal: "Roundtrip goal",
-      current_task: "Roundtrip task",
-    });
-    allEvents.push(...(await waitForEvents(stream, 1)));
-
-    // Message
-    await mcpClient.callTool("message", {
-      action: "send",
-      agent_key: key,
-      to_agent: "*",
-      content: "Roundtrip broadcast",
-    });
-    allEvents.push(...(await waitForEvents(stream, 1)));
-
-    // Release lock
-    await mcpClient.callTool("lock", {
-      action: "release",
-      file_path: "/roundtrip/test.dart",
-      agent_key: key,
-    });
-    allEvents.push(...(await waitForEvents(stream, 1)));
+    const eventTypes: string[] = registerEvents.map((e) => extractEventType(e) ?? "");
+    eventTypes.push(
+      ...(await runStreamedSteps(stream, toolSteps(mcpClient, {
+        key,
+        filePath: ROUND_TRIP_FILE_PATH,
+        toAgent: BROADCAST,
+        content: "Roundtrip broadcast",
+        goal: "Roundtrip goal",
+        currentTask: "Roundtrip task",
+        lockReason: "roundtrip",
+      }))),
+    );
 
     stream.close();
 
     // MUST have received events for all operations
     assert.ok(
-      allEvents.length >= 5,
+      eventTypes.length >= ROUND_TRIP_STEP_COUNT,
       "MUST receive at least 5 stream events for " +
         "register+lock+plan+message+release",
     );
 
-    // Extract event types from all events
-    const eventTypes = allEvents.map((e) => extractEventType(e));
-
-    assert.ok(
-      eventTypes.includes("agent_registered"),
-      "MUST have agent_registered event",
-    );
-    assert.ok(
-      eventTypes.includes("lock_acquired"),
-      "MUST have lock_acquired event",
-    );
-    assert.ok(
-      eventTypes.includes("plan_updated"),
-      "MUST have plan_updated event",
-    );
-    assert.ok(
-      eventTypes.includes("message_sent"),
-      "MUST have message_sent event",
-    );
-    assert.ok(
-      eventTypes.includes("lock_released"),
-      "MUST have lock_released event",
-    );
+    for (const expected of [
+      EVENT_AGENT_REGISTERED,
+      EVENT_LOCK_ACQUIRED,
+      EVENT_PLAN_UPDATED,
+      EVENT_MESSAGE_SENT,
+      EVENT_LOCK_RELEASED,
+    ]) {
+      assert.ok(eventTypes.includes(expected), `MUST have ${expected} event`);
+    }
   });
 });

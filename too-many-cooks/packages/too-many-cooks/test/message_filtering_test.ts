@@ -10,31 +10,33 @@ import type { ChildProcess } from "node:child_process";
 
 import {
   type SpawnedServer,
+  buildBaseUrl,
   killServer,
   resetServerViaAdmin,
   spawnServer,
   waitForServer,
 } from "./support/server_process.js";
 import {
-  ACCEPT_STREAMABLE,
-  MCP_PATH,
-  McpHttpClient,
+  type McpHttpClient,
+  clientFactory,
+  registerAgentKey,
   type ClientInfo,
 } from "./support/mcp_http.js";
+import { type SseEventCollector, extractEventType } from "./support/sse.js";
 import {
-  SseEventCollector,
-  extractEventType,
-  parseJsonRecord,
-} from "./support/sse.js";
-import { assertDefined } from "./support/assertions.js";
-import { getStringField } from "./support/json.js";
+  connectAgentEventsStream,
+  eventWaiter,
+  firstStreamEvent,
+} from "./support/streaming.js";
 import { removeTree } from "./support/fs_helpers.js";
 
 const TEST_PORT = 4055;
-const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
+const BASE_URL = buildBaseUrl(TEST_PORT);
 const STREAM_ESTABLISH_DELAY_MS = 300;
 const EVENT_TIMEOUT_MS = 1500;
 const TMP_PREFIX = "/tmp/tmc-msg-filter-";
+const BROADCAST = "*";
+const EVENT_MESSAGE_SENT = "message_sent";
 
 const CLIENT_INFO: ClientInfo = { name: "msg-filter-test", version: "1.0" };
 
@@ -42,24 +44,50 @@ const CLIENT_INFO: ClientInfo = { name: "msg-filter-test", version: "1.0" };
 // Helpers
 // ============================================================
 
-const newClient = (): McpHttpClient =>
-  new McpHttpClient({ baseUrl: BASE_URL, clientInfo: CLIENT_INFO });
+const newClient = clientFactory(BASE_URL, CLIENT_INFO);
+
+/** A fresh client with an initialized MCP session. */
+const newSessionClient = async (): Promise<McpHttpClient> => {
+  const client = newClient();
+  await client.initSession();
+  return client;
+};
 
 /** Opens the agent's GET /mcp notification stream. */
 const connectAgentStream = async (
   sessionId: string,
 ): Promise<SseEventCollector> =>
-  SseEventCollector.open({
-    url: `${BASE_URL}${MCP_PATH}`,
-    headers: { Accept: ACCEPT_STREAMABLE, "mcp-session-id": sessionId },
-    settleMs: STREAM_ESTABLISH_DELAY_MS,
-  });
+  connectAgentEventsStream(BASE_URL, sessionId, STREAM_ESTABLISH_DELAY_MS);
 
 /** Waits for events with this suite's timeout budget. */
-const waitForEvents = async (
+const waitForEvents = eventWaiter(EVENT_TIMEOUT_MS);
+
+/** Sends `content` from `sender` (authenticated by `senderKey`) to `toAgent`. */
+const sendAs = async (
+  sender: McpHttpClient,
+  senderKey: string,
+  toAgent: string,
+  content: string,
+): Promise<void> => {
+  await sender.callTool("message", {
+    action: "send",
+    agent_key: senderKey,
+    to_agent: toAgent,
+    content,
+  });
+};
+
+/** Asserts `stream` delivered a `message_sent` event; `message` names why. */
+const assertMessageSentEvent = async (
   stream: SseEventCollector,
-  count: number,
-): Promise<string[]> => stream.waitForEvents(count, EVENT_TIMEOUT_MS);
+  message: string,
+): Promise<void> => {
+  assert.strictEqual(
+    extractEventType(await firstStreamEvent(stream, EVENT_TIMEOUT_MS)),
+    EVENT_MESSAGE_SENT,
+    message,
+  );
+};
 
 let spawned: SpawnedServer | undefined;
 
@@ -87,57 +115,34 @@ describe("message filtering", () => {
     // Three agents: sender, recipient, bystander.
     // sender sends to recipient.
     // bystander MUST NOT receive the message_sent notification.
-    const sender = newClient();
-    const recipient = newClient();
-    const bystander = newClient();
-    await sender.initSession();
-    await recipient.initSession();
-    await bystander.initSession();
+    const sender = await newSessionClient();
+    const recipient = await newSessionClient();
+    const bystander = await newSessionClient();
 
-    const senderReg = parseJsonRecord(
-      await sender.callTool("register", { name: "sender" }),
-    );
-    await recipient.callTool("register", { name: "recipient" });
-    await bystander.callTool("register", { name: "bystander" });
-
-    const senderKey = getStringField(senderReg, "agent_key");
+    const senderKey = await registerAgentKey(sender, "sender");
+    await registerAgentKey(recipient, "recipient");
+    await registerAgentKey(bystander, "bystander");
 
     // Open streams AFTER registration to avoid buffered events.
     const recipientStream = await connectAgentStream(recipient.getSessionId());
     const bystanderStream = await connectAgentStream(bystander.getSessionId());
 
     // Send a message from sender to recipient only.
-    await sender.callTool("message", {
-      action: "send",
-      agent_key: senderKey,
-      to_agent: "recipient",
-      content: "hello recipient",
-    });
+    await sendAs(sender, senderKey, "recipient", "hello recipient");
 
-    const recipientEvents = await waitForEvents(recipientStream, 1);
     const bystanderEvents = await waitForEvents(bystanderStream, 1);
 
-    recipientStream.close();
     bystanderStream.close();
 
     // Recipient MUST get a message_sent notification.
-    assert.strictEqual(
-      recipientEvents.length > 0,
-      true,
+    await assertMessageSentEvent(
+      recipientStream,
       "recipient MUST receive message_sent notification",
-    );
-    const firstRecipientEvent = recipientEvents[0];
-    assertDefined(firstRecipientEvent, "recipient event payload");
-    const recipientEventType = extractEventType(firstRecipientEvent);
-    assert.strictEqual(
-      recipientEventType,
-      "message_sent",
-      "recipient event type MUST be message_sent",
     );
 
     // Bystander MUST NOT get any message_sent notification.
     const bystanderMessageEvents = bystanderEvents.filter(
-      (e) => extractEventType(e) === "message_sent",
+      (e) => extractEventType(e) === EVENT_MESSAGE_SENT,
     );
     assert.strictEqual(
       bystanderMessageEvents.length === 0,
@@ -147,41 +152,19 @@ describe("message filtering", () => {
   });
 
   it("broadcast message_sent (* recipient) IS delivered to all agents", async () => {
-    const sender = newClient();
-    const agent2 = newClient();
-    await sender.initSession();
-    await agent2.initSession();
+    const sender = await newSessionClient();
+    const agent2 = await newSessionClient();
 
-    const senderReg = parseJsonRecord(
-      await sender.callTool("register", { name: "sender-b" }),
-    );
-    await agent2.callTool("register", { name: "agent2-b" });
-
-    const senderKey = getStringField(senderReg, "agent_key");
+    const senderKey = await registerAgentKey(sender, "sender-b");
+    await registerAgentKey(agent2, "agent2-b");
 
     const agent2Stream = await connectAgentStream(agent2.getSessionId());
 
-    await sender.callTool("message", {
-      action: "send",
-      agent_key: senderKey,
-      to_agent: "*",
-      content: "broadcast!",
-    });
+    await sendAs(sender, senderKey, BROADCAST, "broadcast!");
 
-    const events = await waitForEvents(agent2Stream, 1);
-    agent2Stream.close();
-
-    assert.strictEqual(
-      events.length > 0,
-      true,
+    await assertMessageSentEvent(
+      agent2Stream,
       "agent2 MUST receive broadcast message_sent",
-    );
-    const firstEvent = events[0];
-    assertDefined(firstEvent, "agent2 event payload");
-    assert.strictEqual(
-      extractEventType(firstEvent),
-      "message_sent",
-      "event type MUST be message_sent",
     );
   });
 });

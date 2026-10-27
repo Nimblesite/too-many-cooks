@@ -168,6 +168,10 @@ export const fetchAdminStatus = async (
   return { status: response.status, body };
 };
 
+/** GETs /admin/status and returns only its HTTP status code. */
+export const adminStatusCode = async (port: number): Promise<number> =>
+  (await fetchAdminStatus(port)).status;
+
 /** POSTs /admin/reset; throws when the reset fails. */
 export const resetServerViaAdmin = async (baseUrl: string): Promise<void> => {
   const r = await fetch(`${baseUrl}${ADMIN_RESET_PATH}`, {

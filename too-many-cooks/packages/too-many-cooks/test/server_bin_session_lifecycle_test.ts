@@ -86,12 +86,31 @@ const expectResponse = async (response: Response, status: number, body: string):
   assert.strictEqual(await response.text(), body);
 };
 
-/** Initialize an MCP session and return its id. */
-const openMcpSession = async (): Promise<string> => {
-  const response = await post(MCP_PATH, initializeMessage(1));
+/** Initializes a session on `path`; returns its id and the raw response. */
+const openSessionFor = async (
+  path: string,
+  requestId: number,
+  label: string,
+): Promise<{ readonly response: Response; readonly sessionId: string }> => {
+  const response = await post(path, initializeMessage(requestId));
   assert.strictEqual(response.status, STATUS_OK);
   const sessionId = response.headers.get(SESSION_ID_HEADER);
-  if (sessionId === null) { assert.fail("no mcp-session-id header"); }
+  if (sessionId === null) { assert.fail(`no ${label} session id header`); }
+  return { response, sessionId };
+};
+
+/** DELETEs `path`'s session and asserts the server accepted it. */
+const deleteSessionFor = async (path: string, sessionId: string): Promise<void> => {
+  const deleted = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: { [SESSION_ID_HEADER]: sessionId },
+  });
+  assert.strictEqual(deleted.status, STATUS_OK);
+};
+
+/** Initialize an MCP session and return its id. */
+const openMcpSession = async (): Promise<string> => {
+  const { response, sessionId } = await openSessionFor(MCP_PATH, 1, "mcp-session-id");
   const result = resultOf(parseMcpPayload(await response.text()));
   assert.deepStrictEqual(result.serverInfo, { name: SERVER_NAME, version: SERVER_VERSION });
   return sessionId;
@@ -154,11 +173,7 @@ describe("MCP session HTTP edges", () => {
     if (typeof toolText !== "string") { assert.fail("no tool content text"); }
     assert.ok(toolText.includes(AGENT_NAME), toolText);
 
-    const deleted = await fetch(`${BASE}${MCP_PATH}`, {
-      method: "DELETE",
-      headers: { [SESSION_ID_HEADER]: sessionId },
-    });
-    assert.strictEqual(deleted.status, STATUS_OK);
+    await deleteSessionFor(MCP_PATH, sessionId);
 
     const afterDelete = await fetch(`${BASE}${MCP_PATH}`, {
       headers: { Accept: ACCEPT_STREAMABLE, [SESSION_ID_HEADER]: sessionId },
@@ -194,16 +209,9 @@ describe("admin events session HTTP edges", () => {
   });
 
   it("initialize an admin session, then DELETE removes it", async () => {
-    const response = await post(ADMIN_EVENTS_PATH, initializeMessage(3));
-    assert.strictEqual(response.status, STATUS_OK);
-    const sessionId = response.headers.get(SESSION_ID_HEADER);
-    if (sessionId === null) { assert.fail("no admin session id header"); }
+    const { sessionId } = await openSessionFor(ADMIN_EVENTS_PATH, 3, "admin session id");
 
-    const deleted = await fetch(`${BASE}${ADMIN_EVENTS_PATH}`, {
-      method: "DELETE",
-      headers: { [SESSION_ID_HEADER]: sessionId },
-    });
-    assert.strictEqual(deleted.status, STATUS_OK);
+    await deleteSessionFor(ADMIN_EVENTS_PATH, sessionId);
 
     const afterDelete = await post(ADMIN_EVENTS_PATH, initializeMessage(4), sessionId);
     await expectResponse(afterDelete, HTTP_NOT_FOUND, SESSION_NOT_FOUND_BODY);

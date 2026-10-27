@@ -33,6 +33,24 @@ export const columnNamesOf = (
   }
 };
 
+/**
+ * Runs `sql` against `dbPath` with `foreignKeys` enforced or not, then closes.
+ * Tests use it to write raw DDL the app itself must never issue.
+ */
+export const execRawSql = (
+  dbPath: string,
+  sql: string,
+  foreignKeys: "ON" | "OFF",
+): void => {
+  const db: Database.Database = new Database(dbPath);
+  db.pragma(`foreign_keys = ${foreignKeys}`);
+  try {
+    db.exec(sql);
+  } finally {
+    db.close();
+  }
+};
+
 /** Drops `column` from `table` directly, to simulate schema drift. */
 export const dropColumn = (
   dbPath: string,
@@ -45,6 +63,34 @@ export const dropColumn = (
   } finally {
     db.close();
   }
+};
+
+/** Asserts `table`.`column` exists in `dbPath`; `context` says why. */
+export const assertColumnPresent = (
+  dbPath: string,
+  table: string,
+  column: string,
+  context: string,
+): void => {
+  const cols: readonly string[] = columnNamesOf(dbPath, table);
+  assert.ok(
+    cols.includes(column),
+    `${context}: ${table}.${column} must exist. Got cols: ${cols.join(",")}`,
+  );
+};
+
+/** Asserts `table`.`column` is absent from `dbPath`; `context` says why. */
+export const assertColumnAbsent = (
+  dbPath: string,
+  table: string,
+  column: string,
+  context: string,
+): void => {
+  const cols: readonly string[] = columnNamesOf(dbPath, table);
+  assert.ok(
+    !cols.includes(column),
+    `${context}: ${table}.${column} must be gone. Got cols: ${cols.join(",")}`,
+  );
 };
 
 /** Tables the TMC schema must create ([DB-MIGRATE]). */

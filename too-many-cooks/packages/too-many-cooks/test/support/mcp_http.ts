@@ -53,6 +53,20 @@ export const parseMcpPayload = (
   throw new Error(`Could not parse: ${text}`);
 };
 
+/** Factory for fresh clients bound to one base URL and client info. */
+export const clientFactory = (
+  baseUrl: string,
+  clientInfo: ClientInfo,
+): (() => McpHttpClient) =>
+  (): McpHttpClient => new McpHttpClient({ baseUrl, clientInfo });
+
+/** Registers `name` on `client` and returns the assigned agent key. */
+export const registerAgentKey = async (
+  client: McpHttpClient,
+  name: string,
+): Promise<string> =>
+  getStringField(parseJsonRecord(await client.callTool("register", { name })), "agent_key");
+
 /** Initializes a session on /admin/events and returns its session ID. */
 export const initAdminEventsSession = async (
   baseUrl: string,

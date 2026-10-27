@@ -107,9 +107,20 @@ describe("tool length limits on the wire", () => {
     await teardownTestDb(db, TEST_DB_PATH);
   });
 
+  /** Asserts `tool`'s wire description states the configured `limit`. */
+  const assertDescriptionStatesLimit = (tool: string, limit: number): void => {
+    const description: string = toolInfo(tools, tool).description;
+    assert.ok(description.includes(`${String(limit)} characters`), description);
+  };
+
+  /** The connected client, asserted to exist. */
+  const requireClient = (): Client => {
+    assert.ok(client !== undefined, "client not connected");
+    return client;
+  };
+
   it("message tool description states the configured character limit", () => {
-    const description: string = toolInfo(tools, "message").description;
-    assert.ok(description.includes(`${String(MAX_MESSAGE)} characters`), description);
+    assertDescriptionStatesLimit("message", MAX_MESSAGE);
   });
 
   it("message content schema maxLength is the configured limit", () => {
@@ -117,8 +128,7 @@ describe("tool length limits on the wire", () => {
   });
 
   it("plan tool description states the configured character limit", () => {
-    const description: string = toolInfo(tools, "plan").description;
-    assert.ok(description.includes(`${String(MAX_PLAN)} characters`), description);
+    assertDescriptionStatesLimit("plan", MAX_PLAN);
   });
 
   it("plan goal and current_task schema maxLength are the configured limit", () => {
@@ -128,20 +138,17 @@ describe("tool length limits on the wire", () => {
   });
 
   it("a message at exactly the limit is accepted", async () => {
-    if (client === undefined) { assert.fail("client not connected"); }
-    const res = await callText(client, "message", { action: "send", to_agent: "*", content: FILL.repeat(MAX_MESSAGE) });
+    const res = await callText(requireClient(), "message", { action: "send", to_agent: "*", content: FILL.repeat(MAX_MESSAGE) });
     assert.strictEqual(res.isError, false, res.text);
   });
 
   it("an over-long message is rejected with its length and the limit", async () => {
-    if (client === undefined) { assert.fail("client not connected"); }
-    const res = await callText(client, "message", { action: "send", to_agent: "*", content: FILL.repeat(OVER_MESSAGE) });
+    const res = await callText(requireClient(), "message", { action: "send", to_agent: "*", content: FILL.repeat(OVER_MESSAGE) });
     assertRejectedWithLimit(res, OVER_MESSAGE, MAX_MESSAGE);
   });
 
   it("an over-long plan goal is rejected with its length and the limit", async () => {
-    if (client === undefined) { assert.fail("client not connected"); }
-    const res = await callText(client, "plan", { action: "update", goal: FILL.repeat(OVER_PLAN), current_task: FILL });
+    const res = await callText(requireClient(), "plan", { action: "update", goal: FILL.repeat(OVER_PLAN), current_task: FILL });
     assertRejectedWithLimit(res, OVER_PLAN, MAX_PLAN);
   });
 });

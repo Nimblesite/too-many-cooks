@@ -13,8 +13,8 @@ import { mkdtempSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  ADMIN_STATUS_PATH,
   STILL_RUNNING,
+  adminStatusCode,
   buildBaseUrl,
   spawnServer,
   waitForExit,
@@ -50,11 +50,6 @@ const pollUntilReady = async (port: number): Promise<void> => {
   await waitForServer(buildBaseUrl(port), POLL_ATTEMPTS);
 };
 
-const fetchStatus = async (port: number): Promise<number> => {
-  const response = await fetch(`${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`);
-  return response.status;
-};
-
 // ============================================================
 // Test
 // ============================================================
@@ -78,7 +73,7 @@ describe("only one server may run per workspace folder", () => {
     firstProc = first.proc;
     await pollUntilReady(PORT_FIRST);
     assert.strictEqual(
-      await fetchStatus(PORT_FIRST),
+      await adminStatusCode(PORT_FIRST),
       STATUS_OK,
       "First server MUST be alive",
     );
@@ -114,7 +109,7 @@ describe("only one server may run per workspace folder", () => {
 
     // First server MUST be entirely unaffected.
     assert.strictEqual(
-      await fetchStatus(PORT_FIRST),
+      await adminStatusCode(PORT_FIRST),
       STATUS_OK,
       "First server MUST still be alive after the second refused to start",
     );

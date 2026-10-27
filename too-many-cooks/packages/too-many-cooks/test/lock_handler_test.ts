@@ -17,10 +17,25 @@ import {
   runToolErr,
   runToolOk,
 } from "./support/handlers.js";
-import { getArrayField } from "./support/json.js";
+import { assertArrayFieldCount } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_lock_handler.db";
 const LOCK_AGENT_NAME = "lock-handler-agent";
+const SECOND_AGENT_LABEL = "force-handler-agent";
+const CONTESTED_AGENT_LABEL = "blocker-agent";
+
+/** One "action succeeds once the agent owns the file" case. */
+type OwnedActionCase = {
+  readonly name: string;
+  readonly action: string;
+  readonly flag: string;
+  readonly filePath: string;
+};
+
+const OWNED_ACTION_CASES: readonly OwnedActionCase[] = [
+  { name: "release succeeds when owned", action: "release", flag: "released", filePath: "/release/file.ts" },
+  { name: "renew succeeds when owned", action: "renew", flag: "renewed", filePath: "/renew/file.ts" },
+];
 
 describe("lock handler", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
@@ -39,6 +54,14 @@ describe("lock handler", () => {
   const makeSession = (): (() => SessionIdentity) =>
     () => ({ agentName, agentKey });
 
+  /** Session getter for a freshly registered second agent. */
+  const sessionForNewAgent = async (
+    label: string,
+  ): Promise<() => SessionIdentity> => {
+    const agent = await registerAgent(testDb.db(), label);
+    return () => ({ agentName: agent.agentName, agentKey: agent.agentKey });
+  };
+
   /** Calls the lock handler for the current db/config and session. */
   const runLockHandler = async (
     args: Record<string, unknown>,
@@ -50,25 +73,37 @@ describe("lock handler", () => {
     return handler(args, {});
   };
 
-  /** Runs a lock-handler call as the bound agent, expecting success. */
-  const runAsAgentOk = async (
+  /** Runs a lock-handler call as `getSession`, expecting success. */
+  const runOkAs = async (
+    getSession: () => SessionIdentity | null,
     args: Record<string, unknown>,
   ): Promise<Record<string, unknown>> =>
     runToolOk(
       async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, makeSession()),
+        runLockHandler(toolArgs, getSession),
       args,
     );
 
-  /** Runs a lock-handler call as the bound agent, expecting a tool error. */
-  const runAsAgentErr = async (
+  /** Runs a lock-handler call as `getSession`, expecting a tool error. */
+  const runErrAs = async (
+    getSession: () => SessionIdentity | null,
     args: Record<string, unknown>,
   ): Promise<CallToolResult> =>
     runToolErr(
       async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, makeSession()),
+        runLockHandler(toolArgs, getSession),
       args,
     );
+
+  /** Runs a lock-handler call as the bound agent, expecting success. */
+  const runAsAgentOk = async (
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => await runOkAs(makeSession(), args);
+
+  /** Runs a lock-handler call as the bound agent, expecting a tool error. */
+  const runAsAgentErr = async (
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> => await runErrAs(makeSession(), args);
 
   const nullSession = (): SessionIdentity | null => null;
 
@@ -77,17 +112,13 @@ describe("lock handler", () => {
     assert.strictEqual(parsed.acquired, true);
   });
 
-  it("release succeeds when owned", async () => {
-    await runAsAgentOk({ action: "acquire", file_path: "/release/file.ts" });
-    const parsed = await runAsAgentOk({ action: "release", file_path: "/release/file.ts" });
-    assert.strictEqual(parsed.released, true);
-  });
-
-  it("renew succeeds when owned", async () => {
-    await runAsAgentOk({ action: "acquire", file_path: "/renew/file.ts" });
-    const parsed = await runAsAgentOk({ action: "renew", file_path: "/renew/file.ts" });
-    assert.strictEqual(parsed.renewed, true);
-  });
+  for (const testCase of OWNED_ACTION_CASES) {
+    it(testCase.name, async () => {
+      await runAsAgentOk({ action: "acquire", file_path: testCase.filePath });
+      const parsed = await runAsAgentOk({ action: testCase.action, file_path: testCase.filePath });
+      assert.strictEqual(parsed[testCase.flag], true);
+    });
+  }
 
   it("query returns lock info", async () => {
     await runAsAgentOk({ action: "acquire", file_path: "/query/file.ts", reason: "testing" });
@@ -104,21 +135,14 @@ describe("lock handler", () => {
     await runAsAgentOk({ action: "acquire", file_path: "/list/a.ts" });
     await runAsAgentOk({ action: "acquire", file_path: "/list/b.ts" });
     const parsed = await runAsAgentOk({ action: "list" });
-    assert.strictEqual(Array.isArray(parsed.locks), true);
-    assert.strictEqual(getArrayField(parsed, "locks").length, 2);
+    assertArrayFieldCount(parsed, "locks", 2);
   });
 
   it("force_release fails on non-expired lock", async () => {
-    // Register second agent
-    const agent2 = await registerAgent(testDb.db(), "force-handler-agent");
-    const getSession2 = (): SessionIdentity => ({ agentName: agent2.agentName, agentKey: agent2.agentKey });
+    const getSession2 = await sessionForNewAgent(SECOND_AGENT_LABEL);
 
     await runAsAgentOk({ action: "acquire", file_path: "/force/file.ts" });
-    await runToolErr(
-      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, getSession2),
-      { action: "force_release", file_path: "/force/file.ts" },
-    );
+    await runErrAs(getSession2, { action: "force_release", file_path: "/force/file.ts" });
   });
 
   it("fails when action is missing", async () => {
@@ -150,38 +174,20 @@ describe("lock handler", () => {
   });
 
   it("fails when not registered and no session", async () => {
-    await runToolErr(
-      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, nullSession),
-      { action: "acquire", file_path: "/test.ts" },
-    );
+    await runErrAs(nullSession, { action: "acquire", file_path: "/test.ts" });
   });
 
   it("works with agent_key override", async () => {
-    const parsed = await runToolOk(
-      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, nullSession),
-      { action: "acquire", file_path: "/override.ts", agent_key: agentKey },
-    );
+    const parsed = await runOkAs(nullSession, { action: "acquire", file_path: "/override.ts", agent_key: agentKey });
     assert.strictEqual(parsed.acquired, true);
   });
 
   it("acquire returns error when held by another", async () => {
-    const agent2 = await registerAgent(testDb.db(), "blocker-agent");
+    const getSession2 = await sessionForNewAgent(CONTESTED_AGENT_LABEL);
 
-    // First agent acquires
+    // First agent acquires, second agent tries
     await runAsAgentOk({ action: "acquire", file_path: "/contested.ts" });
-
-    // Second agent tries
-    const getSession2 = (): SessionIdentity => ({
-      agentName: agent2.agentName,
-      agentKey: agent2.agentKey,
-    });
-    const result = await runToolErr(
-      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
-        runLockHandler(toolArgs, getSession2),
-      { action: "acquire", file_path: "/contested.ts" },
-    );
+    const result = await runErrAs(getSession2, { action: "acquire", file_path: "/contested.ts" });
     const parsed = parseToolJson(result);
     assert.strictEqual(parsed.acquired, false);
   });

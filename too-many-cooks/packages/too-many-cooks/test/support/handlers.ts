@@ -118,6 +118,14 @@ export const parseToolJson = (
   result: CallToolResult,
 ): Record<string, unknown> => parseJsonRecord(firstTextBlock(result));
 
+/** Parses the JSON body of an error tool result, asserting it is an error. */
+export const errorToolJson = (
+  result: CallToolResult,
+): Record<string, unknown> => {
+  assert.strictEqual(result.isError, true);
+  return parseToolJson(result);
+};
+
 /** Runs a tool callback expecting success; returns the parsed JSON payload. */
 export const runToolOk = async (
   callback: ToolCallback,

@@ -15,6 +15,9 @@ import {
 
 import { createEventRecorder, createTestMcpServer } from "./support/handlers.js";
 
+/** A `[sessionId, agentName]` binding to install on a hub. */
+type SessionBinding = readonly [string, string];
+
 /** Binds `sessionId` to a fresh test server and agent name on `hub`. */
 const bindHubSession = (
   hub: AgentEventHub,
@@ -23,6 +26,46 @@ const bindHubSession = (
 ): void => {
   hub.servers.set(sessionId, createTestMcpServer());
   hub.sessionAgentNames.set(sessionId, agentName);
+};
+
+/** Asserts both hub maps hold exactly `count` entries. */
+const assertHubSize = (hub: AgentEventHub, count: number): void => {
+  assert.strictEqual(hub.servers.size, count);
+  assert.strictEqual(hub.sessionAgentNames.size, count);
+};
+
+/** Binds `sessions` onto `hub` and asserts the resulting map sizes. */
+const bindSessions = (
+  hub: AgentEventHub,
+  sessions: readonly SessionBinding[],
+): void => {
+  for (const [sessionId, agentName] of sessions) {
+    bindHubSession(hub, sessionId, agentName);
+  }
+  assertHubSize(hub, sessions.length);
+};
+
+/** Asserts every bound session is still registered on `hub`, unchanged. */
+const assertSessionsPreserved = (
+  hub: AgentEventHub,
+  sessions: readonly SessionBinding[],
+): void => {
+  assertHubSize(hub, sessions.length);
+  for (const [sessionId, agentName] of sessions) {
+    assert.strictEqual(hub.servers.has(sessionId), true);
+    assert.strictEqual(hub.sessionAgentNames.has(sessionId), true);
+    assert.strictEqual(hub.sessionAgentNames.get(sessionId), agentName);
+  }
+};
+
+/** Builds a hub with `sessions` bound and no active streams. */
+const hubWithSessions = (
+  sessions: readonly SessionBinding[],
+): AgentEventHub => {
+  const hub = createAgentEventHub();
+  bindSessions(hub, sessions);
+  assert.strictEqual(hub.activeStreamSessions.size, 0);
+  return hub;
 };
 
 describe("NotificationEmitter with callbacks", () => {
@@ -102,104 +145,66 @@ describe("AgentEventHub", () => {
   });
 
   it("pushToAgent to agent WITHOUT active stream does not throw", () => {
-    const hub = createAgentEventHub();
-    const sessionId = "session-no-stream";
-    const agentName = "offline-agent";
-
+    const sessions: readonly SessionBinding[] = [["session-no-stream", "offline-agent"]];
     // Register the agent's server and name mapping, but do NOT add to activeStreamSessions
-    bindHubSession(hub, sessionId, agentName);
-
-    assert.strictEqual(hub.servers.size, 1);
-    assert.strictEqual(hub.sessionAgentNames.size, 1);
-    assert.strictEqual(hub.activeStreamSessions.size, 0);
+    const hub = hubWithSessions(sessions);
 
     // Push to agent — MUST NOT throw even though agent has no active stream
-    hub.pushToAgent(EVENT_MESSAGE_SENT, { content: "hello offline" }, agentName);
+    hub.pushToAgent(EVENT_MESSAGE_SENT, { content: "hello offline" }, "offline-agent");
 
     // Session MUST still exist after failed notification (not cleaned up)
-    assert.strictEqual(hub.servers.has(sessionId), true);
-    assert.strictEqual(hub.sessionAgentNames.has(sessionId), true);
-    assert.strictEqual(hub.servers.size, 1);
-    assert.strictEqual(hub.sessionAgentNames.size, 1);
+    assertSessionsPreserved(hub, sessions);
   });
 
   it("pushEvent broadcast to agents WITHOUT active stream does not throw", () => {
-    const hub = createAgentEventHub();
-    const sessionId = "session-broadcast-no-stream";
-
-    bindHubSession(hub, sessionId, "broadcast-target");
-
-    assert.strictEqual(hub.activeStreamSessions.size, 0);
+    const sessions: readonly SessionBinding[] = [["session-broadcast-no-stream", "broadcast-target"]];
+    const hub = hubWithSessions(sessions);
 
     // Broadcast — MUST NOT throw
     hub.pushEvent(EVENT_AGENT_REGISTERED, { agent_name: "new-agent" });
 
     // Session MUST still exist
-    assert.strictEqual(hub.servers.has(sessionId), true);
-    assert.strictEqual(hub.sessionAgentNames.has(sessionId), true);
-    assert.strictEqual(hub.servers.size, 1);
-    assert.strictEqual(hub.sessionAgentNames.size, 1);
+    assertSessionsPreserved(hub, sessions);
   });
 
   it("pushToAgent broadcast to multiple agents WITHOUT active stream does not throw", () => {
-    const hub = createAgentEventHub();
-    bindHubSession(hub, "sess-1", "agent-a");
-    bindHubSession(hub, "sess-2", "agent-b");
-    bindHubSession(hub, "sess-3", "agent-c");
-
-    assert.strictEqual(hub.servers.size, 3);
-    assert.strictEqual(hub.sessionAgentNames.size, 3);
-    assert.strictEqual(hub.activeStreamSessions.size, 0);
+    const sessions: readonly SessionBinding[] = [
+      ["sess-1", "agent-a"],
+      ["sess-2", "agent-b"],
+      ["sess-3", "agent-c"],
+    ];
+    const hub = hubWithSessions(sessions);
 
     // Broadcast to all — MUST NOT throw
     hub.pushToAgent(EVENT_MESSAGE_SENT, { content: "broadcast" }, BROADCAST_RECIPIENT);
 
     // ALL sessions MUST still exist
-    assert.strictEqual(hub.servers.size, 3);
-    assert.strictEqual(hub.sessionAgentNames.size, 3);
-    assert.strictEqual(hub.servers.has("sess-1"), true);
-    assert.strictEqual(hub.servers.has("sess-2"), true);
-    assert.strictEqual(hub.servers.has("sess-3"), true);
-    assert.strictEqual(hub.sessionAgentNames.has("sess-1"), true);
-    assert.strictEqual(hub.sessionAgentNames.has("sess-2"), true);
-    assert.strictEqual(hub.sessionAgentNames.has("sess-3"), true);
+    assertSessionsPreserved(hub, sessions);
   });
 
   it("pushToAgent targeted to specific agent preserves other sessions", () => {
-    const hub = createAgentEventHub();
-    bindHubSession(hub, "sess-target", "target-agent");
-    bindHubSession(hub, "sess-other", "other-agent");
-
-    assert.strictEqual(hub.servers.size, 2);
-    assert.strictEqual(hub.sessionAgentNames.size, 2);
+    const sessions: readonly SessionBinding[] = [
+      ["sess-target", "target-agent"],
+      ["sess-other", "other-agent"],
+    ];
+    const hub = hubWithSessions(sessions);
 
     // Send only to target-agent — MUST NOT throw
     hub.pushToAgent(EVENT_MESSAGE_SENT, { content: "direct msg" }, "target-agent");
 
     // BOTH sessions MUST still exist
-    assert.strictEqual(hub.servers.size, 2);
-    assert.strictEqual(hub.sessionAgentNames.size, 2);
-    assert.strictEqual(hub.servers.has("sess-target"), true);
-    assert.strictEqual(hub.servers.has("sess-other"), true);
-    assert.strictEqual(hub.sessionAgentNames.get("sess-target"), "target-agent");
-    assert.strictEqual(hub.sessionAgentNames.get("sess-other"), "other-agent");
+    assertSessionsPreserved(hub, sessions);
   });
 
   it("pushToAgent to nonexistent agent does not throw or corrupt state", () => {
-    const hub = createAgentEventHub();
-    bindHubSession(hub, "sess-existing", "existing-agent");
-
-    assert.strictEqual(hub.servers.size, 1);
-    assert.strictEqual(hub.sessionAgentNames.size, 1);
+    const sessions: readonly SessionBinding[] = [["sess-existing", "existing-agent"]];
+    const hub = hubWithSessions(sessions);
 
     // Send to an agent that doesn't exist — MUST NOT throw
     hub.pushToAgent(EVENT_MESSAGE_SENT, { content: "hello ghost" }, "nonexistent-agent");
 
     // Existing session MUST be untouched
-    assert.strictEqual(hub.servers.size, 1);
-    assert.strictEqual(hub.sessionAgentNames.size, 1);
-    assert.strictEqual(hub.servers.has("sess-existing"), true);
-    assert.strictEqual(hub.sessionAgentNames.get("sess-existing"), "existing-agent");
+    assertSessionsPreserved(hub, sessions);
   });
 });
 

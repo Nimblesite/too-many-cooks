@@ -13,15 +13,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { resetServerViaAdmin } from './support/server_process.js';
-import { McpHttpClient, type ClientInfo } from './support/mcp_http.js';
+import { buildBaseUrl, resetServerViaAdmin } from './support/server_process.js';
+import { clientFactory, type ClientInfo } from './support/mcp_http.js';
 import { type SseEventCollector, extractEventType } from './support/sse.js';
-import { bindSpawnedServer, connectAdminEventsStream } from './support/streaming.js';
+import {
+  bindSpawnedServer,
+  connectAdminEventsStream,
+  eventWaiter,
+  firstStreamEvent,
+} from './support/streaming.js';
 
 const TEST_PORT = 4047;
-const BASE_URL = `http://localhost:${String(TEST_PORT)}`;
+const BASE_URL = buildBaseUrl(TEST_PORT);
 const EVENT_TIMEOUT_MS = 2000;
 const TMP_PREFIX = '/tmp/tmc-admin-reset-stream-';
+const EVENT_AGENT_REGISTERED = 'agent_registered';
 
 const ADMIN_CLIENT_INFO: ClientInfo = { name: 'admin-reset-stream-test', version: '1.0.0' };
 const MCP_CLIENT_INFO: ClientInfo = { name: 'admin-reset-mcp', version: '1.0.0' };
@@ -34,8 +40,10 @@ const MCP_CLIENT_INFO: ClientInfo = { name: 'admin-reset-mcp', version: '1.0.0' 
 const connectAdminStream = async (): Promise<SseEventCollector> =>
   connectAdminEventsStream(BASE_URL, ADMIN_CLIENT_INFO);
 
-const newMcpClient = (): McpHttpClient =>
-  new McpHttpClient({ baseUrl: BASE_URL, clientInfo: MCP_CLIENT_INFO });
+/** Waits for events with this suite's timeout budget. */
+const waitForEvents = eventWaiter(EVENT_TIMEOUT_MS);
+
+const newMcpClient = clientFactory(BASE_URL, MCP_CLIENT_INFO);
 
 // ============================================================
 // Tests
@@ -53,7 +61,7 @@ describe('admin_reset_stream_test', () => {
 
     // 3. Consume any events from the reset itself
     //    (state_reset is sent BEFORE hub.servers is cleared)
-    await stream.waitForEvents(1, EVENT_TIMEOUT_MS);
+    await waitForEvents(stream, 1);
 
     // 4. Create MCP session and register agent AFTER reset
     const mcpClient = newMcpClient();
@@ -65,18 +73,9 @@ describe('admin_reset_stream_test', () => {
     //    hub.servers). This is the bug: after reset clears
     //    hub.servers, pushEvent iterates an empty map and
     //    delivers nothing.
-    const events = await stream.waitForEvents(1, EVENT_TIMEOUT_MS);
-    stream.close();
-
     assert.strictEqual(
-      events.length > 0,
-      true,
-    );
-
-    // Verify it's an agent_registered event
-    assert.strictEqual(
-      extractEventType(events[0] ?? ''),
-      'agent_registered',
+      extractEventType(await firstStreamEvent(stream, EVENT_TIMEOUT_MS)),
+      EVENT_AGENT_REGISTERED,
     );
   });
 });

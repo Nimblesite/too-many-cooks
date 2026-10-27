@@ -6,10 +6,7 @@
 /// the assertion and narrows the type.
 
 import assert from "node:assert";
-
-/** Minimal structural shapes of a neverthrow-style Result. */
-type OkResult<T> = { readonly ok: true; readonly value: T };
-type ErrResult<E> = { readonly ok: false; readonly error: E };
+import type { Err, Success } from "too-many-cooks-core";
 
 /** Asserts a value is defined and narrows away `undefined`. */
 export const assertDefined: <T>(
@@ -24,7 +21,7 @@ export const assertDefined: <T>(
 
 /** Asserts a Result is Ok and returns its value. */
 export const expectOk = <T, E>(
-  result: OkResult<T> | ErrResult<E>,
+  result: Success<T> | Err<E>,
   message: string,
 ): T => {
   assert.strictEqual(result.ok, true, message);
@@ -36,7 +33,7 @@ export const expectOk = <T, E>(
 
 /** Asserts a Result is Err and returns its error. */
 export const expectErr = <T, E>(
-  result: OkResult<T> | ErrResult<E>,
+  result: Success<T> | Err<E>,
   message: string,
 ): E => {
   assert.strictEqual(result.ok, false, message);
@@ -70,4 +67,16 @@ export const assertFieldSetEquals = <T>(
     new Set(items.map(field)),
     new Set(expected),
   );
+};
+
+/** Asserts `record[field]` is an array of exactly `count` entries. */
+export const assertArrayFieldCount = (
+  record: Record<string, unknown>,
+  field: string,
+  count: number,
+): void => {
+  const items: unknown = record[field];
+  assert.strictEqual(Array.isArray(items), true, `field "${field}" must be an array`);
+  if (!Array.isArray(items)) { return; }
+  assert.strictEqual(items.length, count);
 };

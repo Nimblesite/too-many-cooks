@@ -15,7 +15,7 @@ import type { ChildProcess } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 
 import {
-  ADMIN_STATUS_PATH,
+  adminStatusCode,
   buildBaseUrl,
   spawnServer,
   waitForServer,
@@ -46,9 +46,13 @@ const spawnOnPort = async (port: number): Promise<{
   return spawned;
 };
 
-const fetchStatus = async (port: number): Promise<number> => {
-  const response = await fetch(`${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`);
-  return response.status;
+/** Asserts `text` carries one of the graceful-shutdown markers; `label` says where. */
+const assertShutdownMarker = (text: string, label: string): void => {
+  assert.ok(
+    text.includes("shutting down") || text.includes("Shutting down") ||
+    text.includes("SIGTERM") || text.includes("Server stopped"),
+    `${label} MUST contain a shutdown/SIGTERM message on graceful exit. Got:\n${text.substring(0, 500)}`,
+  );
 };
 
 // ============================================================
@@ -68,7 +72,7 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
     ({ proc, workspace, stderr } = await spawnOnPort(PORT_SIGTERM_TEST));
 
     // Verify server is alive
-    const statusBefore = await fetchStatus(PORT_SIGTERM_TEST);
+    const statusBefore = await adminStatusCode(PORT_SIGTERM_TEST);
     assert.strictEqual(statusBefore, STATUS_OK, "Server MUST be alive before SIGTERM");
 
     // Send SIGTERM — this is what happens when the process is killed normally
@@ -89,19 +93,9 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
 
     // THE KEY ASSERTION: The log MUST contain a shutdown message.
     // Currently FAILS: SIGTERM kills the process silently, no shutdown logged.
-    assert.ok(
-      logContent.includes("shutting down") || logContent.includes("Shutting down") ||
-      logContent.includes("SIGTERM") || logContent.includes("Server stopped"),
-      `Log MUST contain shutdown/SIGTERM message on graceful exit. ` +
-      `Got log:\n${logContent}`,
-    );
+    assertShutdownMarker(logContent, "Log");
 
     // Verify stderr also got the message (for console visibility)
-    const stderrText = stderr.join("");
-    assert.ok(
-      stderrText.includes("shutting down") || stderrText.includes("Shutting down") ||
-      stderrText.includes("SIGTERM") || stderrText.includes("Server stopped"),
-      `Stderr MUST contain shutdown message. Got:\n${stderrText.substring(0, 500)}`,
-    );
+    assertShutdownMarker(stderr.join(""), "Stderr");
   });
 });

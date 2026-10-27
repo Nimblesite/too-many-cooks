@@ -2,7 +2,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import type { SessionGetter } from "too-many-cooks-core";
+import type { SessionGetter, ToolCallback } from "too-many-cooks-core";
 import { bindAgentDb, registerAgent } from "./support/db_fixture.js";
 import { agentSession, planHandlerFor, runToolErr, runToolOk } from "./support/handlers.js";
 import { getArrayField, getRecordField } from "./support/json.js";
@@ -27,6 +27,15 @@ const PLAN_ERROR_CASES: readonly PlanErrorCase[] = [
 describe("plan handler", () => {
   const agentDb = bindAgentDb(TEST_DB_PATH, AGENT_LABEL);
 
+  /** Sends an update through `handler` directly (setup step). */
+  const seedPlan = async (
+    handler: ToolCallback,
+    goal: string,
+    task: string,
+  ): Promise<void> => {
+    await handler({ action: "update", goal, current_task: task }, {});
+  };
+
   const sessionFor = (): SessionGetter => agentSession(agentDb.agent());
 
   const unauthenticated = (): SessionGetter => () => null;
@@ -41,7 +50,7 @@ describe("plan handler", () => {
 
   it("get returns plan after update", async () => {
     const handler = planHandlerFor(agentDb.db(), sessionFor());
-    await handler({ action: "update", goal: "Ship feature", current_task: "Writing tests" }, {});
+    await seedPlan(handler, "Ship feature", "Writing tests");
     const parsed = await runToolOk(handler, { action: "get" });
     const plan = getRecordField(parsed, "plan");
     assert.strictEqual(plan.goal, "Ship feature");
@@ -58,11 +67,11 @@ describe("plan handler", () => {
 
   it("list returns all plans", async () => {
     const handler = planHandlerFor(agentDb.db(), sessionFor());
-    await handler({ action: "update", goal: "Goal A", current_task: "Task A" }, {});
+    await seedPlan(handler, "Goal A", "Task A");
 
     const agent2 = await registerAgent(agentDb.db(), SECOND_AGENT_LABEL);
     const handler2 = planHandlerFor(agentDb.db(), agentSession(agent2));
-    await handler2({ action: "update", goal: "Goal B", current_task: "Task B" }, {});
+    await seedPlan(handler2, "Goal B", "Task B");
 
     const parsed = await runToolOk(handler, { action: "list" });
     assert.strictEqual(Array.isArray(parsed.plans), true);

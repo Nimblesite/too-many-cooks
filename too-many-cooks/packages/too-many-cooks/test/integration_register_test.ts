@@ -4,10 +4,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
+import { registerAgentKey } from "./support/mcp_http.js";
 import { getStringField, parseJsonRecord } from "./support/json.js";
 import {
-  bindIntegrationLifecycle,
-  createIntegrationServer,
+  assertToolCallFails,
+  bindIntegrationSuite,
   registerAgentPair,
 } from "./support/integration_server.js";
 
@@ -16,17 +17,13 @@ const TMP_PREFIX = "/tmp/tmc-integration-register-";
 
 describe("Too Many Cooks MCP Server Integration", () => {
   // Server for the file; DB reset + fresh MCP client for each test
-  const suite = bindIntegrationLifecycle(
-    createIntegrationServer(TEST_PORT, TMP_PREFIX),
-  );
+  const suite = bindIntegrationSuite(TEST_PORT, TMP_PREFIX);
 
   // REGISTER: reconnect with key only
   it("register reconnect with key only", async () => {
     const client = suite.client();
     // First registration - name only
-    const regResult = await client.callTool("register", { name: "recon1" });
-    const regJson = parseJsonRecord(regResult);
-    const key = getStringField(regJson, "agent_key");
+    const key = await registerAgentKey(client, "recon1");
 
     // Reconnect - key only, no name
     const reconResult = await client.callTool("register", { key });
@@ -37,24 +34,15 @@ describe("Too Many Cooks MCP Server Integration", () => {
 
   it("register with both name and key returns error", async () => {
     const client = suite.client();
-    const regResult = await client.callTool("register", { name: "both1" });
-    const regJson = parseJsonRecord(regResult);
-    const key = getStringField(regJson, "agent_key");
+    const key = await registerAgentKey(client, "both1");
 
     // Both name AND key - spec says this is an error
-    const result = await client.callToolRaw("register", {
-      name: "both1",
-      key,
-    });
-    assert.strictEqual(result.isError, true);
+    await assertToolCallFails(client, "register", { name: "both1", key });
   });
 
   it("register reconnect with invalid key returns error", async () => {
     const client = suite.client();
-    const result = await client.callToolRaw("register", {
-      key: "definitely-not-a-real-key",
-    });
-    assert.strictEqual(result.isError, true);
+    await assertToolCallFails(client, "register", { key: "definitely-not-a-real-key" });
   });
 
   // MESSAGE TOOL: mark_read action

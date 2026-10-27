@@ -33,6 +33,8 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { nonEmptyLines } from "./support/text.js";
 import {
+  assertColumnAbsent,
+  assertColumnPresent,
   assertTablesPresent,
   columnNamesOf,
   dropColumn,
@@ -55,6 +57,9 @@ const INSTALL_PREFIX: string = "tmc-pubpkg-";
 /** Prefix for the throwaway workspace dir (where data.db lives). */
 const WORKSPACE_PREFIX: string = "tmc-pubpkg-ws-";
 
+/** Prefix for the isolated npm cache dir (see `installTarballs`). */
+const CACHE_PREFIX: string = "tmc-pubpkg-cache-";
+
 /** Name of the published package — must match package.json `name`. */
 const PACKAGE_NAME: string = "too-many-cooks";
 
@@ -63,6 +68,9 @@ const BIN_REL_PATH: string = "node_modules/too-many-cooks/build/bin/server.js";
 
 /** Path inside the install where the DataProvider YAML schema lives. */
 const SCHEMA_REL_PATH: string = "node_modules/too-many-cooks/schema/tmc-schema.yaml";
+
+/** Path of the DataProvider YAML schema inside the packed tarball. */
+const SCHEMA_TARBALL_SUFFIX: string = "schema/tmc-schema.yaml";
 
 /** Where prisma would land if it were still a runtime dependency. It must NOT
  *  be: runtime `npx prisma` broke Windows installs (spawnSync npx ENOENT). */
@@ -76,8 +84,11 @@ const MIGRATE_BIN_TARBALL_PATHS: readonly string[] = [
   "dataprovider/win32-x64/DataProviderMigrate.exe",
 ];
 
+/** Workspace-relative directory that holds the database. */
+const DATA_DIR_NAME: string = ".too_many_cooks";
+
 /** Workspace-relative path to the SQLite database file. */
-const DB_REL_PATH: string = ".too_many_cooks/data.db";
+const DB_REL_PATH: string = `${DATA_DIR_NAME}/data.db`;
 
 /** Port the spawned server listens on. Fixed; the suite boots one server at a
  *  time and kills it before the next, so the port is free each boot. The server
@@ -91,6 +102,10 @@ const MAX_POLL_ATTEMPTS: number = 150; // 30s total — npm install + native bui
 /** Column we drop to prove DataProviderMigrate repairs drift. */
 const DRIFT_TABLE: string = "locks";
 const DRIFT_COLUMN: string = "reason";
+
+/** Column the rebuild must restore on the identity table. */
+const IDENTITY_TABLE: string = "identity";
+const IDENTITY_KEY_COLUMN: string = "agent_key";
 
 /** HTTP status code expected from /admin/status. */
 const HTTP_OK: number = 200;
@@ -139,7 +154,7 @@ const installTarballs = (tarballs: readonly string[]): string => {
   // prebuilds don't match the current Node ABI — that's the failure mode
   // that bit `npx too-many-cooks` in the wild. A fresh cache reproduces a
   // first-time user's resolve.
-  const cacheDir: string = mkdtempSync(join(tmpdir(), "tmc-pubpkg-cache-"));
+  const cacheDir: string = mkdtempSync(join(tmpdir(), CACHE_PREFIX));
   execFileSync("npm", ["init", "-y"], { cwd: dir, stdio: "pipe" });
   execFileSync(
     "npm",
@@ -208,10 +223,37 @@ const killAndWait = async (proc: ChildProcess): Promise<void> => {
   });
 };
 
+/** Boots the installed bin on `workspace` until ready, then stops it. */
+const bootAndWait = async (installDir: string, workspace: string): Promise<void> => {
+  const proc: ChildProcess = spawnInstalledBin(installDir, workspace);
+  try {
+    await pollUntilReady(PORT, proc);
+  } finally {
+    await killAndWait(proc);
+  }
+};
+
+/** A throwaway workspace with its data dir created; returns both paths. */
+const newWorkspace = (): { readonly workspace: string; readonly dbPath: string } => {
+  const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
+  mkdirSync(join(workspace, DATA_DIR_NAME), { recursive: true });
+  return { workspace, dbPath: join(workspace, DB_REL_PATH) };
+};
 
 const tarballEntries = (tarball: string): readonly string[] => {
   const out: string = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" });
   return nonEmptyLines(out);
+};
+
+/** Entries of the packed tarball whose path ends with `suffix`. */
+const tarballEntriesEndingWith = (suffix: string): readonly string[] => {
+  const fx: Fixture = requireFixture();
+  return tarballEntries(fx.tarballPath).filter((entry: string): boolean => entry.endsWith(suffix));
+};
+
+/** Asserts the packed tarball ships an entry whose path ends with `suffix`. */
+const assertTarballContains = (suffix: string, message: string): void => {
+  assert.notStrictEqual(tarballEntriesEndingWith(suffix).length, 0, message);
 };
 
 const requireFixture = (): Fixture => {
@@ -246,10 +288,8 @@ describe("published package: tarball + install + boot", () => {
   // --------------------------------------------------------------------------
 
   it("tarball does NOT contain Prisma files (regression: 0.8.0 shipped prisma.config.ts and broke `npx prisma`)", (): void => {
-    const fx: Fixture = requireFixture();
-    const entries: readonly string[] = tarballEntries(fx.tarballPath);
     for (const forbidden of FORBIDDEN_TARBALL_PATHS) {
-      const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith(`/${forbidden}`));
+      const hits: readonly string[] = tarballEntriesEndingWith(`/${forbidden}`);
       assert.deepStrictEqual(
         hits,
         [],
@@ -259,26 +299,17 @@ describe("published package: tarball + install + boot", () => {
   });
 
   it("tarball contains the DataProvider YAML schema", (): void => {
-    const fx: Fixture = requireFixture();
-    const entries: readonly string[] = tarballEntries(fx.tarballPath);
-    const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith("schema/tmc-schema.yaml"));
-    assert.notStrictEqual(hits.length, 0, "Tarball MUST contain schema/tmc-schema.yaml");
+    assertTarballContains(SCHEMA_TARBALL_SUFFIX, "Tarball MUST contain schema/tmc-schema.yaml");
   });
 
   it("tarball bundles DataProviderMigrate for every supported platform (the VSIX must boot offline)", (): void => {
-    const fx: Fixture = requireFixture();
-    const entries: readonly string[] = tarballEntries(fx.tarballPath);
     for (const bin of MIGRATE_BIN_TARBALL_PATHS) {
-      const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith(`/${bin}`));
-      assert.notStrictEqual(hits.length, 0, `Tarball MUST contain ${bin}`);
+      assertTarballContains(`/${bin}`, `Tarball MUST contain ${bin}`);
     }
   });
 
   it("tarball contains the bin entry point", (): void => {
-    const fx: Fixture = requireFixture();
-    const entries: readonly string[] = tarballEntries(fx.tarballPath);
-    const hits: readonly string[] = entries.filter((e: string): boolean => e.endsWith("build/bin/server.js"));
-    assert.notStrictEqual(hits.length, 0, "Tarball MUST contain build/bin/server.js");
+    assertTarballContains("build/bin/server.js", "Tarball MUST contain build/bin/server.js");
   });
 
   // --------------------------------------------------------------------------
@@ -306,12 +337,10 @@ describe("published package: tarball + install + boot", () => {
 
   it("spawning the installed bin creates the DB with the full schema", async (): Promise<void> => {
     const fx: Fixture = requireFixture();
-    const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
-    mkdirSync(join(workspace, ".too_many_cooks"), { recursive: true });
+    const { workspace, dbPath } = newWorkspace();
     const proc: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
     try {
       await pollUntilReady(PORT, proc);
-      const dbPath: string = join(workspace, DB_REL_PATH);
       assert.ok(existsSync(dbPath), `DB file must exist after boot: ${dbPath}`);
 
       assertTablesPresent(dbPath, "After migration,");
@@ -330,37 +359,19 @@ describe("published package: tarball + install + boot", () => {
 
   it("re-spawning the bin after dropping a column restores the column via DataProviderMigrate", async (): Promise<void> => {
     const fx: Fixture = requireFixture();
-    const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
-    mkdirSync(join(workspace, ".too_many_cooks"), { recursive: true });
-    const dbPath: string = join(workspace, DB_REL_PATH);
+    const { workspace, dbPath } = newWorkspace();
 
     // First boot — schema gets created.
-    const first: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
-    try {
-      await pollUntilReady(PORT, first);
-    } finally {
-      await killAndWait(first);
-    }
-    const beforeDrift: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
-    assert.ok(beforeDrift.includes(DRIFT_COLUMN), `precondition: ${DRIFT_TABLE}.${DRIFT_COLUMN} present after first boot. Got: ${beforeDrift.join(",")}`);
+    await bootAndWait(fx.installDir, workspace);
+    assertColumnPresent(dbPath, DRIFT_TABLE, DRIFT_COLUMN, "precondition after first boot");
 
     // Corrupt the schema by dropping a column out-of-band.
     dropColumn(dbPath, DRIFT_TABLE, DRIFT_COLUMN);
-    const dropped: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
-    assert.ok(!dropped.includes(DRIFT_COLUMN), `setup: ${DRIFT_TABLE}.${DRIFT_COLUMN} gone after DROP COLUMN. Got: ${dropped.join(",")}`);
+    assertColumnAbsent(dbPath, DRIFT_TABLE, DRIFT_COLUMN, "setup after DROP COLUMN");
 
     // Second boot — DataProviderMigrate must repair the drift.
-    const second: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
-    try {
-      await pollUntilReady(PORT, second);
-    } finally {
-      await killAndWait(second);
-    }
-    const afterRepair: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
-    assert.ok(
-      afterRepair.includes(DRIFT_COLUMN),
-      `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by DataProviderMigrate on the published bin. Got: ${afterRepair.join(",")}`,
-    );
+    await bootAndWait(fx.installDir, workspace);
+    assertColumnPresent(dbPath, DRIFT_TABLE, DRIFT_COLUMN, "DataProviderMigrate on the published bin");
 
     rmSync(workspace, { recursive: true, force: true });
   });
@@ -371,32 +382,20 @@ describe("published package: tarball + install + boot", () => {
 
   it("booting against a wildly stale DB still ends up with a correct schema", async (): Promise<void> => {
     const fx: Fixture = requireFixture();
-    const workspace: string = mkdtempSync(join(tmpdir(), WORKSPACE_PREFIX));
-    const dataDir: string = join(workspace, ".too_many_cooks");
-    mkdirSync(dataDir, { recursive: true });
-    const dbPath: string = join(workspace, DB_REL_PATH);
+    const { workspace, dbPath } = newWorkspace();
 
     // Seed a stale DB whose schema can't be patched into the new one.
     const seed: Database.Database = new Database(dbPath);
     try {
-      seed.exec(`CREATE TABLE identity (agent_name TEXT PRIMARY KEY, garbage INTEGER NOT NULL);`);
+      seed.exec(`CREATE TABLE ${IDENTITY_TABLE} (agent_name TEXT PRIMARY KEY, garbage INTEGER NOT NULL);`);
     } finally {
       seed.close();
     }
-    assert.deepStrictEqual(columnNamesOf(dbPath, "identity"), ["agent_name", "garbage"]);
+    assert.deepStrictEqual(columnNamesOf(dbPath, IDENTITY_TABLE), ["agent_name", "garbage"]);
 
-    const proc: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
-    try {
-      await pollUntilReady(PORT, proc);
-    } finally {
-      await killAndWait(proc);
-    }
+    await bootAndWait(fx.installDir, workspace);
     assertTablesPresent(dbPath, "After stale-DB recovery,");
-    const identityCols: readonly string[] = columnNamesOf(dbPath, "identity");
-    assert.ok(
-      identityCols.includes("agent_key"),
-      `identity.agent_key must exist after rebuild. Got: ${identityCols.join(",")}`,
-    );
+    assertColumnPresent(dbPath, IDENTITY_TABLE, IDENTITY_KEY_COLUMN, "After rebuild");
 
     rmSync(workspace, { recursive: true, force: true });
   });

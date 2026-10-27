@@ -4,12 +4,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import { assertDefined } from "./support/assertions.js";
-import { getArrayField } from "./support/json.js";
 import {
-  bindIntegrationLifecycle,
+  type Agent,
+  bindIntegrationSuite,
   callToolJson,
-  createIntegrationServer,
+  callToolArrayField,
   registerAgentPair,
   registerAgents,
   registerSingleAgent,
@@ -18,12 +17,33 @@ import {
 const TEST_PORT = 4059;
 const TMP_PREFIX = "/tmp/tmc-integration-locks-";
 const LOCK_TOOL = "lock";
+const LOCK_AGENT_COUNT = 3;
 
 describe("Too Many Cooks MCP Server Integration", () => {
   // Server for the file; DB reset + fresh MCP client for each test
-  const suite = bindIntegrationLifecycle(
-    createIntegrationServer(TEST_PORT, TMP_PREFIX),
-  );
+  const suite = bindIntegrationSuite(TEST_PORT, TMP_PREFIX);
+
+  /** Calls `action` on `filePath` as `agent` through the lock tool. */
+  const callLock = async (
+    client: ReturnType<typeof suite.client>,
+    action: string,
+    filePath: string,
+    agent: Agent,
+  ): Promise<Record<string, unknown>> =>
+    await callToolJson(client, LOCK_TOOL, {
+      action,
+      file_path: filePath,
+      agent_key: agent.key,
+    });
+
+  /** Acquires `filePath` for `agent` through the lock tool. */
+  const acquireFor = async (
+    client: ReturnType<typeof suite.client>,
+    agent: Agent,
+    filePath: string,
+  ): Promise<void> => {
+    await callLock(client, "acquire", filePath, agent);
+  };
 
   // LOCK TOOL: query, list, renew, force_release
   it("lock query returns lock status", async () => {
@@ -38,11 +58,7 @@ describe("Too Many Cooks MCP Server Integration", () => {
     });
     assert.strictEqual(unlocked.locked, false);
 
-    await client.callTool(LOCK_TOOL, {
-      action: "acquire",
-      file_path: filePath,
-      agent_key: agent.key,
-    });
+    await acquireFor(client, agent, filePath);
 
     // Query locked file
     const locked = await callToolJson(client, LOCK_TOOL, {
@@ -55,22 +71,17 @@ describe("Too Many Cooks MCP Server Integration", () => {
 
   it("lock list returns all locks", async () => {
     const client = suite.client();
-    const agents = await registerAgents(client, 3);
+    const agents = await registerAgents(client, LOCK_AGENT_COUNT);
 
     // Acquire locks on different files
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
-      assertDefined(agent, "locking agent");
-      await client.callTool(LOCK_TOOL, {
-        action: "acquire",
-        file_path: `/src/list_test_${String(i)}.dart`,
-        agent_key: agent.key,
-      });
+      assert.ok(agent !== undefined, "locking agent");
+      await acquireFor(client, agent, `/src/list_test_${String(i)}.dart`);
     }
 
-    const json = await callToolJson(client, LOCK_TOOL, { action: "list" });
-    const locks = getArrayField(json, "locks");
-    assert.strictEqual(locks.length, 3);
+    const locks = await callToolArrayField(client, LOCK_TOOL, "list", "locks");
+    assert.strictEqual(locks.length, LOCK_AGENT_COUNT);
   });
 
   it("lock renew extends expiration", async () => {
@@ -78,17 +89,9 @@ describe("Too Many Cooks MCP Server Integration", () => {
     const agent = await registerSingleAgent(client, "locking agent");
     const filePath = "/src/renew_test.dart";
 
-    await client.callTool(LOCK_TOOL, {
-      action: "acquire",
-      file_path: filePath,
-      agent_key: agent.key,
-    });
+    await acquireFor(client, agent, filePath);
 
-    const json = await callToolJson(client, LOCK_TOOL, {
-      action: "renew",
-      file_path: filePath,
-      agent_key: agent.key,
-    });
+    const json = await callLock(client, "renew", filePath, agent);
     assert.strictEqual(json.renewed, true);
   });
 
@@ -98,18 +101,10 @@ describe("Too Many Cooks MCP Server Integration", () => {
 
     // Agent 0 acquires lock
     const filePath = "/src/force_release_test.dart";
-    await client.callTool(LOCK_TOOL, {
-      action: "acquire",
-      file_path: filePath,
-      agent_key: holder.key,
-    });
+    await acquireFor(client, holder, filePath);
 
     // Agent 1 tries to force release (should work for expired locks only)
-    const json = await callToolJson(client, LOCK_TOOL, {
-      action: "force_release",
-      file_path: filePath,
-      agent_key: releaser.key,
-    });
+    const json = await callLock(client, "force_release", filePath, releaser);
     // May fail if lock not expired, but exercises the code path
     assert.ok("released" in json || "error" in json);
   });
