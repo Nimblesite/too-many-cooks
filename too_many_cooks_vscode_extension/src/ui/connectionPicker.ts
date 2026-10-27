@@ -7,11 +7,9 @@
 import * as vscode from 'vscode';
 import type { AgentType, CloudTarget, ConnectionTarget, Transport } from '../services/connectionTypes';
 import type { ConnectionManager } from '../services/connectionManager';
+import type { LogFn } from '../services/logging';
 import type { McpConfigManager } from '../services/mcpConfigManager';
 import type { StoreManager } from '../services/storeManager';
-
-/** Log function signature. */
-type LogFn = (msg: string) => void;
 
 /** Quick Pick option labels. */
 const LABEL_CLOUD: string = 'Connect to TMC Cloud';
@@ -51,6 +49,12 @@ const CONFIG_SECTION: string = 'tooManyCooks';
 /** VS Code configuration key for port. */
 const CONFIG_KEY_PORT: string = 'port';
 
+/** Resolve the configured local port, falling back to the default. */
+function resolveConfiguredPort(): number {
+  const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return config.get<number>(CONFIG_KEY_PORT) ?? DEFAULT_PORT;
+}
+
 /** Connection picker dependencies. */
 export interface ConnectionPickerDeps {
   readonly connectionManager: ConnectionManager;
@@ -60,27 +64,24 @@ export interface ConnectionPickerDeps {
   readonly storeManager: StoreManager;
 }
 
+/** Read one input box value, returning null when cancelled or empty. */
+async function readInput(options: vscode.InputBoxOptions): Promise<string | null> {
+  const value: string | typeof CLEARED = await vscode.window.showInputBox(options) ?? CLEARED;
+  if (value === CLEARED || value.length === 0) { return null; }
+  return value;
+}
+
 /** Prompt for a single input box value. Returns null if cancelled or empty. */
 async function promptInput(
   prompt: string,
   password: boolean,
 ): Promise<string | null> {
-  const value: string | typeof CLEARED = await vscode.window.showInputBox({
-    password,
-    prompt,
-  }) ?? CLEARED;
-  if (value === CLEARED || value.length === 0) { return null; }
-  return value;
+  return await readInput({ password, prompt });
 }
 
 /** Prompt for API URL with a placeholder. Returns null if cancelled or empty. */
 async function promptApiUrl(): Promise<string | null> {
-  const value: string | typeof CLEARED = await vscode.window.showInputBox({
-    placeHolder: PLACEHOLDER_API_URL,
-    prompt: PROMPT_API_URL,
-  }) ?? CLEARED;
-  if (value === CLEARED || value.length === 0) { return null; }
-  return value;
+  return await readInput({ placeHolder: PLACEHOLDER_API_URL, prompt: PROMPT_API_URL });
 }
 
 /** Prompt the user for cloud credentials. Returns null if cancelled. */
@@ -107,8 +108,7 @@ async function promptCloudCredentials(
 
 /** Handle "Start Local Server" selection. */
 async function handleLocalServer(deps: ConnectionPickerDeps): Promise<void> {
-  const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const port: number = config.get<number>(CONFIG_KEY_PORT) ?? DEFAULT_PORT;
+  const port: number = resolveConfiguredPort();
 
   deps.log('[ConnectionPicker] Starting local server...');
   await deps.connectionManager.startLocal(port);
@@ -140,9 +140,7 @@ function writeAgentConfig(
     return;
   }
 
-  const config: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const port: number = config.get<number>(CONFIG_KEY_PORT) ?? DEFAULT_PORT;
-  deps.mcpConfigManager.writeHttpStreamableConfig(agents, port);
+  deps.mcpConfigManager.writeHttpStreamableConfig(agents, resolveConfiguredPort());
 }
 
 /** Handle cloud connection (stdio or HTTP). */

@@ -621,8 +621,19 @@ strong {
   box-shadow: 0 28px 60px -20px rgba(0, 0, 0, 0.45);
 }
 
-.showcase-figure img {
+.showcase-figure img,
+.showcase-figure video {
+  display: block;
   width: 100%;
+  height: auto;
+}
+
+.quickstart {
+  padding-bottom: var(--space-20);
+}
+
+.quickstart .hero-code {
+  max-width: 760px;
 }
 
 .showcase-caption {

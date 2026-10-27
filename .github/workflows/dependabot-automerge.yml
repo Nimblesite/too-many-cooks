@@ -18,18 +18,23 @@ on:
     branches:
       - dependabot-upgrades
 
+# [SWR-SEC-TOKEN-PRIVILEGE] read-only by default; the merge job escalates.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   auto-merge:
     name: Auto-merge into dependabot-upgrades
-    if: github.actor == 'dependabot[bot]'
+    # PR author, not github.actor: the actor is whoever triggered this run
+    # (spoofable by re-running), the PR author is fixed. [zizmor bot-conditions]
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     # Deliberately the standard runner, NOT a larger/paid runner: a trivial merge
     # bot should not consume CI minutes meant for the real build matrix.
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Squash-merge the bump into the staging branch
         env:

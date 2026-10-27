@@ -22,87 +22,36 @@
 // The test MUST FAIL until reconnect logic is added to adminEventStream.ts.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
+  assertOk,
+  directToolCall,
+  initDirectMcpSession,
+  MCP_ENDPOINT,
+  dumpTree,
+  ensureServerReady,
+  extractKeyFromResult,
+  getTestAPI,
+  restoreDialogMocks,
+  safeDisconnect,
   waitForAgentInTree,
   waitForCondition,
-  safeDisconnect,
-  getTestAPI,
-  extractKeyFromResult,
-  resetServerState,
-  restoreDialogMocks,
-  dumpTree,
-  assertOk,
 } from './testHelpers';
 
 restoreDialogMocks();
 
 const TEST_PORT = process.env.TMC_PORT ?? '4040';
 const BASE_URL = `http://localhost:${TEST_PORT}`;
-const MCP_ACCEPT = 'application/json, text/event-stream';
-const MCP_CONTENT = 'application/json';
-const MCP_VERSION = '2025-03-26';
 
 // Direct MCP session that bypasses the VSIX's callTool (which calls refreshStatus).
 // The ONLY way the VSIX tree can update after directRegister() is via the admin event stream.
+const DIRECT_CLIENT_NAME = 'sign-in-refresh-test';
+
 async function initDirectSession(): Promise<string> {
-  const initBody = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: 'sign-in-refresh-test', version: '1.0.0' },
-      protocolVersion: MCP_VERSION,
-    },
-  });
-  const headers = { 'accept': MCP_ACCEPT, 'content-type': MCP_CONTENT };
-  const resp = await fetch(`${BASE_URL}/mcp`, { body: initBody, headers, method: 'POST' });
-  const sessionId = resp.headers.get('mcp-session-id');
-  if (!sessionId) { throw new Error('No mcp-session-id in response'); }
-  const notifyBody = JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
-  await fetch(`${BASE_URL}/mcp`, {
-    body: notifyBody,
-    headers: { ...headers, 'mcp-session-id': sessionId },
-    method: 'POST',
-  });
-  return sessionId;
+  return await initDirectMcpSession(BASE_URL, MCP_ENDPOINT, DIRECT_CLIENT_NAME);
 }
 
 async function directRegister(sessionId: string, agentName: string): Promise<string> {
-  const body = JSON.stringify({
-    id: Date.now(),
-    jsonrpc: '2.0',
-    method: 'tools/call',
-    params: { arguments: { name: agentName }, name: 'register' },
-  });
-  const headers = { 'accept': MCP_ACCEPT, 'content-type': MCP_CONTENT, 'mcp-session-id': sessionId };
-  const resp = await fetch(`${BASE_URL}/mcp`, { body, headers, method: 'POST' });
-  const text = await resp.text();
-  // Response is SSE: parse data lines, then extract the inner tool-result text
-  const lines = text.split('\n').filter((l: string): boolean => l.startsWith('data: '));
-  if (lines.length > 0) {
-    const data = lines.map((l: string): string => l.substring(6).trim()).join('');
-    const parsed: unknown = JSON.parse(data);
-    if (
-      typeof parsed === 'object' && parsed !== null &&
-      'result' in parsed &&
-      typeof (parsed as Record<string, unknown>).result === 'object'
-    ) {
-      const result = (parsed as Record<string, unknown>).result as Record<string, unknown>;
-      const content = result.content;
-      if (Array.isArray(content) && content.length > 0) {
-        const first: unknown = content[0];
-        if (typeof first === 'object' && first !== null && 'text' in first) {
-          const innerText = (first as Record<string, unknown>).text;
-          if (typeof innerText === 'string') {
-            return extractKeyFromResult(innerText);
-          }
-        }
-      }
-    }
-  }
-  throw new Error(`Cannot parse register response: ${text.substring(0, 200)}`);
+  const result = await directToolCall(BASE_URL, sessionId, 'register', { name: agentName });
+  return extractKeyFromResult(result);
 }
 
 suite('BUG: VSIX tree does not update after SSE stream closes (no reconnect)', () => {
@@ -110,13 +59,7 @@ suite('BUG: VSIX tree does not update after SSE stream closes (no reconnect)', (
   let sessionId = '';
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
     await waitForCondition(
       () => getTestAPI().getAgentCount() === 0,
       'Store to clear after reset',

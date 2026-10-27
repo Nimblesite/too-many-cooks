@@ -3,227 +3,168 @@
  * These tests focus on ensuring event handlers execute within V8 coverage tracking.
  */
 import { test, expect } from './coverage.setup.js';
+import {
+  ALLOWED_THEMES,
+  CLIPBOARD_PERMISSIONS,
+  LANGS,
+  PATHS,
+  SELECTORS,
+  TEXT,
+  THRESHOLDS,
+  TIMEOUTS,
+  WAITS,
+} from './support/constants.js';
+import {
+  dispatchCodeHover,
+  expectCopyButtonText,
+  firstCopyButton,
+  readCodeText,
+  readCopyButtonOpacity,
+  showCopyButtonByHover,
+} from './support/code-blocks.js';
+import {
+  expectMobileMenuClosed,
+  expectMobileMenuToggled,
+  expectSidebarToggled,
+  hoverNavigation,
+  openMobileMenu,
+  readOpacity,
+  sidebar,
+} from './support/layout.js';
+import {
+  clickLanguageLink,
+  clearStoredLang,
+  expectDropdownClosed,
+  expectDropdownOpenedForAssistiveTech,
+  expectDropdownVisible,
+  expectStoredLang,
+  openLanguageDropdown,
+} from './support/language.js';
+import {
+  expectVisible,
+  gotoMobileSettled,
+  gotoSettled,
+  waitForVisible,
+} from './support/page.js';
+import { readTheme, toggleThemeAndRead } from './support/theme.js';
+
+const LANGUAGE_PREFERENCE_CASES = [
+  {
+    title: 'language link click saves preference',
+    lang: LANGS.en,
+    preventNavigation: false,
+  },
+  {
+    title: 'language link click zh saves preference',
+    lang: LANGS.zh,
+    preventNavigation: true,
+  },
+];
+
+const gotoDocsPage = async (page) => {
+  await gotoSettled(page, PATHS.gettingStarted);
+  await page.waitForTimeout(WAITS.pageSettled);
+};
 
 test.describe('Event Handler Coverage', () => {
   test('theme toggle click handler executes', async ({ page }) => {
-    await page.goto('/docs/getting-started/', { waitUntil: 'load' });
-    await page.waitForSelector('#theme-toggle', { state: 'visible', timeout: 10000 });
+    await page.goto(PATHS.gettingStarted);
+    await waitForVisible(page, SELECTORS.themeToggle);
 
-    // Get initial theme
-    const initialTheme = await page.evaluate(() =>
-      document.documentElement.getAttribute('data-theme')
-    );
+    const initialTheme = await readTheme(page);
 
-    // Click theme toggle - this should execute lines 33-34
-    await page.click('#theme-toggle');
-    await page.waitForTimeout(100);
-
-    // Verify the click handler ran by checking theme changed
-    const newTheme = await page.evaluate(() =>
-      document.documentElement.getAttribute('data-theme')
-    );
-
+    const newTheme = await toggleThemeAndRead(page);
     expect(newTheme).not.toBe(initialTheme);
-    expect(['light', 'dark']).toContain(newTheme);
+    expect(ALLOWED_THEMES).toContain(newTheme);
   });
 
   test('language button click opens dropdown', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // Click language button - lines 52-54
-    await page.click('.language-btn');
+    await openLanguageDropdown(page);
 
-    // Verify dropdown opened
-    await expect(page.locator('.language-switcher')).toHaveClass(/open/);
-    const expanded = await page.locator('.language-btn').getAttribute('aria-expanded');
-    expect(expanded).toBe('true');
+    await expectDropdownOpenedForAssistiveTech(page);
   });
 
-  test('language link click saves preference', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+  for (const { title, lang, preventNavigation } of LANGUAGE_PREFERENCE_CASES) {
+    test(title, async ({ page }) => {
+      await gotoDocsPage(page);
+      await clearStoredLang(page);
 
-    // Clear lang preference
-    await page.evaluate(() => localStorage.removeItem('lang'));
+      await openLanguageDropdown(page);
+      await expectDropdownVisible(page);
 
-    // Open dropdown
-    await page.click('.language-btn');
-    await expect(page.locator('.language-dropdown')).toBeVisible();
+      await clickLanguageLink(page, lang, { preventNavigation });
 
-    // Click a language link - lines 61-62
-    // This test targets the language link click handler
-    const enLink = page.locator('.language-dropdown a[lang="en"]');
-    if (await enLink.count() > 0) {
-      // Clicking the en link won't navigate away (same page)
-      await enLink.click();
-      await page.waitForTimeout(100);
-
-      const langSaved = await page.evaluate(() => localStorage.getItem('lang'));
-      expect(langSaved).toBe('en');
-    }
-  });
-
-  test('language link click zh saves preference', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
-
-    // Clear lang preference
-    await page.evaluate(() => localStorage.removeItem('lang'));
-
-    // Open dropdown
-    await page.click('.language-btn');
-    await expect(page.locator('.language-dropdown')).toBeVisible();
-
-    // Click zh link - this tests lines 61-62 with a different lang value
-    const zhLink = page.locator('.language-dropdown a[lang="zh"]');
-    if (await zhLink.count() > 0) {
-      // We need to prevent navigation to keep coverage
-      await page.evaluate(() => {
-        const link = document.querySelector('.language-dropdown a[lang="zh"]');
-        if (link) {
-          // Temporarily prevent navigation by modifying the link
-          link.addEventListener('click', (e) => e.preventDefault(), { once: true, capture: true });
-        }
-      });
-
-      await zhLink.click();
-      await page.waitForTimeout(100);
-
-      const langSaved = await page.evaluate(() => localStorage.getItem('lang'));
-      expect(langSaved).toBe('zh');
-    }
-  });
+      await expectStoredLang(page, lang);
+    });
+  }
 
   test('click outside closes language dropdown', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // Open dropdown
-    await page.click('.language-btn');
-    await expect(page.locator('.language-switcher')).toHaveClass(/open/);
+    await openLanguageDropdown(page);
+    await expectDropdownVisible(page);
 
-    // Click outside - lines 69-72
     await page.evaluate(() => {
       document.body.click();
     });
+    await page.waitForTimeout(WAITS.short);
 
-    // Wait a moment for handler to process
-    await page.waitForTimeout(100);
-
-    // Dropdown should close
-    await expect(page.locator('.language-switcher')).not.toHaveClass(/open/);
+    await expectDropdownClosed(page);
   });
 
   test('escape key closes language dropdown', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // Open dropdown
-    await page.click('.language-btn');
-    await expect(page.locator('.language-switcher')).toHaveClass(/open/);
+    await openLanguageDropdown(page);
+    await expectDropdownVisible(page);
 
-    // Press escape - lines 77-80
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(WAITS.short);
 
-    // Dropdown should close
-    await expect(page.locator('.language-switcher')).not.toHaveClass(/open/);
+    await expectDropdownClosed(page);
   });
 
   test('mobile menu toggle click', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoMobileSettled(page, PATHS.home);
+    await page.waitForTimeout(WAITS.pageSettled);
 
-    const toggle = page.locator('#mobile-menu-toggle');
-    const navLinks = page.locator('.nav-links');
-
-    // Click toggle - lines 90-91
-    await toggle.click();
-    await page.waitForTimeout(100);
-
-    // Verify it opened
-    await expect(navLinks).toHaveClass(/open/);
-    await expect(toggle).toHaveClass(/active/);
-
-    // Click again to close
-    await toggle.click();
-    await page.waitForTimeout(100);
-
-    await expect(navLinks).not.toHaveClass(/open/);
+    await expectMobileMenuToggled(page, WAITS.short);
   });
 
   test('click outside closes mobile menu', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoMobileSettled(page, PATHS.home);
+    await page.waitForTimeout(WAITS.pageSettled);
 
-    const toggle = page.locator('#mobile-menu-toggle');
-    const navLinks = page.locator('.nav-links');
+    await openMobileMenu(page);
 
-    // Open menu
-    await toggle.click();
-    await expect(navLinks).toHaveClass(/open/);
-
-    // Click outside - lines 96-99
-    await page.evaluate(() => {
-      const main = document.querySelector('main');
+    await page.evaluate((selector) => {
+      const main = document.querySelector(selector);
       if (main) main.click();
-    });
-    await page.waitForTimeout(100);
+    }, SELECTORS.main);
+    await page.waitForTimeout(WAITS.short);
 
-    // Should close
-    await expect(navLinks).not.toHaveClass(/open/);
+    await expectMobileMenuClosed(page);
   });
 
   test('sidebar toggle click', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoMobileSettled(page, PATHS.gettingStarted);
+    await page.waitForTimeout(WAITS.pageSettled);
 
-    const toggle = page.locator('.sidebar-toggle');
-    const sidebar = page.locator('#docs-sidebar');
+    await expectVisible(sidebar(page).toggle);
 
-    // Click toggle - lines 137-138
-    await toggle.click();
-    await page.waitForTimeout(100);
-
-    await expect(sidebar).toHaveClass(/open/);
-    await expect(toggle).toHaveText('Close');
-
-    // Close it
-    await toggle.click();
-    await page.waitForTimeout(100);
-
-    await expect(sidebar).not.toHaveClass(/open/);
-    await expect(toggle).toHaveText('Menu');
+    await expectSidebarToggled(page);
   });
 
   test('anchor link smooth scroll', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // The smooth scroll handler is on lines 143-151
-    // It attaches to all `a[href^="#"]` anchors at page load
-    // We need to find and click an existing anchor that points to a visible target
-
-    // First, scroll to top
+    // The smooth scroll handler attaches to every `a[href^="#"]` at page load.
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(WAITS.short);
 
-    // Find an anchor that links to an existing element
     const scrollResult = await page.evaluate(() => {
-      // Find all hash links
       const anchors = document.querySelectorAll('a[href^="#"]');
       for (const anchor of anchors) {
         const href = anchor.getAttribute('href');
@@ -233,8 +174,6 @@ test.describe('Event Handler Coverage', () => {
         const target = document.getElementById(targetId);
 
         if (target) {
-          // Found a valid anchor-target pair
-          // The click handler calls e.preventDefault() and target.scrollIntoView
           anchor.click();
           return { clicked: true, targetId };
         }
@@ -243,10 +182,8 @@ test.describe('Event Handler Coverage', () => {
     });
 
     if (scrollResult.clicked) {
-      // Wait for smooth scroll
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(WAITS.smoothScroll);
 
-      // Verify the target is now in viewport
       const inViewport = await page.evaluate((id) => {
         const target = document.getElementById(id);
         if (!target) return false;
@@ -259,142 +196,78 @@ test.describe('Event Handler Coverage', () => {
   });
 
   test('code block mouseenter shows copy button', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
+    await showCopyButtonByHover(page);
 
-    // Find the wrapper around the first pre element
-    const wrapper = page.locator('pre').first().locator('..');
-
-    // Hover over the wrapper - triggers lines 179-181
-    await wrapper.hover();
-    await page.waitForTimeout(300);
-
-    // Copy button should be visible
-    const opacity = await page.locator('.copy-btn').first().evaluate(el => {
-      return parseFloat(getComputedStyle(el).opacity);
-    });
-
-    expect(opacity).toBeGreaterThan(0.8);
+    expect(await readCopyButtonOpacity(page)).toBeGreaterThan(THRESHOLDS.opacityVisible);
   });
 
   test('code block mouseleave hides copy button', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
+    await showCopyButtonByHover(page);
 
-    const wrapper = page.locator('pre').first().locator('..');
+    await hoverNavigation(page);
 
-    // First hover to show - lines 179-181
-    await wrapper.hover();
-    await page.waitForTimeout(300);
-
-    // Now hover away (on nav) - triggers lines 183-185
-    await page.locator('nav').hover();
-    await page.waitForTimeout(300);
-
-    const opacity = await page.locator('.copy-btn').first().evaluate(el => {
-      return parseFloat(getComputedStyle(el).opacity);
-    });
-
-    expect(opacity).toBeLessThan(0.2);
+    expect(await readCopyButtonOpacity(page)).toBeLessThan(THRESHOLDS.opacityHidden);
   });
 
   test('copy button click copies code', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await context.grantPermissions(CLIPBOARD_PERMISSIONS);
+    await gotoDocsPage(page);
 
-    // Get code text
-    const codeText = await page.evaluate(() => {
-      const code = document.querySelector('pre code');
-      return code ? code.textContent : '';
-    });
+    const codeText = await readCodeText(page);
 
-    // Click copy button - lines 187-199
-    await page.evaluate(() => {
-      const wrapper = document.querySelector('pre')?.parentElement;
-      if (wrapper) {
-        wrapper.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      }
-    });
+    await dispatchCodeHover(page);
 
-    await page.waitForTimeout(100);
-
-    const copyBtn = page.locator('.copy-btn').first();
+    const copyBtn = firstCopyButton(page);
     await copyBtn.click();
+    await page.waitForTimeout(WAITS.short);
 
-    // Wait for async clipboard operation
-    await page.waitForTimeout(100);
+    await expectCopyButtonText(page, TEXT.copyDone);
 
-    // Button should say Copied!
-    await expect(copyBtn).toHaveText('Copied!');
-
-    // Clipboard should have code
     const clipboard = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboard).toBe(codeText);
 
-    // Wait for reset (2000ms in code + buffer)
-    await page.waitForTimeout(2500);
-    await expect(copyBtn).toHaveText('Copy', { timeout: 1000 });
+    // The button resets to its idle label after 2000ms.
+    await page.waitForTimeout(WAITS.clipboardReset);
+    await expectCopyButtonText(page, TEXT.copyIdle, { timeout: TIMEOUTS.copyReset });
   });
 
   test('copy button shows Failed on error', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // Override clipboard to fail - lines 197-198
     await page.evaluate(() => {
       navigator.clipboard.writeText = async () => {
         throw new Error('Denied');
       };
     });
 
-    await page.evaluate(() => {
-      const wrapper = document.querySelector('pre')?.parentElement;
-      if (wrapper) {
-        wrapper.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      }
-    });
+    await dispatchCodeHover(page);
 
-    await page.waitForTimeout(100);
+    await firstCopyButton(page).click();
+    await page.waitForTimeout(WAITS.short);
 
-    const copyBtn = page.locator('.copy-btn').first();
-    await copyBtn.click();
-
-    await page.waitForTimeout(100);
-
-    await expect(copyBtn).toHaveText('Failed');
+    await expectCopyButtonText(page, TEXT.copyFailed);
   });
 
   test('heading anchor mouseenter/leave', async ({ page }) => {
-    await page.goto('/docs/getting-started/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await gotoDocsPage(page);
 
-    // Find a heading with an anchor
-    const heading = page.locator('.docs-content h2[id], .doc-content h2[id]').first();
-    const anchor = heading.locator('.heading-anchor');
+    const heading = page.locator(SELECTORS.headingWithAnchor).first();
+    const anchor = heading.locator(SELECTORS.headingAnchor);
 
-    if (await heading.count() === 0 || await anchor.count() === 0) {
-      // No headings with anchors - test passes
+    if ((await heading.count()) === 0 || (await anchor.count()) === 0) {
+      // No headings with anchors - nothing to verify.
       return;
     }
 
-    // Lines 221-223 - hover should show anchor
     await heading.hover();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(WAITS.style);
 
-    let opacity = await anchor.evaluate(el => parseFloat(getComputedStyle(el).opacity));
-    expect(opacity).toBeGreaterThan(0.8);
+    expect(await readOpacity(anchor)).toBeGreaterThan(THRESHOLDS.opacityVisible);
 
-    // Lines 225-227 - leave should hide anchor
-    await page.locator('nav').hover();
-    await page.waitForTimeout(300);
+    await hoverNavigation(page);
 
-    opacity = await anchor.evaluate(el => parseFloat(getComputedStyle(el).opacity));
-    expect(opacity).toBeLessThan(0.2);
+    expect(await readOpacity(anchor)).toBeLessThan(THRESHOLDS.opacityHidden);
   });
 });

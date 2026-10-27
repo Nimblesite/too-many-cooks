@@ -126,11 +126,14 @@ claude mcp add \
 </td>
 <td width="50%" valign="top" style="padding:1rem;">
 
-<h3>Codex</h3>
+<h3>Codex &amp; pi</h3>
 
 ```bash
-codex --mcp-server \
-  http://localhost:4040/mcp
+codex mcp add too-many-cooks \
+  --url http://localhost:4040/mcp
+
+pi mcp add too-many-cooks \
+  --url http://localhost:4040/mcp
 ```
 
 </td>

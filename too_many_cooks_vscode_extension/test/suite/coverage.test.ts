@@ -3,27 +3,34 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForAgentInTree,
-  waitForAgentGone,
-  waitForMessageInTree,
-  waitForCondition,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  installDialogMocks,
-  restoreDialogMocks,
-  getLabel,
-  getDescription,
-  getChildren,
-  hasChildWithLabel,
-  assertOk,
+  acquireLockAndWait,
+  acquireLockToolCall,
   assertEqual,
+  assertOk,
+  callToolString,
+  ensureServerReady,
+  extractKeyFromResult,
+  getChildren,
+  getDescription,
+  getLabel,
+  getTestAPI,
+  hasChildWithLabel,
+  installDialogMocks,
+  reconnectFresh,
+  requireMessageItem,
+  requireTreeItem,
+  restoreDialogMocks,
+  safeDisconnect,
+  sendMessageToolCall,
+  startAgentSuite,
+  updatePlanToolCall,
+  waitForAgentGone,
+  waitForAgentInTree,
+  waitForCondition,
+  waitForConnection,
+  waitForExtensionActivation,
+  waitForLockGone,
+  waitForMessageInTree,
 } from './testHelpers';
 
 restoreDialogMocks();
@@ -31,37 +38,13 @@ restoreDialogMocks();
 // Lock State Coverage Tests
 suite('Lock State Coverage', () => {
   const testId = Date.now();
-  const agentName = `lock-cov-test-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`lock-cov-test-${testId}`, reconnectFresh);
 
   test('Active lock appears in state and tree', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/lock/active.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing active lock',
-    });
-
-    await waitForLockInTree(api, '/test/lock/active.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/test/lock/active.ts', 'Testing active lock');
 
     const locks = api.getLocks();
     const ourLock = locks.find(l => l.filePath === '/test/lock/active.ts');
@@ -73,22 +56,14 @@ suite('Lock State Coverage', () => {
 
   test('Lock shows agent name in tree description', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     const lockPath = '/test/lock/description.ts';
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: lockPath,
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Testing lock description',
-    });
-
-    await waitForLockInTree(api, lockPath);
+    await acquireLockAndWait(api, agentName, agentKey, lockPath, 'Testing lock description');
 
     const lockItem = api.findLockInTree(lockPath);
     assertOk(lockItem, 'Lock should exist');
-    const desc = getDescription(lockItem!);
+    const desc = getDescription(requireTreeItem(lockItem, 'lockItem must exist'));
     assertOk(desc.startsWith(agentName), `Lock description should start with agent name, got: ${desc}`);
   });
 });
@@ -96,37 +71,13 @@ suite('Lock State Coverage', () => {
 // Store Error Handling Coverage Tests
 suite('Store Error Handling Coverage', () => {
   const testId = Date.now();
-  const agentName = `store-err-test-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`store-err-test-${testId}`, reconnectFresh);
 
   test('forceReleaseLock works on existing lock', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/force/release.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Will be force released',
-    });
-
-    await waitForLockInTree(api, '/test/force/release.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/test/force/release.ts', 'Will be force released');
 
     await api.forceReleaseLock('/test/force/release.ts');
     await waitForLockGone(api, '/test/force/release.ts');
@@ -141,21 +92,9 @@ suite('Store Error Handling Coverage', () => {
     const regResult = await callToolString(api, 'register', { name: deleteAgentName });
     const deleteAgentKey = extractKeyFromResult(regResult);
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/test/delete/agent.ts',
-      agent_name: deleteAgentName,
-      agent_key: deleteAgentKey,
-      reason: 'Will be deleted with agent',
-    });
+    await acquireLockToolCall(api, '/test/delete/agent.ts', deleteAgentName, deleteAgentKey, 'Will be deleted with agent');
 
-    await api.callTool('plan', {
-      action: 'update',
-      agent_name: deleteAgentName,
-      agent_key: deleteAgentKey,
-      goal: 'Will be deleted',
-      current_task: 'Waiting to be deleted',
-    });
+    await updatePlanToolCall(api, deleteAgentName, deleteAgentKey, 'Will be deleted', 'Waiting to be deleted');
 
     await waitForAgentInTree(api, deleteAgentName);
 
@@ -177,9 +116,8 @@ suite('Store Error Handling Coverage', () => {
 
     await waitForMessageInTree(api, 'Test message via store');
 
-    const msgItem = api.findMessageInTree('Test message via store');
-    assertOk(msgItem, 'Message should appear in tree');
-    const label = getLabel(msgItem!);
+    const msgItem = requireMessageItem(api, 'Test message via store', 'Message should appear in tree');
+    const label = getLabel(msgItem);
     assertOk(label.includes(senderName), 'Message should show sender');
     assertOk(label.includes(receiverName), 'Message should show receiver');
   });
@@ -241,41 +179,17 @@ suite('Extension Commands Coverage', () => {
 // Tree Provider Edge Cases
 suite('Tree Provider Edge Cases', () => {
   const testId = Date.now();
-  const agentName = `edge-case-${testId}`;
-  let agentKey: string | undefined;
-
-  suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`edge-case-${testId}`, ensureServerReady);
 
   test('Messages tree handles read messages correctly', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
     const receiverName = `edge-receiver-${testId}`;
     const regResult = await callToolString(api, 'register', { name: receiverName });
     const receiverKey = extractKeyFromResult(regResult);
 
-    await api.callTool('message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: receiverName,
-      content: 'Edge case message',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, receiverName, 'Edge case message');
 
     await waitForMessageInTree(api, 'Edge case');
 
@@ -294,35 +208,21 @@ suite('Tree Provider Edge Cases', () => {
 
   test('Agents tree shows summary counts correctly', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
-    await api.callTool('lock', {
-      action: 'acquire',
-      file_path: '/edge/case/file.ts',
-      agent_name: agentName,
-      agent_key: agentKey,
-      reason: 'Edge case lock',
-    });
-
-    await waitForLockInTree(api, '/edge/case/file.ts');
+    await acquireLockAndWait(api, agentName, agentKey, '/edge/case/file.ts', 'Edge case lock');
 
     const agentItem = api.findAgentInTree(agentName);
     assertOk(agentItem, 'Agent should be in tree');
-    const desc = getDescription(agentItem!);
+    const desc = getDescription(requireTreeItem(agentItem, 'agentItem must exist'));
     assertOk(desc.includes('lock'), `Agent description should mention locks, got: ${desc}`);
   });
 
   test('Plans appear correctly as agent children', async () => {
     const api = getTestAPI();
-    if (!agentKey) { throw new Error('agentKey not set'); }
+    const agentKey = requireKey();
 
-    await api.callTool('plan', {
-      action: 'update',
-      agent_name: agentName,
-      agent_key: agentKey,
-      goal: 'Edge case goal',
-      current_task: 'Testing edge cases',
-    });
+    await updatePlanToolCall(api, agentName, agentKey, 'Edge case goal', 'Testing edge cases');
 
     // Wait for plan to appear
     await waitForCondition(() => {
@@ -332,12 +232,12 @@ suite('Tree Provider Edge Cases', () => {
     }, 'Plan to appear in agent tree');
 
     const agentItem = api.findAgentInTree(agentName);
-    const children = getChildren(agentItem!);
+    const children = getChildren(requireTreeItem(agentItem, 'agentItem must exist'));
     assertOk(children, 'Agent should have children');
 
     const planChild = children!.find(c => getLabel(c).includes('Goal:'));
     assertOk(planChild, 'Agent should have plan child');
-    const planLabel = getLabel(planChild!);
+    const planLabel = getLabel(requireTreeItem(planChild, 'planChild must exist'));
     assertOk(planLabel.includes('Edge case goal'), `Plan child should contain goal, got: ${planLabel}`);
   });
 });

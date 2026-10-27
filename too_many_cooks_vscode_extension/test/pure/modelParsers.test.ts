@@ -4,7 +4,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   boolField,
-  isRecord,
   nullableBoolField,
   nullableNumberField,
   nullableStringField,
@@ -19,6 +18,23 @@ import {
   parseMessage,
   stringField,
 } from '../../src/state/modelParsers';
+import { assertFieldFallback, assertMatches, describeIsRecordSuite } from './testSupport';
+
+/** A nullable field reader: values that pass through, plus its rejection case. */
+interface NullableFieldCase {
+  readonly accepted: readonly unknown[];
+  readonly fallbackInvalid: unknown;
+  readonly key: string;
+  readonly name: string;
+  readonly reader: (record: Record<string, unknown>, key: string) => unknown;
+}
+
+/** Nullable reader cases: accepted values, null, and a wrong-typed fallback. */
+const NULLABLE_FIELD_CASES: readonly NullableFieldCase[] = [
+  { accepted: ['editing'], fallbackInvalid: 42, key: 'reason', name: 'nullableStringField returns string or null', reader: nullableStringField },
+  { accepted: [1000], fallbackInvalid: 'x', key: 'readAt', name: 'nullableNumberField returns number or null', reader: nullableNumberField },
+  { accepted: [true, false], fallbackInvalid: 'yes', key: 'flag', name: 'nullableBoolField returns boolean or null', reader: nullableBoolField },
+];
 
 describe('field helpers', () => {
   it('stringField returns string value', () => {
@@ -26,8 +42,7 @@ describe('field helpers', () => {
   });
 
   it('stringField returns empty for non-string', () => {
-    assert.strictEqual(stringField({ name: 42 }, 'name'), '');
-    assert.strictEqual(stringField({}, 'name'), '');
+    assertFieldFallback(stringField, 'name', 42, '');
   });
 
   it('numberField returns number value', () => {
@@ -35,8 +50,7 @@ describe('field helpers', () => {
   });
 
   it('numberField returns 0 for non-number', () => {
-    assert.strictEqual(numberField({ count: 'five' }, 'count'), 0);
-    assert.strictEqual(numberField({}, 'count'), 0);
+    assertFieldFallback(numberField, 'count', 'five', 0);
   });
 
   it('boolField returns boolean value', () => {
@@ -45,47 +59,21 @@ describe('field helpers', () => {
   });
 
   it('boolField returns false for non-boolean', () => {
-    assert.strictEqual(boolField({ active: 'yes' }, 'active'), false);
-    assert.strictEqual(boolField({}, 'active'), false);
+    assertFieldFallback(boolField, 'active', 'yes', false);
   });
 
-  it('nullableStringField returns string or null', () => {
-    assert.strictEqual(nullableStringField({ reason: 'editing' }, 'reason'), 'editing');
-    assert.strictEqual(nullableStringField({ reason: null }, 'reason'), null);
-    assert.strictEqual(nullableStringField({ reason: 42 }, 'reason'), null);
-    assert.strictEqual(nullableStringField({}, 'reason'), null);
-  });
-
-  it('nullableNumberField returns number or null', () => {
-    assert.strictEqual(nullableNumberField({ readAt: 1000 }, 'readAt'), 1000);
-    assert.strictEqual(nullableNumberField({ readAt: null }, 'readAt'), null);
-    assert.strictEqual(nullableNumberField({ readAt: 'x' }, 'readAt'), null);
-    assert.strictEqual(nullableNumberField({}, 'readAt'), null);
-  });
-
-  it('nullableBoolField returns boolean or null', () => {
-    assert.strictEqual(nullableBoolField({ flag: true }, 'flag'), true);
-    assert.strictEqual(nullableBoolField({ flag: false }, 'flag'), false);
-    assert.strictEqual(nullableBoolField({ flag: null }, 'flag'), null);
-    assert.strictEqual(nullableBoolField({ flag: 'yes' }, 'flag'), null);
-    assert.strictEqual(nullableBoolField({}, 'flag'), null);
-  });
+  for (const fieldCase of NULLABLE_FIELD_CASES) {
+    it(fieldCase.name, () => {
+      for (const value of fieldCase.accepted) {
+        assert.strictEqual(fieldCase.reader({ [fieldCase.key]: value }, fieldCase.key), value);
+      }
+      assert.strictEqual(fieldCase.reader({ [fieldCase.key]: null }, fieldCase.key), null);
+      assertFieldFallback(fieldCase.reader, fieldCase.key, fieldCase.fallbackInvalid, null);
+    });
+  }
 });
 
-describe('isRecord', () => {
-  it('returns true for plain objects', () => {
-    assert.strictEqual(isRecord({}), true);
-    assert.strictEqual(isRecord({ key: 'val' }), true);
-  });
-
-  it('returns false for non-objects', () => {
-    assert.strictEqual(isRecord(null), false);
-    assert.strictEqual(isRecord([]), false);
-    assert.strictEqual(isRecord('string'), false);
-    assert.strictEqual(isRecord(42), false);
-    assert.strictEqual(isRecord(undefined), false);
-  });
-});
+describeIsRecordSuite();
 
 describe('parseArray', () => {
   it('parses array of records', () => {
@@ -140,12 +128,14 @@ describe('parse functions', () => {
       reason: 'editing',
       version: 3,
     });
-    assert.strictEqual(result.filePath, '/src/test.ts');
-    assert.strictEqual(result.agentName, 'test-agent');
-    assert.strictEqual(result.acquiredAt, 1000);
-    assert.strictEqual(result.expiresAt, 70000);
-    assert.strictEqual(result.reason, 'editing');
-    assert.strictEqual(result.version, 3);
+    assertMatches(result, {
+      filePath: '/src/test.ts',
+      agentName: 'test-agent',
+      acquiredAt: 1000,
+      expiresAt: 70000,
+      reason: 'editing',
+      version: 3,
+    });
   });
 
   it('parseFileLock with null reason', () => {
@@ -199,12 +189,14 @@ describe('parse functions', () => {
       created_at: 1000,
       read_at: 2000,
     });
-    assert.strictEqual(result.id, 'msg-1');
-    assert.strictEqual(result.fromAgent, 'sender');
-    assert.strictEqual(result.toAgent, 'receiver');
-    assert.strictEqual(result.content, 'hello');
-    assert.strictEqual(result.createdAt, 1000);
-    assert.strictEqual(result.readAt, 2000);
+    assertMatches(result, {
+      id: 'msg-1',
+      fromAgent: 'sender',
+      toAgent: 'receiver',
+      content: 'hello',
+      createdAt: 1000,
+      readAt: 2000,
+    });
   });
 
   it('parseMessage with null readAt', () => {
@@ -226,10 +218,12 @@ describe('parse functions', () => {
       current_task: 'Reading code',
       updated_at: 5000,
     });
-    assert.strictEqual(result.agentName, 'test-agent');
-    assert.strictEqual(result.goal, 'Fix bugs');
-    assert.strictEqual(result.currentTask, 'Reading code');
-    assert.strictEqual(result.updatedAt, 5000);
+    assertMatches(result, {
+      agentName: 'test-agent',
+      goal: 'Fix bugs',
+      currentTask: 'Reading code',
+      updatedAt: 5000,
+    });
   });
 
   it('parseDbError', () => {
@@ -237,7 +231,6 @@ describe('parse functions', () => {
       code: 'ERR_NOT_FOUND',
       message: 'Not found',
     });
-    assert.strictEqual(result.code, 'ERR_NOT_FOUND');
-    assert.strictEqual(result.message, 'Not found');
+    assertMatches(result, { code: 'ERR_NOT_FOUND', message: 'Not found' });
   });
 });

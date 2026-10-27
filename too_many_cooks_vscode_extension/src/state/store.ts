@@ -1,7 +1,26 @@
 // Simple Redux-style store with EventEmitter pattern.
 
-import type { AppAction, AppState, FileLock } from './types';
+import type { AppAction, AppState, FileLock, Message } from './types';
 import { initialState } from './types';
+
+/** Key extractors shared by the immutable list helpers below. */
+function agentNameKey(item: Readonly<{ agentName: string }>): string {
+  return item.agentName;
+}
+
+function filePathKey(item: Readonly<{ filePath: string }>): string {
+  return item.filePath;
+}
+
+/** Drop every item whose key equals `key`. */
+function withoutKey<T>(items: readonly T[], keyOf: (item: Readonly<T>) => string, key: string): T[] {
+  return items.filter((item: Readonly<T>): boolean => { return keyOf(item) !== key; });
+}
+
+/** Replace the item holding the same key as `value`, or append `value` when absent. */
+function upsertByKey<T>(items: readonly T[], keyOf: (item: Readonly<T>) => string, value: T): T[] {
+  return [...withoutKey(items, keyOf, keyOf(value)), value];
+}
 
 // Reduce agent-related actions.
 function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction>): AppState {
@@ -16,18 +35,12 @@ function reduceAgentAction(state: Readonly<AppState>, action: Readonly<AppAction
       // UI never shows rows orphaned against a deleted agent.
       return {
         ...state,
-        agents: state.agents.filter((agent: Readonly<{ agentName: string }>): boolean => {
-          return agent.agentName !== action.agentName;
-        }),
-        locks: state.locks.filter((lock: Readonly<{ agentName: string }>): boolean => {
-          return lock.agentName !== action.agentName;
-        }),
-        messages: state.messages.filter((message: Readonly<{ fromAgent: string; toAgent: string }>): boolean => {
+        agents: withoutKey(state.agents, agentNameKey, action.agentName),
+        locks: withoutKey(state.locks, agentNameKey, action.agentName),
+        messages: state.messages.filter((message: Readonly<Message>): boolean => {
           return message.fromAgent !== action.agentName && message.toAgent !== action.agentName;
         }),
-        plans: state.plans.filter((plan: Readonly<{ agentName: string }>): boolean => {
-          return plan.agentName !== action.agentName;
-        }),
+        plans: withoutKey(state.plans, agentNameKey, action.agentName),
       };
     default:
       return state;
@@ -40,22 +53,9 @@ function reduceLockAction(state: Readonly<AppState>, action: Readonly<AppAction>
     case 'SetLocks':
       return { ...state, locks: action.locks };
     case 'UpsertLock':
-      return {
-        ...state,
-        locks: [
-          ...state.locks.filter((lock: Readonly<{ filePath: string }>): boolean => {
-            return lock.filePath !== action.lock.filePath;
-          }),
-          action.lock,
-        ],
-      };
+      return { ...state, locks: upsertByKey(state.locks, filePathKey, action.lock) };
     case 'RemoveLock':
-      return {
-        ...state,
-        locks: state.locks.filter((lock: Readonly<{ filePath: string }>): boolean => {
-          return lock.filePath !== action.filePath;
-        }),
-      };
+      return { ...state, locks: withoutKey(state.locks, filePathKey, action.filePath) };
     case 'RenewLock':
       return {
         ...state,
@@ -83,15 +83,7 @@ function reduceDataAction(state: Readonly<AppState>, action: Readonly<AppAction>
     case 'SetPlans':
       return { ...state, plans: action.plans };
     case 'UpsertPlan':
-      return {
-        ...state,
-        plans: [
-          ...state.plans.filter((plan: Readonly<{ agentName: string }>): boolean => {
-            return plan.agentName !== action.plan.agentName;
-          }),
-          action.plan,
-        ],
-      };
+      return { ...state, plans: upsertByKey(state.plans, agentNameKey, action.plan) };
     default:
       return state;
   }

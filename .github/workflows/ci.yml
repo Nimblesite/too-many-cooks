@@ -4,9 +4,16 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # release.yml calls this as its CI gate: the tagged SHA must pass lint + test +
+  # build before anything publishes. [SWR-REL-WORKFLOW]
+  workflow_call:
+
+# [SWR-SEC-TOKEN-PRIVILEGE] read-only by default; jobs escalate individually.
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -14,91 +21,97 @@ jobs:
     name: Build, Lint & Test
     runs-on: ubuntu-latest
     # TIMEOUT EXCEPTION: Full E2E suite spins up MCP server, VSIX, and Playwright; needs more than 10 min.
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: |
             too-many-cooks/package-lock.json
             too_many_cooks_vscode_extension/package-lock.json
+            website/package-lock.json
 
-      # ── Install & Build ────────────────────────────────
-      - name: Install MCP server dependencies
-        working-directory: too-many-cooks
-        run: npm ci
+      # Same entry points developers run locally — no duplicated steps.
+      # make test computes coverage AND enforces coverage-thresholds.json.
+      - name: Install dependencies
+        run: make setup
 
-      - name: Build MCP server
-        working-directory: too-many-cooks
-        run: npm run build
+      - name: Lint
+        run: make lint
 
-      - name: Install extension dependencies
-        working-directory: too_many_cooks_vscode_extension
-        run: npm ci
-
-      - name: Compile extension and tests
-        working-directory: too_many_cooks_vscode_extension
-        run: npm run pretest
-
-      # ── Lint ───────────────────────────────────────────
-      - name: Lint MCP server
-        working-directory: too-many-cooks
-        run: npm run lint
-
-      - name: Lint extension
-        working-directory: too_many_cooks_vscode_extension
-        run: npm run lint
-
-      # ── Start MCP server ──────────────────────────────
-      - name: Start MCP server
-        working-directory: too-many-cooks
-        run: node packages/too-many-cooks/build/bin/server.js &
-        env:
-          TMC_PORT: '4040'
-
-      - name: Wait for MCP server to be ready
-        run: |
-          for i in $(seq 1 30); do
-            if curl -s http://localhost:4040/admin/status > /dev/null 2>&1; then
-              echo "MCP server ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "MCP server failed to start"
-          exit 1
-
-      # ── Tests ──────────────────────────────────────────
-      - name: Test MCP server
-        working-directory: too-many-cooks
-        run: npm test
-
-      - name: Test extension
-        uses: coactions/setup-xvfb@v1
+      - name: Test (fail-fast + coverage gate)
+        uses: coactions/setup-xvfb@b6b4fcfb9f5a895edadc3bc76318fae0ac17c8b3 # v1.0.1
         with:
-          run: npm test
-          working-directory: too_many_cooks_vscode_extension
+          run: make test
+
+      - name: Build
+        run: make build
+
+  # [SWR-VSIX-PACKAGE] Build, boot and package the per-platform VSIX on all four
+  # native runners for every PR, so the release path is proven before a tag.
+  # Skipped when release.yml calls this as its gate (it runs the same workflow
+  # itself with the tag's version).
+  vsix-platforms:
+    name: VSIX platforms
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/vsix-platforms.yml
 
   # Dependency review ([GITHUB-DEP-REVIEW]) — fails a PR that adds a dependency
-  # with known vulnerabilities. Lightweight, PR-only, no special token scopes.
+  # with known vulnerabilities. Lightweight, PR-only, read-only token (the
+  # failure is in the job log, no PR comment), so release.yml can call ci.yml
+  # without granting pull-requests: write.
   # CodeQL source scanning is SEPARATE in codeql.yml ([GITHUB-CODE-SCANNING]).
   # The two do NOT overlap with each other or with linting: dependency-review =
   # vulnerable packages, CodeQL = vulnerable code, lint = style/correctness.
   security:
     name: security
+    # Needs a PR diff; skipped when release.yml calls this on a tag.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write # dependency-review posts its PR summary
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
+          comment-summary-in-pr: never
+
+  # [SWR-SEC-VULN-GATE] Every lockfile scanned against OSV on every PR and on the
+  # tagged release SHA. Fails on any known vulnerability.
+  vuln-scan:
+    name: osv-scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --lockfile=too-many-cooks/package-lock.json
+            --lockfile=too_many_cooks_vscode_extension/package-lock.json
+            --lockfile=website/package-lock.json
+
+  # [SWR-GATE-ACTION-PINNING] [SWR-GATE-TOKEN-PRIVILEGE] zizmor over every workflow.
+  supply-chain:
+    name: Supply-chain lint
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lint-supply-chain.yml

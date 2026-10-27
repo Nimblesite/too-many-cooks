@@ -1,136 +1,88 @@
 /// Tests for register tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
-  createRegisterHandler,
-} from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { bindTestDb, registerAgent } from "./support/db_fixture.js";
+import {
+  createSessionCapture,
+  parseToolJson,
+  registerHandlerFor,
+} from "./support/handlers.js";
 
 const TEST_DB_PATH = ".test_register_handler.db";
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
-};
-
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
+/** Session setter that never records (for negative-path tests). */
+const noopSetSession = (): void => { /* noop */ };
 
 describe("register handler", () => {
-  let db: TooManyCooksDb | undefined;
+  const testDb = bindTestDb(TEST_DB_PATH);
 
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
-  });
+  /** Registers `name` through a capturing handler; returns payload + session. */
+  const registerByName = async (
+    name: string,
+  ): Promise<{
+    readonly parsed: Record<string, unknown>;
+    readonly session: SessionIdentity | null;
+  }> => {
+    const capture = createSessionCapture();
+    const handler = registerHandlerFor(testDb.db(), capture.setSession);
+    const result = await handler({ name }, {});
+    assert.strictEqual(result.isError, false);
+    return { parsed: parseToolJson(result), session: capture.session() };
+  };
 
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  /** Runs the register handler expecting a tool error; returns its payload. */
+  const expectHandlerError = async (
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => {
+    const handler = registerHandlerFor(testDb.db(), noopSetSession);
+    const result = await handler(args, {});
+    assert.strictEqual(result.isError, true);
+    return parseToolJson(result);
+  };
 
   it("registers a new agent with name", async () => {
-    if (!db) { throw new Error("expected db"); }
-    let session: SessionIdentity | null = null;
-    const setSession = (agentName: string, agentKey: string): void => {
-      session = { agentName, agentKey };
-    };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
-    const result = await handler({ name: "test-agent" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const { parsed, session } = await registerByName("test-agent");
     assert.strictEqual(parsed.agent_name, "test-agent");
     assert.strictEqual(typeof parsed.agent_key, "string");
     assert.notStrictEqual(session, null);
-    assert.strictEqual(session!.agentName, "test-agent");
+    if (session !== null) {
+      assert.strictEqual(session.agentName, "test-agent");
+    }
   });
 
   it("reconnects with existing key", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const regResult = await db.register("reconnect-agent");
-    if (!regResult.ok) { throw new Error("expected ok"); }
-    const { agentKey } = regResult.value;
+    const { agentKey } = await registerAgent(testDb.db(), "reconnect-agent");
 
-    let session: SessionIdentity | null = null;
-    const setSession = (agentName: string, key: string): void => {
-      session = { agentName, agentKey: key };
-    };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
+    const capture = createSessionCapture();
+    const handler = registerHandlerFor(testDb.db(), capture.setSession);
     const result = await handler({ key: agentKey }, {});
     assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.agent_name, "reconnect-agent");
     assert.strictEqual(parsed.agent_key, agentKey);
-    assert.notStrictEqual(session, null);
+    assert.notStrictEqual(capture.session(), null);
   });
 
   it("fails when both name and key provided", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
-    const result = await handler({ name: "agent", key: "some-key" }, {});
-    assert.strictEqual(result.isError, true);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await expectHandlerError({ name: "agent", key: "some-key" });
     assert.strictEqual(typeof parsed.error, "string");
   });
 
   it("fails when neither name nor key provided", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
-    const result = await handler({}, {});
-    assert.strictEqual(result.isError, true);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await expectHandlerError({});
     assert.strictEqual(typeof parsed.error, "string");
   });
 
   it("fails reconnect with invalid key", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const setSession = (): void => { /* noop */ };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
-    const result = await handler({ key: "nonexistent-key" }, {});
-    assert.strictEqual(result.isError, true);
+    await expectHandlerError({ key: "nonexistent-key" });
   });
 
   it("re-registers an already registered name", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const regResult = await db.register("duplicate-agent");
-    if (!regResult.ok) { throw new Error("expected ok"); }
+    await registerAgent(testDb.db(), "duplicate-agent");
 
-    let session: SessionIdentity | null = null;
-    const setSession = (agentName: string, agentKey: string): void => {
-      session = { agentName, agentKey };
-    };
-    const handler = createRegisterHandler(db, createTestEmitter(), createTestLogger(), setSession);
-    const result = await handler({ name: "duplicate-agent" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const { parsed, session } = await registerByName("duplicate-agent");
     assert.strictEqual(parsed.agent_name, "duplicate-agent");
     assert.notStrictEqual(session, null);
   });

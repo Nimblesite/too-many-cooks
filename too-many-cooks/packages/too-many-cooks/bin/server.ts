@@ -11,38 +11,14 @@
 /// - [SERVER-STATE-ISOLATION] all state lives in `${workspace}/.too_many_cooks/`
 /// - [SERVER-EPIPE] a dead stdio pipe can never loop into the logger
 ///
-/// Implements the deploy-toolkit `--version` contract before anything else.
-
-{
-  const argv: string[] = process.argv.slice(2);
-  const wantsVersion: boolean = argv.includes("--version") || argv.includes("-V");
-  if (wantsVersion) {
-    const name: string = "too-many-cooks";
-    // Kept in sync with packages/too-many-cooks/package.json `version` and
-    // packages/core/src/server.ts SERVER_VERSION by the release pipeline.
-    const version: string = "0.5.0";
-    if (argv.includes("--json")) {
-      process.stdout.write(
-        `${JSON.stringify({
-          manifestVersion: 1,
-          name,
-          version,
-          kind: "mcp",
-          language: "typescript",
-          product: "too-many-cooks",
-        })}\n`,
-      );
-    } else {
-      process.stdout.write(`${name} ${version}\n`);
-    }
-    process.exit(0);
-  }
-}
+/// [SWR-VERSION-CLI-OUTPUT] `--version` / `--version --json` and both MCP
+/// handshakes report the version stamped into this package's package.json.
 
 import crypto from "node:crypto";
 import type { Server } from "node:http";
 import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { handleVersionArgs } from "@nimblesite/shipwright-mcp";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -50,6 +26,7 @@ import {
   type AgentEventHub,
   type Logger,
   type Result,
+  type ServerInfo,
   type TooManyCooksDb,
   createAdminEventHub,
   createAgentEventHub,
@@ -58,6 +35,7 @@ import {
   getServerPort,
   getWorkspaceFolder,
   registerAdminRoutes,
+  serverInfoFor,
 } from "too-many-cooks-core";
 
 import { createBackend } from "../src/backend.js";
@@ -69,14 +47,11 @@ import {
   releaseServerLock,
   resolveLockPath,
 } from "./server_lock.js";
-
-/** JSON-RPC bad request error response. */
-const BAD_REQUEST_JSON: string =
-  '{"jsonrpc":"2.0","error":{"code":-32000,"message":"Bad Request"},"id":null}';
-
-/** JSON-RPC session-not-found error response (404). */
-const SESSION_NOT_FOUND_JSON: string =
-  '{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found"},"id":null}';
+import {
+  extractBody,
+  ignoreStreamOpen,
+  registerSessionRoutes,
+} from "./session_routes.js";
 
 /// [SERVER-EPIPE] A dead stdout/stderr pipe is unrecoverable, not fatal-loopable.
 /// Without an 'error' listener an EPIPE surfaces as an uncaughtException, which
@@ -105,7 +80,23 @@ const installProcessHandlers: (log: Logger) => void = (log: Logger): void => {
   });
 };
 
+/// Print the version and exit when asked — before any logger or lock file exists.
+const exitOnVersionFlag: (info: ServerInfo) => void = (info: ServerInfo): void => {
+  const out: ReturnType<typeof handleVersionArgs> = handleVersionArgs(process.argv.slice(2), {
+    ...info, kind: "mcp", language: "typescript", product: info.name,
+  });
+  if (!out.ok || out.value === undefined) {throw new Error(out.error);}
+  if (!out.value.handled) {return;}
+  process.stdout.write(out.value.stdout);
+  process.exit(0);
+};
+
+const FATAL_SEE_LOG: string = "Server failed to start; see .too_many_cooks/ logs";
+
 const main: () => Promise<void> = async (): Promise<void> => {
+  const info: Result<ServerInfo, string> = serverInfoFor(import.meta.url);
+  if (!info.ok) {throw new Error(info.error);}
+  exitOnVersionFlag(info.value);
   const log: Logger = createLogger();
   installProcessHandlers(log);
   log.info("Server starting...");
@@ -115,10 +106,11 @@ const main: () => Promise<void> = async (): Promise<void> => {
   guardSingleInstance(lockPath, workspace, port, log);
   process.on("exit", (): void => { releaseServerLock(lockPath); });
   try {
-    await startServer(log, port);
+    await startServer(log, port, info.value);
   } catch (e) {
     log.fatal("Fatal error", { error: String(e) });
-    throw e;
+    // The cause is in the log; never echo it, it can carry the cloud API key.
+    throw new Error(FATAL_SEE_LOG);
   }
 };
 
@@ -165,7 +157,11 @@ const handleListenError: (err: Error, port: number, log: Logger) => void = (
   process.exit(1);
 };
 
-const startServer: (log: Logger, port: number) => Promise<void> = async (log: Logger, port: number): Promise<void> => {
+const startServer: (log: Logger, port: number, serverInfo: ServerInfo) => Promise<void> = async (
+  log: Logger,
+  port: number,
+  serverInfo: ServerInfo,
+): Promise<void> => {
   log.info("Creating server...");
 
   const cfg: typeof defaultConfig = defaultConfig;
@@ -175,24 +171,8 @@ const startServer: (log: Logger, port: number) => Promise<void> = async (log: Lo
   const db: TooManyCooksDb = dbResult.value;
   log.info("Database created.");
 
-  const transports: Map<string, StreamableHTTPServerTransport> = new Map<string, StreamableHTTPServerTransport>();
-  const agentHub: AgentEventHub = createAgentEventHub();
-  const adminHub: AdminEventHub = createAdminEventHub();
-
   const app: ReturnType<typeof express> = express();
-
-  registerAdminRoutes(app, db, adminHub);
-
-  // Admin Streamable HTTP routes (/admin/events)
-  app.post("/admin/events", asyncHandler(adminPostHandler(adminHub, log), log));
-  app.get("/admin/events", asyncHandler(adminGetDeleteHandler(adminHub), log));
-  app.delete("/admin/events", asyncHandler(adminGetDeleteHandler(adminHub), log));
-
-  // MCP Streamable HTTP routes
-  const mcpCtx: McpSessionContext = { transports, db, cfg, log, adminHub, agentHub };
-  app.post("/mcp", asyncHandler(mcpPostHandler(mcpCtx), log));
-  app.get("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
-  app.delete("/mcp", asyncHandler(mcpGetDeleteHandler(transports, agentHub), log));
+  registerStreamableRoutes(app, db, cfg, log, serverInfo);
 
   const server: Server = app.listen(port, (): void => {
     log.info("Server listening", { port });
@@ -206,14 +186,50 @@ const startServer: (log: Logger, port: number) => Promise<void> = async (log: Lo
   await new Promise<void>((): void => { /* Noop */ });
 };
 
-/** Extract the mcp-session-id header as a string, or undefined. */
-const extractSessionId: (req: Request) => string | undefined = (req: Request): string | undefined => {
-  const raw: string[] | string | undefined = req.headers["mcp-session-id"];
-  return Array.isArray(raw) ? raw[0] : raw;
+/// [SERVER-ROUTE-SESSIONS] Registers the MCP and admin Streamable-HTTP routes.
+/// The two route pairs differ only in their session map and initializer.
+const registerStreamableRoutes: (
+  app: ReturnType<typeof express>,
+  db: TooManyCooksDb,
+  cfg: typeof defaultConfig,
+  log: Logger,
+  serverInfo: ServerInfo,
+) => void = (
+  app: ReturnType<typeof express>,
+  db: TooManyCooksDb,
+  cfg: typeof defaultConfig,
+  log: Logger,
+  serverInfo: ServerInfo,
+): void => {
+  const transports: Map<string, StreamableHTTPServerTransport> =
+    new Map<string, StreamableHTTPServerTransport>();
+  const agentHub: AgentEventHub = createAgentEventHub();
+  const adminHub: AdminEventHub = createAdminEventHub();
+  registerAdminRoutes(app, db, adminHub);
+  const mcpCtx: McpSessionContext = { transports, db, cfg, log, adminHub, agentHub, serverInfo };
+  registerSessionRoutes(
+    app,
+    {
+      mcp: {
+        transports,
+        initialize: async (req: Request, res: Response): Promise<void> => {
+          await initializeMcpSession(req, res, mcpCtx);
+        },
+        onStreamOpen: (sessionId: string): void => {
+          agentHub.activeStreamSessions.add(sessionId);
+        },
+      },
+      admin: {
+        transports: adminHub.transports,
+        initialize: async (req: Request, res: Response): Promise<void> => {
+          await initializeAdminSession(req, res, adminHub, log, serverInfo);
+        },
+        onStreamOpen: ignoreStreamOpen,
+      },
+    },
+    log,
+  );
 };
-
-/** Extract the request body as unknown. */
-const extractBody: (req: Request) => unknown = (req: Request): unknown => req.body;
 
 /**
  * Assert that a value satisfies both StreamableHTTPServerTransport and Transport.
@@ -224,13 +240,6 @@ const assertMcpTransport: (transport: unknown) => asserts transport is Streamabl
   _transport: unknown,
 ): asserts _transport is StreamableHTTPServerTransport & Transport => { /* type-only assertion */ };
 
-/** Check if a parsed JSON body is an MCP initialize request. */
-const isInitializeRequest: (body: unknown) => boolean = (body: unknown): boolean => {
-  if (typeof body !== "object" || body === null) {return false;}
-  const method: unknown = "method" in body ? body.method : undefined;
-  return method === "initialize";
-};
-
 /** Context for initializing an MCP session. */
 type McpSessionContext = {
   readonly transports: Map<string, StreamableHTTPServerTransport>;
@@ -239,7 +248,17 @@ type McpSessionContext = {
   readonly log: Logger;
   readonly adminHub: AdminEventHub;
   readonly agentHub: AgentEventHub;
+  readonly serverInfo: ServerInfo;
 };
+
+/// [SERVER-ROUTE-SESSIONS] Builds one session transport, reporting its ID to `onOpen`.
+const createSessionTransport: (onOpen: (sessionId: string) => void) => StreamableHTTPServerTransport = (
+  onOpen: (sessionId: string) => void,
+): StreamableHTTPServerTransport =>
+  new StreamableHTTPServerTransport({
+    sessionIdGenerator: (): string => {return crypto.randomUUID()},
+    onsessioninitialized: onOpen,
+  });
 
 /** Wire up transport close handler for agent sessions. */
 const wireAgentTransportClose: (
@@ -272,29 +291,13 @@ const initializeMcpSession: (
   ctx: McpSessionContext,
 ): Promise<void> => {
   const body: unknown = extractBody(req);
-  const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => {return crypto.randomUUID()},
-    onsessioninitialized: (sid: string): void => {
-      ctx.log.info("Session init", { sessionId: sid });
-      ctx.transports.set(sid, transport);
-    },
+  const transport: StreamableHTTPServerTransport = createSessionTransport((sid: string): void => {
+    ctx.log.info("Session init", { sessionId: sid });
+    ctx.transports.set(sid, transport);
   });
 
   wireAgentTransportClose(transport, ctx);
-
-  const serverResult: ReturnType<typeof createMcpServerForDb> = createMcpServerForDb(ctx.db, ctx.cfg, ctx.log, {
-    adminPush: ctx.adminHub.pushEvent,
-    agentPush: ctx.agentHub.pushEvent,
-    agentPushToAgent: ctx.agentHub.pushToAgent,
-    onSessionSet: (agentName: string): void => {
-      const sid: string | undefined = transport.sessionId;
-      if (sid !== undefined) {
-        ctx.agentHub.sessionAgentNames.set(sid, agentName);
-      }
-    },
-  });
-  if (!serverResult.ok) {throw new Error(serverResult.error);}
-  const server: McpServer = serverResult.value;
+  const server: McpServer = createAgentMcpServer(transport, ctx);
   assertMcpTransport(transport);
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
@@ -305,59 +308,29 @@ const initializeMcpSession: (
   }
 };
 
-/** POST /mcp handler. */
-const mcpPostHandler: (
+/** Builds the MCP server bound to one agent session transport. */
+const createAgentMcpServer: (
+  transport: StreamableHTTPServerTransport,
   ctx: McpSessionContext,
-) => (req: Request, res: Response) => Promise<void> = (
+) => McpServer = (
+  transport: StreamableHTTPServerTransport,
   ctx: McpSessionContext,
-): ((req: Request, res: Response) => Promise<void>) =>
-  {return async (req: Request, res: Response): Promise<void> => {
-    const sessionId: string | undefined = extractSessionId(req);
-    const body: unknown = extractBody(req);
-
-    if (sessionId !== undefined && ctx.transports.has(sessionId)) {
-      const existing: StreamableHTTPServerTransport | undefined = ctx.transports.get(sessionId);
-      if (existing !== undefined) {
-        await existing.handleRequest(req, res, body);
+): McpServer => {
+  const serverResult: ReturnType<typeof createMcpServerForDb> = createMcpServerForDb(ctx.db, ctx.cfg, ctx.log, {
+    adminPush: ctx.adminHub.pushEvent,
+    agentPush: ctx.agentHub.pushEvent,
+    agentPushToAgent: ctx.agentHub.pushToAgent,
+    serverInfo: ctx.serverInfo,
+    onSessionSet: (agentName: string): void => {
+      const sid: string | undefined = transport.sessionId;
+      if (sid !== undefined) {
+        ctx.agentHub.sessionAgentNames.set(sid, agentName);
       }
-      return;
-    }
-
-    if (sessionId !== undefined) {
-      res.status(404).send(SESSION_NOT_FOUND_JSON);
-      return;
-    }
-
-    if (isInitializeRequest(body)) {
-      await initializeMcpSession(req, res, ctx);
-      return;
-    }
-
-    res.status(400).send(BAD_REQUEST_JSON);
-  }};
-
-/** GET/DELETE /mcp handler. */
-const mcpGetDeleteHandler: (
-  transports: Map<string, StreamableHTTPServerTransport>,
-  agentHub: AgentEventHub,
-) => (req: Request, res: Response) => Promise<void> = (
-  transports: Map<string, StreamableHTTPServerTransport>,
-  agentHub: AgentEventHub,
-): ((req: Request, res: Response) => Promise<void>) =>
-  {return async (req: Request, res: Response): Promise<void> => {
-    const sessionId: string | undefined = extractSessionId(req);
-    if (sessionId === undefined) {
-      res.status(400).send("Missing session ID");
-      return;
-    }
-    const transport: StreamableHTTPServerTransport | undefined = transports.get(sessionId);
-    if (transport === undefined) {
-      res.status(404).send(SESSION_NOT_FOUND_JSON);
-      return;
-    }
-    agentHub.activeStreamSessions.add(sessionId);
-    await transport.handleRequest(req, res);
-  }};
+    },
+  });
+  if (!serverResult.ok) {throw new Error(serverResult.error);}
+  return serverResult.value;
+};
 
 /** Initialize an admin session (POST /admin/events with initialize body). */
 const initializeAdminSession: (
@@ -365,19 +338,18 @@ const initializeAdminSession: (
   res: Response,
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ) => Promise<void> = async (
   req: Request,
   res: Response,
   hub: AdminEventHub,
   log: Logger,
+  serverInfo: ServerInfo,
 ): Promise<void> => {
   const body: unknown = extractBody(req);
-  const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: (): string => {return crypto.randomUUID()},
-    onsessioninitialized: (sid: string): void => {
-      log.info("Admin session init", { sessionId: sid });
-      hub.transports.set(sid, transport);
-    },
+  const transport: StreamableHTTPServerTransport = createSessionTransport((sid: string): void => {
+    log.info("Admin session init", { sessionId: sid });
+    hub.transports.set(sid, transport);
   });
 
   transport.onclose = (): void => {
@@ -390,7 +362,7 @@ const initializeAdminSession: (
   };
 
   const server: McpServer = new McpServer(
-    { name: "too-many-cooks", version: "0.1.0" },
+    serverInfo,
     { capabilities: { logging: {} } },
   );
   assertMcpTransport(transport);
@@ -402,73 +374,6 @@ const initializeAdminSession: (
     hub.servers.set(sid, server);
   }
 };
-
-/** POST /admin/events handler. */
-const adminPostHandler: (
-  hub: AdminEventHub,
-  log: Logger,
-) => (req: Request, res: Response) => Promise<void> = (
-  hub: AdminEventHub,
-  log: Logger,
-): ((req: Request, res: Response) => Promise<void>) =>
-  {return async (req: Request, res: Response): Promise<void> => {
-    const sessionId: string | undefined = extractSessionId(req);
-    const body: unknown = extractBody(req);
-
-    if (sessionId !== undefined && hub.transports.has(sessionId)) {
-      const existing: StreamableHTTPServerTransport | undefined = hub.transports.get(sessionId);
-      if (existing !== undefined) {
-        await existing.handleRequest(req, res, body);
-      }
-      return;
-    }
-
-    if (sessionId !== undefined) {
-      res.status(404).send(SESSION_NOT_FOUND_JSON);
-      return;
-    }
-
-    if (isInitializeRequest(body)) {
-      await initializeAdminSession(req, res, hub, log);
-      return;
-    }
-
-    res.status(400).send(BAD_REQUEST_JSON);
-  }};
-
-/** GET/DELETE /admin/events handler. */
-const adminGetDeleteHandler: (
-  hub: AdminEventHub,
-) => (req: Request, res: Response) => Promise<void> = (
-  hub: AdminEventHub,
-): ((req: Request, res: Response) => Promise<void>) =>
-  {return async (req: Request, res: Response): Promise<void> => {
-    const sessionId: string | undefined = extractSessionId(req);
-    if (sessionId === undefined) {
-      res.status(400).send("Missing session ID");
-      return;
-    }
-    const transport: StreamableHTTPServerTransport | undefined = hub.transports.get(sessionId);
-    if (transport === undefined) {
-      res.status(404).send(SESSION_NOT_FOUND_JSON);
-      return;
-    }
-    await transport.handleRequest(req, res);
-  }};
-
-/** Wrap an async handler for Express. */
-const asyncHandler: (
-  fn: (req: Request, res: Response) => Promise<void>,
-  log: Logger,
-) => (req: Request, res: Response) => void = (
-  fn: (req: Request, res: Response) => Promise<void>,
-  log: Logger,
-): ((req: Request, res: Response) => void) =>
-  {return (req: Request, res: Response): void => {
-    fn(req, res).catch((e: unknown): void => {
-      log.error("Request error", { error: String(e) });
-    });
-  }};
 
 main().catch((e: unknown): void => {
   console.error("Fatal:", e);

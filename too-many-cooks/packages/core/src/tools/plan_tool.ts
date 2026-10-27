@@ -1,5 +1,7 @@
 /// Plan tool - agent plan management.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import { EVENT_PLAN_UPDATED } from "../notifications.js";
@@ -7,135 +9,98 @@ import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
+import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
+import { DEFAULT_MAX_PLAN_LENGTH } from "../config.js";
 import {
-  type CallToolResult,
-  type SessionGetter,
-  type ToolCallback,
-  textContent,
-} from "../mcp-types.js";
-import { type IdentityResult, errorContent, makeErrorResult, resolveIdentity } from "./tool_utils.js";
+  actionContext,
+  agentKeyField,
+  errorContent,
+  jsonResult,
+  limitedText,
+  listJsonResult,
+  makeErrorResult,
+  optionalString,
+  rejectedNeverTruncated,
+  toJsonSchema,
+  toolConfig,
+  unknownActionError,
+  withResolvedAgent,
+} from "./tool_utils.js";
+import type { ActionContext } from "./tool_utils.js";
 
-/** Input schema for plan tool. */
-export const PLAN_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: Record<string, unknown>;
-  readonly required: readonly string[];
-} = {
-  type: "object",
-  properties: {
-    action: {
-      type: "string",
-      enum: ["update", "get", "list"],
-      description: "Plan action to perform",
-    },
-    goal: {
-      type: "string",
-      maxLength: 100,
-      description: "Your goal (for update). MUST be 100 chars or less.",
-    },
-    current_task: {
-      type: "string",
-      maxLength: 100,
-      description:
-        "What you are doing now (for update). MUST be 100 chars or less.",
-    },
-  },
-  required: ["action"],
-} as const;
+/** Plan tool input — the ONE source of the wire schema. [MCP-TOOL-LIMITS] */
+export const planInputShape = (maxFieldLength: number): z.ZodRawShape => ({
+  action: z.enum(["update", "get", "list"]).describe("Plan action to perform"),
+  goal: limitedText("goal", maxFieldLength, "Your goal (for update)."),
+  current_task: limitedText("current_task", maxFieldLength, "What you are doing now (for update)."),
+  agent_key: agentKeyField,
+});
 
-/** Tool config for plan. */
-export const PLAN_TOOL_CONFIG: {
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: typeof PLAN_INPUT_SCHEMA;
-  readonly outputSchema: null;
-  readonly annotations: null;
-} = {
-  title: "Plan",
-  description:
-    "Manage your plan. You must register first (except list). " +
-    "REQUIRED: action (update|get|list). " +
-    "For update: goal, current_task. " +
-    'Example: {"action":"update","goal":"Fix bug",' +
-    ' "current_task":"Reading code"}',
-  inputSchema: PLAN_INPUT_SCHEMA,
-  outputSchema: null,
-  annotations: null,
-} as const;
+/** Plan tool description — leads with the hard limit agents keep missing. */
+export const planToolDescription = (maxFieldLength: number): string =>
+  `HARD LIMIT: goal and current_task must each be ${String(maxFieldLength)} characters or fewer. ${rejectedNeverTruncated("values")}` +
+  "Manage your plan. You must register first (except list). " +
+  "REQUIRED: action (update|get|list). " +
+  "For update: goal, current_task. " +
+  'Example: {"action":"update","goal":"Fix bug",' +
+  ' "current_task":"Reading code"}';
+
+/** JSON Schema of the plan input at the default limit (derived from the zod shape). */
+export const PLAN_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(planInputShape(DEFAULT_MAX_PLAN_LENGTH));
+
+/** Tool config for plan (default limit; the server uses the configured one). */
+export const PLAN_TOOL_CONFIG = toolConfig(
+  "Plan",
+  planToolDescription(DEFAULT_MAX_PLAN_LENGTH),
+  PLAN_INPUT_SCHEMA
+);
 
 /** Create plan tool handler. */
-export const createPlanHandler: (
+export const createPlanHandler = (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   logger: Logger,
-  getSession: SessionGetter,
-) => ToolCallback = (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  logger: Logger,
-  getSession: SessionGetter,
-): ToolCallback =>
-  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionArg: unknown = args.action;
-    if (typeof actionArg !== "string") {
-      return errorContent("missing_parameter: action is required");
-    }
-    const action: string = actionArg;
-    const log: Logger = logger.child({ tool: "plan", action });
+  getSession: SessionGetter
+): ToolCallback => {
+  return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const ctx: ActionContext = actionContext(args, logger, "plan", {});
+    if (ctx.isError) {return ctx.result;}
 
-    if (action === "list") {return await handleList(db);}
+    if (ctx.action === "list") {return await handleList(db);}
 
-    const identity: IdentityResult = await resolveIdentity(db, args, getSession);
-    if (identity.isError) {return identity.result;}
-    const { agentName, agentKey }: { agentName: string; agentKey: string } = identity;
-
-    switch (action) {
-      case "update":
-        return await handleUpdate(
-          db,
-          emitter,
-          log,
-          agentName,
-          agentKey,
-          typeof args.goal === "string" ? args.goal : null,
-          typeof args.current_task === "string"
-            ? args.current_task
-            : null,
-        );
-      case "get":
-        return await handleGet(db, agentName);
-      default:
-        return {
-          content: [
-            textContent(
-              JSON.stringify({ error: `Unknown action: ${action}` }),
-            ),
-          ],
-          isError: true,
-        };
-    }
-  }};
+    return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> => {
+      switch (ctx.action) {
+        case "update":
+          return await handleUpdate(
+            db,
+            emitter,
+            ctx.log,
+            agentName,
+            agentKey,
+            optionalString(args, "goal"),
+            optionalString(args, "current_task")
+          );
+        case "get":
+          return await handleGet(db, agentName);
+        default:
+          return unknownActionError(ctx.action);
+      }
+    });
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
 
-const handleUpdate: (
+const handleUpdate = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   agentName: string,
   agentKey: string,
   goal: string | null,
-  currentTask: string | null,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  agentName: string,
-  agentKey: string,
-  goal: string | null,
-  currentTask: string | null,
+  currentTask: string | null
 ): Promise<CallToolResult> => {
   if (goal === null || currentTask === null) {
     return errorContent("update requires goal, current_task");
@@ -148,54 +113,27 @@ const handleUpdate: (
     current_task: currentTask,
   });
   log.info(`Plan updated for ${agentName}: ${currentTask}`);
-  return {
-    content: [textContent(JSON.stringify({ updated: true }))],
-    isError: false,
-  };
+  return jsonResult({ updated: true });
 };
 
 // ---------------------------------------------------------------------------
 // Get
 // ---------------------------------------------------------------------------
 
-const handleGet: (
-  db: TooManyCooksDb,
-  agentName: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  agentName: string,
-): Promise<CallToolResult> => {
+const handleGet = async (db: TooManyCooksDb, agentName: string): Promise<CallToolResult> => {
   const result: Result<AgentPlan | null, DbError> = await db.getPlan(agentName);
   if (!result.ok) {return makeErrorResult(result.error);}
   if (result.value !== null) {
-    return {
-      content: [
-        textContent(
-          JSON.stringify({ plan: agentPlanToJson(result.value) }),
-        ),
-      ],
-      isError: false,
-    };
+    return jsonResult({ plan: agentPlanToJson(result.value) });
   }
-  return {
-    content: [textContent(JSON.stringify({ plan: null }))],
-    isError: false,
-  };
+  return jsonResult({ plan: null });
 };
 
 // ---------------------------------------------------------------------------
 // List
 // ---------------------------------------------------------------------------
 
-const handleList: (db: TooManyCooksDb) => Promise<CallToolResult> = async (db: TooManyCooksDb): Promise<CallToolResult> => {
+const handleList = async (db: TooManyCooksDb): Promise<CallToolResult> => {
   const result: Result<readonly AgentPlan[], DbError> = await db.listPlans();
-  if (!result.ok) {return makeErrorResult(result.error);}
-  return {
-    content: [
-      textContent(
-        JSON.stringify({ plans: result.value.map(agentPlanToJson) }),
-      ),
-    ],
-    isError: false,
-  };
+  return listJsonResult(result, "plans", agentPlanToJson);
 };

@@ -1,233 +1,194 @@
 /// Tests for lock tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
-  type TooManyCooksDb,
+  type CallToolResult,
+  type TooManyCooksDataConfig,
   createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
   createLockHandler,
 } from "too-many-cooks-core";
 import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { bindTestDb, registerAgent } from "./support/db_fixture.js";
+import {
+  createTestEmitter,
+  createTestLogger,
+  parseToolJson,
+  runToolErr,
+  runToolOk,
+} from "./support/handlers.js";
+import { assertArrayFieldCount } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_lock_handler.db";
+const LOCK_AGENT_NAME = "lock-handler-agent";
+const SECOND_AGENT_LABEL = "force-handler-agent";
+const CONTESTED_AGENT_LABEL = "blocker-agent";
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
+/** One "action succeeds once the agent owns the file" case. */
+type OwnedActionCase = {
+  readonly name: string;
+  readonly action: string;
+  readonly flag: string;
+  readonly filePath: string;
 };
 
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
+const OWNED_ACTION_CASES: readonly OwnedActionCase[] = [
+  { name: "release succeeds when owned", action: "release", flag: "released", filePath: "/release/file.ts" },
+  { name: "renew succeeds when owned", action: "renew", flag: "renewed", filePath: "/renew/file.ts" },
+];
 
 describe("lock handler", () => {
-  let db: TooManyCooksDb | undefined;
+  const testDb = bindTestDb(TEST_DB_PATH);
+  const initialConfig: TooManyCooksDataConfig = createDataConfig({ dbPath: TEST_DB_PATH });
   let agentName = "";
   let agentKey = "";
-  let config = createDataConfig({ dbPath: TEST_DB_PATH });
+  let config: TooManyCooksDataConfig = initialConfig;
 
   beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
-
-    const regResult = await db.register("lock-handler-agent");
-    if (!regResult.ok) { throw new Error("expected ok"); }
-    agentName = regResult.value.agentName;
-    agentKey = regResult.value.agentKey;
-  });
-
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
+    config = testDb.config();
+    const agent = await registerAgent(testDb.db(), LOCK_AGENT_NAME);
+    agentName = agent.agentName;
+    agentKey = agent.agentKey;
   });
 
   const makeSession = (): (() => SessionIdentity) =>
     () => ({ agentName, agentKey });
 
+  /** Session getter for a freshly registered second agent. */
+  const sessionForNewAgent = async (
+    label: string,
+  ): Promise<() => SessionIdentity> => {
+    const agent = await registerAgent(testDb.db(), label);
+    return () => ({ agentName: agent.agentName, agentKey: agent.agentKey });
+  };
+
+  /** Calls the lock handler for the current db/config and session. */
+  const runLockHandler = async (
+    args: Record<string, unknown>,
+    getSession: () => SessionIdentity | null,
+  ): Promise<CallToolResult> => {
+    const handler = createLockHandler(
+      testDb.db(), config, createTestEmitter(), createTestLogger(), getSession,
+    );
+    return handler(args, {});
+  };
+
+  /** Runs a lock-handler call as `getSession`, expecting success. */
+  const runOkAs = async (
+    getSession: () => SessionIdentity | null,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> =>
+    runToolOk(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, getSession),
+      args,
+    );
+
+  /** Runs a lock-handler call as `getSession`, expecting a tool error. */
+  const runErrAs = async (
+    getSession: () => SessionIdentity | null,
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> =>
+    runToolErr(
+      async (toolArgs: Record<string, unknown>): Promise<CallToolResult> =>
+        runLockHandler(toolArgs, getSession),
+      args,
+    );
+
+  /** Runs a lock-handler call as the bound agent, expecting success. */
+  const runAsAgentOk = async (
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => await runOkAs(makeSession(), args);
+
+  /** Runs a lock-handler call as the bound agent, expecting a tool error. */
+  const runAsAgentErr = async (
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> => await runErrAs(makeSession(), args);
+
+  const nullSession = (): SessionIdentity | null => null;
+
   it("acquire succeeds on free file", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "acquire", file_path: "/test/file.ts", reason: "editing" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runAsAgentOk({ action: "acquire", file_path: "/test/file.ts", reason: "editing" });
     assert.strictEqual(parsed.acquired, true);
   });
 
-  it("release succeeds when owned", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "acquire", file_path: "/release/file.ts" }, {});
-    const result = await handler({ action: "release", file_path: "/release/file.ts" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    assert.strictEqual(parsed.released, true);
-  });
-
-  it("renew succeeds when owned", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "acquire", file_path: "/renew/file.ts" }, {});
-    const result = await handler({ action: "renew", file_path: "/renew/file.ts" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    assert.strictEqual(parsed.renewed, true);
-  });
+  for (const testCase of OWNED_ACTION_CASES) {
+    it(testCase.name, async () => {
+      await runAsAgentOk({ action: "acquire", file_path: testCase.filePath });
+      const parsed = await runAsAgentOk({ action: testCase.action, file_path: testCase.filePath });
+      assert.strictEqual(parsed[testCase.flag], true);
+    });
+  }
 
   it("query returns lock info", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "acquire", file_path: "/query/file.ts", reason: "testing" }, {});
-    const result = await handler({ action: "query", file_path: "/query/file.ts" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    await runAsAgentOk({ action: "acquire", file_path: "/query/file.ts", reason: "testing" });
+    const parsed = await runAsAgentOk({ action: "query", file_path: "/query/file.ts" });
     assert.strictEqual(parsed.locked, true);
   });
 
   it("query returns unlocked for free file", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "query", file_path: "/free/file.ts" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runAsAgentOk({ action: "query", file_path: "/free/file.ts" });
     assert.strictEqual(parsed.locked, false);
   });
 
   it("list returns all locks", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "acquire", file_path: "/list/a.ts" }, {});
-    await handler({ action: "acquire", file_path: "/list/b.ts" }, {});
-    const result = await handler({ action: "list" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    assert.strictEqual(Array.isArray(parsed.locks), true);
-    assert.strictEqual((parsed.locks as unknown[]).length, 2);
+    await runAsAgentOk({ action: "acquire", file_path: "/list/a.ts" });
+    await runAsAgentOk({ action: "acquire", file_path: "/list/b.ts" });
+    const parsed = await runAsAgentOk({ action: "list" });
+    assertArrayFieldCount(parsed, "locks", 2);
   });
 
   it("force_release fails on non-expired lock", async () => {
-    if (!db) { throw new Error("expected db"); }
-    // Register second agent
-    const reg2 = await db.register("force-handler-agent");
-    if (!reg2.ok) { throw new Error("expected ok"); }
-    const agent2Name = reg2.value.agentName;
-    const agent2Key = reg2.value.agentKey;
+    const getSession2 = await sessionForNewAgent(SECOND_AGENT_LABEL);
 
-    const handler1 = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler1({ action: "acquire", file_path: "/force/file.ts" }, {});
-
-    const getSession2 = (): SessionIdentity => ({ agentName: agent2Name, agentKey: agent2Key });
-    const handler2 = createLockHandler(db, config, createTestEmitter(), createTestLogger(), getSession2);
-    const result = await handler2({ action: "force_release", file_path: "/force/file.ts" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentOk({ action: "acquire", file_path: "/force/file.ts" });
+    await runErrAs(getSession2, { action: "force_release", file_path: "/force/file.ts" });
   });
 
   it("fails when action is missing", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({}, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({});
   });
 
   it("fails with unknown action", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "invalid_action" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "invalid_action" });
   });
 
   it("acquire fails without file_path", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "acquire" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "acquire" });
   });
 
   it("release fails without file_path", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "release" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "release" });
   });
 
   it("renew fails without file_path", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "renew" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "renew" });
   });
 
   it("query fails without file_path", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "query" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "query" });
   });
 
   it("force_release fails without file_path", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "force_release" }, {});
-    assert.strictEqual(result.isError, true);
+    await runAsAgentErr({ action: "force_release" });
   });
 
   it("fails when not registered and no session", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "acquire", file_path: "/test.ts" }, {});
-    assert.strictEqual(result.isError, true);
+    await runErrAs(nullSession, { action: "acquire", file_path: "/test.ts" });
   });
 
   it("works with agent_key override", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createLockHandler(db, config, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "acquire", file_path: "/override.ts", agent_key: agentKey }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runOkAs(nullSession, { action: "acquire", file_path: "/override.ts", agent_key: agentKey });
     assert.strictEqual(parsed.acquired, true);
   });
 
   it("acquire returns error when held by another", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const reg2 = await db.register("blocker-agent");
-    if (!reg2.ok) { throw new Error("expected ok"); }
+    const getSession2 = await sessionForNewAgent(CONTESTED_AGENT_LABEL);
 
-    // First agent acquires
-    const handler1 = createLockHandler(db, config, createTestEmitter(), createTestLogger(), makeSession());
-    await handler1({ action: "acquire", file_path: "/contested.ts" }, {});
-
-    // Second agent tries
-    const getSession2 = (): SessionIdentity => ({
-      agentName: reg2.value.agentName,
-      agentKey: reg2.value.agentKey,
-    });
-    const handler2 = createLockHandler(db, config, createTestEmitter(), createTestLogger(), getSession2);
-    const result = await handler2({ action: "acquire", file_path: "/contested.ts" }, {});
-    assert.strictEqual(result.isError, true);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    // First agent acquires, second agent tries
+    await runAsAgentOk({ action: "acquire", file_path: "/contested.ts" });
+    const result = await runErrAs(getSession2, { action: "acquire", file_path: "/contested.ts" });
+    const parsed = parseToolJson(result);
     assert.strictEqual(parsed.acquired, false);
   });
 });

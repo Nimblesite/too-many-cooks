@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../.oxlintrc.json"
+  ],
+  "rules": {
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      {
+        "considerDefaultExhaustiveForUnions": true
+      }
+    ],
+    "typescript/consistent-type-definitions": [
+      "error",
+      "interface"
+    ],
+    "eslint/func-style": [
+      "error",
+      "declaration"
+    ],
+    "eslint/max-lines": [
+      "error",
+      300
+    ],
+    "eslint/max-params": [
+      "error",
+      3
+    ],
+    "eslint/class-methods-use-this": [
+      "error",
+      {
+        "exceptMethods": [
+          "getTreeItem"
+        ]
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "playwright.config.ts"
+  ]
+}

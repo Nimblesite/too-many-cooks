@@ -1,0 +1,25 @@
+{
+  "binary": [
+    "too-many-cooks/**",
+    "scripts/stamp-version.sh",
+    "scripts/shipwright.schema.json",
+    "shipwright.json",
+    "scripts/fetch-dataprovider.mjs",
+    "scripts/dataprovider-version",
+    ".oxlintrc.json",
+    "Makefile"
+  ],
+  "vsix": ["too_many_cooks_vscode_extension/**"],
+  "website": ["website/**"],
+  "ignore": [
+    "**/*.md",
+    "LICENSE",
+    ".github/**",
+    ".claude/**",
+    ".deslop-cache/**",
+    "docs/**",
+    ".gitignore",
+    "coverage-thresholds.json",
+    "bail-reporter.mjs"
+  ]
+}

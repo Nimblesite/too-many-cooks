@@ -2,15 +2,39 @@
 
 import * as vscode from 'vscode';
 
+/** Subset of vscode.InputBoxOptions the extension uses, with readonly fields. */
+export interface DialogInputOptions {
+  readonly placeHolder?: string;
+  readonly prompt?: string;
+}
+
+/** Subset of vscode.MessageOptions the extension uses, with readonly fields. */
+export interface DialogMessageOptions {
+  readonly modal?: boolean;
+}
+
 export interface DialogService {
   readonly showErrorMessage: (message: string) => Thenable<string | undefined>;
   readonly showInformationMessage: (message: string) => Thenable<string | undefined>;
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  readonly showInputBox: (options: Readonly<vscode.InputBoxOptions>) => Thenable<string | undefined>;
+  readonly showInputBox: (options: Readonly<DialogInputOptions>) => Thenable<string | undefined>;
    
   readonly showQuickPick: (items: readonly string[], options: Readonly<vscode.QuickPickOptions>) => Thenable<string | undefined>;
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  readonly showWarningMessage: (message: string, options: Readonly<vscode.MessageOptions>, ...items: string[]) => Thenable<string | undefined>;
+  readonly showWarningMessage: (
+    message: string,
+    options: Readonly<DialogMessageOptions>,
+    ...items: readonly string[]
+  ) => Thenable<string | undefined>;
+}
+
+function toInputBoxOptions(options: Readonly<DialogInputOptions>): vscode.InputBoxOptions {
+  const inputOptions: vscode.InputBoxOptions = {};
+  if (typeof options.placeHolder !== 'undefined') {
+    inputOptions.placeHolder = options.placeHolder;
+  }
+  if (typeof options.prompt !== 'undefined') {
+    inputOptions.prompt = options.prompt;
+  }
+  return inputOptions;
 }
 
 function createDefaultDialogService(): DialogService {
@@ -21,16 +45,22 @@ function createDefaultDialogService(): DialogService {
     showInformationMessage: (message: string): Thenable<string | undefined> => {
       return vscode.window.showInformationMessage(message);
     },
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    showInputBox: (options: Readonly<vscode.InputBoxOptions>): Thenable<string | undefined> => {
-      return vscode.window.showInputBox(options);
+    showInputBox: (options: Readonly<DialogInputOptions>): Thenable<string | undefined> => {
+      return vscode.window.showInputBox(toInputBoxOptions(options));
     },
     showQuickPick: (items: readonly string[], options: Readonly<vscode.QuickPickOptions>): Thenable<string | undefined> => {
       return vscode.window.showQuickPick([...items], options);
     },
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    showWarningMessage: (message: string, options: Readonly<vscode.MessageOptions>, ...items: string[]): Thenable<string | undefined> => {
-      return vscode.window.showWarningMessage(message, options, ...items);
+    showWarningMessage: (
+      message: string,
+      options: Readonly<DialogMessageOptions>,
+      ...items: readonly string[]
+    ): Thenable<string | undefined> => {
+      return vscode.window.showWarningMessage(
+        message,
+        { modal: options.modal ?? false },
+        ...items,
+      );
     },
   };
 }

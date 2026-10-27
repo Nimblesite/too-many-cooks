@@ -3,6 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
+import type { TooManyCooksDataConfig } from "too-many-cooks-core";
 import {
   resolveDbPath,
   createDataConfig,
@@ -13,6 +14,13 @@ import {
   DEFAULT_MAX_MESSAGE_LENGTH,
   DEFAULT_MAX_PLAN_LENGTH,
 } from "too-many-cooks-core";
+
+/** Asserts `config` carries the default lock timeout and message/plan limits. */
+const assertDefaultLimits = (config: TooManyCooksDataConfig): void => {
+  assert.strictEqual(config.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS);
+  assert.strictEqual(config.maxMessageLength, DEFAULT_MAX_MESSAGE_LENGTH);
+  assert.strictEqual(config.maxPlanLength, DEFAULT_MAX_PLAN_LENGTH);
+};
 
 describe("config", () => {
   it("resolveDbPath returns correct path", () => {
@@ -36,17 +44,13 @@ describe("config", () => {
   it("createDataConfig uses defaults", () => {
     const config = createDataConfig({ dbPath: "/path.db" });
     assert.strictEqual(config.dbPath, "/path.db");
-    assert.strictEqual(config.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS);
-    assert.strictEqual(config.maxMessageLength, DEFAULT_MAX_MESSAGE_LENGTH);
-    assert.strictEqual(config.maxPlanLength, DEFAULT_MAX_PLAN_LENGTH);
+    assertDefaultLimits(config);
   });
 
   it("createDataConfigFromWorkspace creates config with resolved path", () => {
     const config = createDataConfigFromWorkspace("/my/workspace");
     assert.strictEqual(config.dbPath, "/my/workspace/.too_many_cooks/data.db");
-    assert.strictEqual(config.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS);
-    assert.strictEqual(config.maxMessageLength, DEFAULT_MAX_MESSAGE_LENGTH);
-    assert.strictEqual(config.maxPlanLength, DEFAULT_MAX_PLAN_LENGTH);
+    assertDefaultLimits(config);
   });
 
   it("default constants have expected values", () => {
@@ -70,9 +74,7 @@ describe("config", () => {
   });
 
   it("defaultConfig uses default timeout and limits", () => {
-    assert.strictEqual(defaultConfig.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS);
-    assert.strictEqual(defaultConfig.maxMessageLength, DEFAULT_MAX_MESSAGE_LENGTH);
-    assert.strictEqual(defaultConfig.maxPlanLength, DEFAULT_MAX_PLAN_LENGTH);
+    assertDefaultLimits(defaultConfig);
   });
 
   it("defaultConfig dbPath matches createDataConfigFromWorkspace", () => {

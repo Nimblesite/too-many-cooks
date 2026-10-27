@@ -8,7 +8,7 @@ MCP server enabling multiple AI agents to safely edit a git repository simultane
 
 **Location**: `examples/too-many-cooks/`
 
-**Tech Stack**: TypeScript on Node.js, Prisma (SQLite), express, @modelcontextprotocol/sdk
+**Tech Stack**: TypeScript 7 on Node.js, SQLite (better-sqlite3) with DataProvider migrations, express, @modelcontextprotocol/sdk
 
 > **Why TypeScript, not Dart?** The server was originally written in Dart compiled to JS via dart2js. We abandoned Dart because `dart:js_interop` made interop with Node.js libraries (Prisma, express, MCP SDK) painful — every call required manual JSObject wrappers, type bridging was brittle, and debugging compiled JS was a nightmare. TypeScript gives us native access to the entire Node.js ecosystem with zero interop friction.
 
@@ -106,9 +106,9 @@ Defense in depth: even one un-guarded write to a dead pipe must not be able to s
 
 ---
 
-## Database Schema (Prisma — SQLite)
+## Database Schema (DataProvider — SQLite) [DB-MIGRATE]
 
-Schema defined in `packages/local/prisma/schema.prisma`. **No raw SQL anywhere.** All table creation, migrations, and queries go through Prisma.
+Schema defined in `packages/too-many-cooks/schema/tmc-schema.yaml` — the single source of truth. **No hand-written DDL.** On startup the server runs the bundled [DataProviderMigrate](https://dataprovider.tech/docs/migrations/) CLI (pinned in `scripts/dataprovider-version`, fetched and SHA256-verified by `scripts/fetch-dataprovider.mjs`, shipped in the npm package under `dataprovider/<platform>-<arch>/`). It diffs the live DB against the YAML and applies only the difference, so a fresh DB is created and drift is repaired in place. The binary is spawned by absolute path — no npx, no PATH lookup. If migration still fails, the DB file is deleted and recreated (no legacy DB support).
 
 > **TMC Cloud uses a SUPERSET of this schema** (PostgreSQL). The cloud schema contains these same 4 coordination tables with additional `tenantId`/`workspaceId` composite keys for multi-tenant sharding, plus cloud-only tables (tenants, workspaces, api_keys, etc.). See `tmc-cloud/prisma/schema.prisma`.
 

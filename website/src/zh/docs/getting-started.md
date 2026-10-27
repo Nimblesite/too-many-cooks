@@ -18,16 +18,18 @@ npm install -g too-many-cooks
 
 ## 升级
 
-如果你已全局安装，更新所有 TMC 包到最新版本：
+如果你已全局安装，更新到最新版本：
 
 ```bash
-npm update -g too-many-cooks @too-many-cooks/core
+npm update -g too-many-cooks
 ```
 
-## 添加到 Claude Code
+## 连接你的智能体
 
 ```bash
-claude mcp add --transport http too-many-cooks -- too-many-cooks
+claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
+codex mcp add too-many-cooks --url http://localhost:4040/mcp
+pi mcp add too-many-cooks --url http://localhost:4040/mcp
 ```
 
 ## 启动服务器

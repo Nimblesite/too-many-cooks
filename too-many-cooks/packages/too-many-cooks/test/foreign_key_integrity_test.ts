@@ -6,20 +6,32 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-
 import Database from "better-sqlite3";
-import { createDataConfig } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import type { TooManyCooksDb } from "too-many-cooks-core";
+import {
+  type RegisteredAgent,
+  freshTestDb,
+  openTestDb,
+  registerAgent,
+} from "./support/db_fixture.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
+import { execRawSql } from "./support/sqlite_rows.js";
+import {
+  getNumberField,
+  getStringField,
+  isRecord,
+} from "./support/json.js";
 
-const TEST_FK_DB_PATH = ".test_fk_integrity.db" as const;
+/** to_agent FK clause (any quoting style) whose ON DELETE action is NO ACTION. */
+const TO_AGENT_FK_NO_ACTION: RegExp = /FOREIGN KEY \(\W*to_agent\W*\) REFERENCES[^,]*ON DELETE NO ACTION/u;
+
+/** to_agent FK clause (any quoting style) whose ON DELETE action is CASCADE. */
+const TO_AGENT_FK_CASCADE: RegExp = /FOREIGN KEY \(\W*to_agent\W*\) REFERENCES[^,]*ON DELETE CASCADE/u;
+
+const TEST_FK_DB_PATH = ".test_fk_integrity.db";
 const BROADCAST: string = "*";
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) { fs.unlinkSync(path); }
-  } catch { /* ignore */ }
-};
+const DELETE_AGENT_SQL = "DELETE FROM identity WHERE agent_name = ?";
+const MESSAGES_TABLE = "messages";
 
 const openRawDb = (): Database.Database => {
   const db = new Database(TEST_FK_DB_PATH);
@@ -31,9 +43,7 @@ const openRawDb = (): Database.Database => {
 /// it looked BEFORE the to_agent cascade migration — to_agent ON DELETE NO ACTION —
 /// simulating a DB that predates 20260525_add_to_agent_fk_cascade.
 const downgradeMessagesToPreCascade = (path: string): void => {
-  const db = new Database(path);
-  db.pragma("foreign_keys = OFF");
-  db.exec(`
+  execRawSql(path, `
     DROP TABLE IF EXISTS message_reads;
     DROP TABLE IF EXISTS messages;
     CREATE TABLE messages (
@@ -54,71 +64,105 @@ const downgradeMessagesToPreCascade = (path: string): void => {
       CONSTRAINT message_reads_message_id_fkey FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE ON UPDATE CASCADE,
       CONSTRAINT message_reads_agent_name_fkey FOREIGN KEY (agent_name) REFERENCES identity (agent_name) ON DELETE CASCADE ON UPDATE CASCADE
     );
-  `);
-  db.close();
+  `, "OFF");
 };
 
 const messagesDdl = (path: string): string => {
   const db = new Database(path);
-  const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'messages'").get() as { sql: string } | undefined;
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'messages'").get();
   db.close();
-  return row?.sql ?? "";
+  return isRecord(row) ? getStringField(row, "sql") : "";
 };
+
+/** COUNT(*) helper: narrows a `SELECT COUNT(*) as c` row to its number. */
+const countOf = (row: unknown): number => {
+  if (!isRecord(row)) { throw new Error("expected a COUNT(*) row"); }
+  return getNumberField(row, "c");
+};
+
+/** Fresh FK db plus one agent registered on it. */
+const fixtureWithAgent = async (
+  name: string,
+): Promise<{ readonly db: TooManyCooksDb; readonly agent: RegisteredAgent }> => {
+  const result = freshTestDb(TEST_FK_DB_PATH);
+  const agent = await registerAgent(result.db, name);
+  return { db: result.db, agent };
+};
+
+/** Closes the fixture db and reopens the same file as a raw connection. */
+const closeAndOpenRaw = async (
+  db: TooManyCooksDb,
+): Promise<Database.Database> => {
+  await db.close();
+  return openRawDb();
+};
+
+/** Deletes `agentName`'s identity row through the raw connection. */
+const deleteAgentRow = (db: Database.Database, agentName: string): void => {
+  db.prepare(DELETE_AGENT_SQL).run(agentName);
+};
+
+/** Rows left in `table` for `agentName` after deleting the identity row. */
+const rowsLeftFor = (agentName: string, table: string): unknown => {
+  const db = openRawDb();
+  deleteAgentRow(db, agentName);
+  const row = db.prepare(`SELECT * FROM ${table} WHERE agent_name = ?`).get(agentName);
+  db.close();
+  return row;
+};
+
+/**
+ * Closes the fixture db, asserts `column`=`value` has `expected` messages, and
+ * deletes `value`'s identity row; returns the open raw connection.
+ */
+const closeAndDeleteAfterCountCheck = async (
+  fixtureDb: TooManyCooksDb,
+  column: string,
+  value: string,
+  expected: number,
+): Promise<Database.Database> => {
+  const db = await closeAndOpenRaw(fixtureDb);
+  const before = messageCount(db, column, value);
+  assert.strictEqual(
+    before,
+    expected,
+    `Sanity: ${value} must have ${String(expected)} messages in ${column} before delete`,
+  );
+  deleteAgentRow(db, value);
+  return db;
+};
+
+/** `messages` rows whose `column` equals `value`. */
+const messageCount = (
+  db: Database.Database,
+  column: string,
+  value: string,
+): number => countOf(db.prepare(`SELECT COUNT(*) as c FROM ${MESSAGES_TABLE} WHERE ${column} = ?`).get(value));
 
 describe("foreign_key_integrity", () => {
   afterEach(() => { deleteIfExists(TEST_FK_DB_PATH); });
 
   it("cascade deletes locks when agent is deleted directly", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent } = await fixtureWithAgent("fk-test-agent");
+    await fixtureDb.acquireLock("/fk/test.ts", agent.agentName, agent.agentKey, null, 60000);
+    await fixtureDb.close();
 
-    const reg = await result.value.register("fk-test-agent");
-    assert.strictEqual(reg.ok, true);
-    if (!reg.ok) { return; }
-
-    await result.value.acquireLock("/fk/test.ts", reg.value.agentName, reg.value.agentKey, null, 60000);
-    await result.value.close();
-
-    const db = openRawDb();
-    db.prepare("DELETE FROM identity WHERE agent_name = ?").run("fk-test-agent");
-    const lockRow = db.prepare("SELECT * FROM locks WHERE agent_name = ?").get("fk-test-agent");
-    db.close();
-
+    const lockRow = rowsLeftFor("fk-test-agent", "locks");
     assert.strictEqual(lockRow, undefined, "Lock must be cascade deleted with agent");
   });
 
   it("cascade deletes plans when agent is deleted directly", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent } = await fixtureWithAgent("fk-plan-agent");
+    await fixtureDb.updatePlan(agent.agentName, agent.agentKey, "Goal", "Task");
+    await fixtureDb.close();
 
-    const reg = await result.value.register("fk-plan-agent");
-    assert.strictEqual(reg.ok, true);
-    if (!reg.ok) { return; }
-
-    await result.value.updatePlan(reg.value.agentName, reg.value.agentKey, "Goal", "Task");
-    await result.value.close();
-
-    const db = openRawDb();
-    db.prepare("DELETE FROM identity WHERE agent_name = ?").run("fk-plan-agent");
-    const planRow = db.prepare("SELECT * FROM plans WHERE agent_name = ?").get("fk-plan-agent");
-    db.close();
-
+    const planRow = rowsLeftFor("fk-plan-agent", "plans");
     assert.strictEqual(planRow, undefined, "Plan must be cascade deleted with agent");
   });
 
   it("rejects lock insertion for nonexistent agent when FKs enforced", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
-    await result.value.close();
+    const result = freshTestDb(TEST_FK_DB_PATH);
+    await result.db.close();
 
     const db = openRawDb();
     assert.throws(
@@ -134,86 +178,51 @@ describe("foreign_key_integrity", () => {
   });
 
   it("cascade deletes outbound messages (from_agent) when sender is deleted", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent: sender } = await fixtureWithAgent("fk-msg-sender");
+    const receiver = await registerAgent(fixtureDb, "fk-msg-receiver");
 
-    const sender = await result.value.register("fk-msg-sender");
-    const receiver = await result.value.register("fk-msg-receiver");
-    assert.strictEqual(sender.ok, true);
-    assert.strictEqual(receiver.ok, true);
-    if (!sender.ok || !receiver.ok) { return; }
-
-    const sent = await result.value.sendMessage(
-      sender.value.agentName, sender.value.agentKey, receiver.value.agentName, "hi receiver",
+    const sent = await fixtureDb.sendMessage(
+      sender.agentName, sender.agentKey, receiver.agentName, "hi receiver",
     );
     assert.strictEqual(sent.ok, true);
-    await result.value.close();
 
-    const db = openRawDb();
-    const before = db.prepare("SELECT COUNT(*) as c FROM messages WHERE from_agent = ?").get("fk-msg-sender") as { c: number };
-    assert.strictEqual(before.c, 1, "Sanity: sender must have one outbound message before delete");
+    const db = await closeAndDeleteAfterCountCheck(fixtureDb, "from_agent", "fk-msg-sender", 1);
 
-    db.prepare("DELETE FROM identity WHERE agent_name = ?").run("fk-msg-sender");
-
-    const after = db.prepare("SELECT COUNT(*) as c FROM messages WHERE from_agent = ?").get("fk-msg-sender") as { c: number };
-    const receiverInbox = db.prepare("SELECT COUNT(*) as c FROM messages WHERE to_agent = ?").get("fk-msg-receiver") as { c: number };
+    const after = messageCount(db, "from_agent", "fk-msg-sender");
+    const receiverInbox = messageCount(db, "to_agent", "fk-msg-receiver");
     db.close();
 
-    assert.strictEqual(after.c, 0, "Outbound messages from deleted sender must be cascade-deleted");
-    assert.strictEqual(receiverInbox.c, 0, "Receiver inbox referencing dead sender must be cleaned");
+    assert.strictEqual(after, 0, "Outbound messages from deleted sender must be cascade-deleted");
+    assert.strictEqual(receiverInbox, 0, "Receiver inbox referencing dead sender must be cleaned");
   });
 
   it("cascade deletes inbound messages (to_agent) when recipient is deleted — the bug the user reported", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent: sender } = await fixtureWithAgent("fk-survives-sender");
+    const recipient = await registerAgent(fixtureDb, "fk-doomed-recipient");
 
-    const sender = await result.value.register("fk-survives-sender");
-    const recipient = await result.value.register("fk-doomed-recipient");
-    assert.strictEqual(sender.ok, true);
-    assert.strictEqual(recipient.ok, true);
-    if (!sender.ok || !recipient.ok) { return; }
-
-    const sent1 = await result.value.sendMessage(
-      sender.value.agentName, sender.value.agentKey, recipient.value.agentName, "msg 1",
+    const sent1 = await fixtureDb.sendMessage(
+      sender.agentName, sender.agentKey, recipient.agentName, "msg 1",
     );
-    const sent2 = await result.value.sendMessage(
-      sender.value.agentName, sender.value.agentKey, recipient.value.agentName, "msg 2",
+    const sent2 = await fixtureDb.sendMessage(
+      sender.agentName, sender.agentKey, recipient.agentName, "msg 2",
     );
     assert.strictEqual(sent1.ok, true);
     assert.strictEqual(sent2.ok, true);
-    await result.value.close();
 
-    const db = openRawDb();
-    const before = db.prepare("SELECT COUNT(*) as c FROM messages WHERE to_agent = ?").get("fk-doomed-recipient") as { c: number };
-    assert.strictEqual(before.c, 2, "Sanity: recipient must have two inbound messages before delete");
+    const db = await closeAndDeleteAfterCountCheck(fixtureDb, "to_agent", "fk-doomed-recipient", 2);
 
-    db.prepare("DELETE FROM identity WHERE agent_name = ?").run("fk-doomed-recipient");
-
-    const after = db.prepare("SELECT COUNT(*) as c FROM messages WHERE to_agent = ?").get("fk-doomed-recipient") as { c: number };
+    const after = messageCount(db, "to_agent", "fk-doomed-recipient");
     const senderStillThere: unknown = db.prepare("SELECT agent_name FROM identity WHERE agent_name = ?").get("fk-survives-sender");
     db.close();
 
-    assert.strictEqual(after.c, 0, "Inbound messages to deleted recipient MUST be cascade-deleted — no orphans");
+    assert.strictEqual(after, 0, "Inbound messages to deleted recipient MUST be cascade-deleted — no orphans");
     assert.notStrictEqual(senderStillThere, undefined, "Sender must survive deletion of recipient");
   });
 
   it("rejects message insertion for nonexistent to_agent when FKs enforced", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
-
-    const sender = await result.value.register("fk-orphan-sender");
-    assert.strictEqual(sender.ok, true);
-    if (!sender.ok) { return; }
-    await result.value.close();
+    const result = freshTestDb(TEST_FK_DB_PATH);
+    await registerAgent(result.db, "fk-orphan-sender");
+    await result.db.close();
 
     const db = openRawDb();
     assert.throws(
@@ -229,42 +238,33 @@ describe("foreign_key_integrity", () => {
   });
 
   it("broadcast sentinel row exists so to_agent='*' is FK-valid", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent: sender } = await fixtureWithAgent("fk-broadcast-sender");
 
-    const sender = await result.value.register("fk-broadcast-sender");
-    assert.strictEqual(sender.ok, true);
-    if (!sender.ok) { return; }
-
-    const broadcast = await result.value.sendMessage(
-      sender.value.agentName, sender.value.agentKey, BROADCAST, "hello everyone",
+    const broadcast = await fixtureDb.sendMessage(
+      sender.agentName, sender.agentKey, BROADCAST, "hello everyone",
     );
     assert.strictEqual(broadcast.ok, true, "Broadcast send must succeed thanks to '*' sentinel row");
-    await result.value.close();
 
-    const db = openRawDb();
-    const sentinel = db.prepare("SELECT agent_name AS agentName, active FROM identity WHERE agent_name = ?").get(BROADCAST) as { agentName: string; active: number } | undefined;
-    const broadcastRow = db.prepare("SELECT to_agent AS toAgent, content FROM messages WHERE to_agent = ?").get(BROADCAST) as { toAgent: string; content: string } | undefined;
+    const db = await closeAndOpenRaw(fixtureDb);
+    const sentinelRow = db.prepare("SELECT agent_name AS agentName, active FROM identity WHERE agent_name = ?").get(BROADCAST);
+    const broadcastRowRaw = db.prepare("SELECT to_agent AS toAgent, content FROM messages WHERE to_agent = ?").get(BROADCAST);
     db.close();
 
-    assert.notStrictEqual(sentinel, undefined, "Broadcast sentinel identity row must exist");
-    assert.strictEqual(sentinel?.active, 0, "Sentinel must be inactive so it never appears in agent lists");
-    assert.notStrictEqual(broadcastRow, undefined, "Broadcast message must be stored against to_agent='*'");
-    assert.strictEqual(broadcastRow?.content, "hello everyone");
+    assert.notStrictEqual(sentinelRow, undefined, "Broadcast sentinel identity row must exist");
+    const sentinelActive = isRecord(sentinelRow)
+      ? getNumberField(sentinelRow, "active")
+      : undefined;
+    assert.strictEqual(sentinelActive, 0, "Sentinel must be inactive so it never appears in agent lists");
+    assert.notStrictEqual(broadcastRowRaw, undefined, "Broadcast message must be stored against to_agent='*'");
+    const content = isRecord(broadcastRowRaw) ? getStringField(broadcastRowRaw, "content") : "";
+    assert.strictEqual(content, "hello everyone");
   });
 
   it("register rejects '*' because it would collide with the broadcast sentinel", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const result = freshTestDb(TEST_FK_DB_PATH);
 
-    const rejected = await result.value.register(BROADCAST);
-    await result.value.close();
+    const rejected = await result.db.register(BROADCAST);
+    await result.db.close();
 
     assert.strictEqual(rejected.ok, false, "Registering '*' must be rejected");
     if (rejected.ok) { return; }
@@ -272,55 +272,40 @@ describe("foreign_key_integrity", () => {
   });
 
   it("adminDeleteAgent refuses to delete the broadcast sentinel", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const result = freshTestDb(TEST_FK_DB_PATH);
 
-    const refused = await result.value.adminDeleteAgent(BROADCAST);
+    const refused = await result.db.adminDeleteAgent(BROADCAST);
     assert.strictEqual(refused.ok, false, "adminDeleteAgent must refuse to delete the sentinel");
 
-    const sender = await result.value.register("fk-still-broadcasting");
-    assert.strictEqual(sender.ok, true);
-    if (!sender.ok) { return; }
-    const broadcast = await result.value.sendMessage(
-      sender.value.agentName, sender.value.agentKey, BROADCAST, "still works",
+    const sender = await registerAgent(result.db, "fk-still-broadcasting");
+    const broadcast = await result.db.sendMessage(
+      sender.agentName, sender.agentKey, BROADCAST, "still works",
     );
-    await result.value.close();
+    await result.db.close();
 
     assert.strictEqual(broadcast.ok, true, "Broadcast must still work after refused delete attempt");
   });
 
   it("cascade is end-to-end: adminDeleteAgent wipes locks, plans, outbound AND inbound messages", async () => {
-    deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { return; }
+    const { db: fixtureDb, agent: alice } = await fixtureWithAgent("fk-alice");
+    const bob = await registerAgent(fixtureDb, "fk-bob");
 
-    const alice = await result.value.register("fk-alice");
-    const bob = await result.value.register("fk-bob");
-    assert.strictEqual(alice.ok, true);
-    assert.strictEqual(bob.ok, true);
-    if (!alice.ok || !bob.ok) { return; }
+    await fixtureDb.acquireLock("/a.ts", alice.agentName, alice.agentKey, "edit", 60000);
+    await fixtureDb.acquireLock("/b.ts", alice.agentName, alice.agentKey, "edit", 60000);
+    await fixtureDb.updatePlan(alice.agentName, alice.agentKey, "Goal", "Task");
+    await fixtureDb.sendMessage(alice.agentName, alice.agentKey, bob.agentName, "out 1");
+    await fixtureDb.sendMessage(alice.agentName, alice.agentKey, bob.agentName, "out 2");
+    await fixtureDb.sendMessage(bob.agentName, bob.agentKey, alice.agentName, "in 1");
+    await fixtureDb.sendMessage(alice.agentName, alice.agentKey, BROADCAST, "shout");
 
-    await result.value.acquireLock("/a.ts", alice.value.agentName, alice.value.agentKey, "edit", 60000);
-    await result.value.acquireLock("/b.ts", alice.value.agentName, alice.value.agentKey, "edit", 60000);
-    await result.value.updatePlan(alice.value.agentName, alice.value.agentKey, "Goal", "Task");
-    await result.value.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, "out 1");
-    await result.value.sendMessage(alice.value.agentName, alice.value.agentKey, bob.value.agentName, "out 2");
-    await result.value.sendMessage(bob.value.agentName, bob.value.agentKey, alice.value.agentName, "in 1");
-    await result.value.sendMessage(alice.value.agentName, alice.value.agentKey, BROADCAST, "shout");
-
-    const wipe = await result.value.adminDeleteAgent("fk-alice");
+    const wipe = await fixtureDb.adminDeleteAgent("fk-alice");
     assert.strictEqual(wipe.ok, true, "adminDeleteAgent must succeed");
 
-    const locksAfter = await result.value.listLocks();
-    const plansAfter = await result.value.listPlans();
-    const messagesAfter = await result.value.listAllMessages();
-    const agentsAfter = await result.value.listAgents();
-    await result.value.close();
+    const locksAfter = await fixtureDb.listLocks();
+    const plansAfter = await fixtureDb.listPlans();
+    const messagesAfter = await fixtureDb.listAllMessages();
+    const agentsAfter = await fixtureDb.listAgents();
+    await fixtureDb.close();
 
     assert.strictEqual(locksAfter.ok, true);
     assert.strictEqual(plansAfter.ok, true);
@@ -341,45 +326,38 @@ describe("foreign_key_integrity", () => {
 
   /// [VSIX-REMOVE-AGENT] Issue #43, Hypothesis A: on a DB that predates the
   /// to_agent cascade migration, reopening through createDb must repair the schema
-  /// (prisma db push rebuilds the table with ON DELETE CASCADE) so that deleting a
+  /// ([DB-MIGRATE] DataProviderMigrate diffs the FK and rebuilds the table with
+  /// ON DELETE CASCADE) so that deleting a
   /// recipient cascade-deletes their inbound messages — no orphans survive. This
   /// is the legacy-DB counterpart to the fresh-DB cascade tests above.
   it("repairs a pre-cascade messages table on reopen, then cascade-deletes inbound messages (#43)", async () => {
     deleteIfExists(TEST_FK_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_FK_DB_PATH });
-    const first = createDb(config);
-    assert.strictEqual(first.ok, true);
-    if (!first.ok) { return; }
-    await first.value.close();
+    const first = openTestDb(TEST_FK_DB_PATH);
+    await first.db.close();
 
     downgradeMessagesToPreCascade(TEST_FK_DB_PATH);
     assert.match(
       messagesDdl(TEST_FK_DB_PATH),
-      /messages_to_agent_fkey[\s\S]*ON DELETE NO ACTION/u,
+      TO_AGENT_FK_NO_ACTION,
       "precondition: legacy messages table must lack the to_agent cascade",
     );
 
-    const second = createDb(config);
-    assert.strictEqual(second.ok, true, "reopen must succeed and repair the schema via prisma db push");
-    if (!second.ok) { return; }
+    const second = openTestDb(TEST_FK_DB_PATH);
 
     assert.match(
       messagesDdl(TEST_FK_DB_PATH),
-      /messages_to_agent_fkey[\s\S]*ON DELETE CASCADE/u,
-      "db push must rebuild the messages table with the to_agent cascade",
+      TO_AGENT_FK_CASCADE,
+      "the migration must rebuild the messages table with the to_agent cascade",
     );
 
-    const sender = await second.value.register("pre-sender");
-    const recipient = await second.value.register("pre-recipient");
-    assert.strictEqual(sender.ok, true);
-    assert.strictEqual(recipient.ok, true);
-    if (!sender.ok || !recipient.ok) { return; }
-    await second.value.sendMessage(sender.value.agentName, sender.value.agentKey, recipient.value.agentName, "legacy inbound");
+    const sender = await registerAgent(second.db, "pre-sender");
+    const recipient = await registerAgent(second.db, "pre-recipient");
+    await second.db.sendMessage(sender.agentName, sender.agentKey, recipient.agentName, "legacy inbound");
 
-    const wipe = await second.value.adminDeleteAgent("pre-recipient");
+    const wipe = await second.db.adminDeleteAgent("pre-recipient");
     assert.strictEqual(wipe.ok, true, "deleting the recipient must succeed");
-    const after = await second.value.listAllMessages();
-    await second.value.close();
+    const after = await second.db.listAllMessages();
+    await second.db.close();
 
     assert.strictEqual(after.ok, true);
     if (!after.ok) { return; }

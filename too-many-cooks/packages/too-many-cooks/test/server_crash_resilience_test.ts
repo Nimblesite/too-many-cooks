@@ -11,19 +11,22 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import {
+  adminStatusCode,
+  buildBaseUrl,
+  spawnServer,
+  waitForServer,
+  stopAndRemove,
+} from "./support/server_process.js";
 
 // ============================================================
 // Constants
 // ============================================================
 
 const PORT_SIGTERM_TEST = 4054;
-const MAX_POLL_ATTEMPTS = 30;
-const POLL_INTERVAL_MS = 200;
-const ADMIN_STATUS_PATH = "/admin/status";
 const TMP_PREFIX = "/tmp/tmc-crash-test-";
 const STATUS_OK = 200;
 const EXIT_SETTLE_MS = 1000;
@@ -32,50 +35,24 @@ const EXIT_SETTLE_MS = 1000;
 // Helpers
 // ============================================================
 
-const buildBaseUrl = (port: number): string =>
-  `http://localhost:${String(port)}`;
-
-const spawnOnPort = (port: number): {
+/** Spawns the server on `port`, waits until it answers, keeping its stderr. */
+const spawnOnPort = async (port: number): Promise<{
   readonly proc: ChildProcess;
   readonly workspace: string;
-  readonly stderr: string[];
-} => {
-  const workspace = mkdtempSync(TMP_PREFIX);
-  const stderr: string[] = [];
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      TMC_PORT: String(port),
-      TMC_WORKSPACE: workspace,
-    },
-  });
-  proc.stderr?.on("data", (chunk: Buffer): void => {
-    stderr.push(chunk.toString());
-  });
-  return { proc, workspace, stderr };
+  readonly stderr: readonly string[];
+}> => {
+  const spawned = spawnServer({ port, tmpPrefix: TMP_PREFIX, captureStderr: true });
+  await waitForServer(buildBaseUrl(port));
+  return spawned;
 };
 
-const pollUntilReady = async (port: number): Promise<void> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) { return; }
-    } catch {
-      // Not ready yet
-    }
-    if (i === MAX_POLL_ATTEMPTS - 1) {
-      throw new Error(`Server on port ${String(port)} failed to start`);
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-};
-
-const fetchStatus = async (port: number): Promise<number> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  const response = await fetch(url);
-  return response.status;
+/** Asserts `text` carries one of the graceful-shutdown markers; `label` says where. */
+const assertShutdownMarker = (text: string, label: string): void => {
+  assert.ok(
+    text.includes("shutting down") || text.includes("Shutting down") ||
+    text.includes("SIGTERM") || text.includes("Server stopped"),
+    `${label} MUST contain a shutdown/SIGTERM message on graceful exit. Got:\n${text.substring(0, 500)}`,
+  );
 };
 
 // ============================================================
@@ -85,23 +62,17 @@ const fetchStatus = async (port: number): Promise<number> => {
 describe("server handles SIGTERM gracefully (not silent death)", () => {
   let proc: ChildProcess;
   let workspace: string;
-  let stderr: string[];
+  let stderr: readonly string[] = [];
 
-  after(() => {
-    proc.kill("SIGKILL");
-    rmSync(workspace, { recursive: true, force: true });
+  after(async () => {
+    await stopAndRemove({ proc, workspace }, "SIGKILL");
   });
 
   it("logs shutdown message to log file on SIGTERM", async () => {
-    const spawned = spawnOnPort(PORT_SIGTERM_TEST);
-    proc = spawned.proc;
-    workspace = spawned.workspace;
-    stderr = spawned.stderr;
-
-    await pollUntilReady(PORT_SIGTERM_TEST);
+    ({ proc, workspace, stderr } = await spawnOnPort(PORT_SIGTERM_TEST));
 
     // Verify server is alive
-    const statusBefore = await fetchStatus(PORT_SIGTERM_TEST);
+    const statusBefore = await adminStatusCode(PORT_SIGTERM_TEST);
     assert.strictEqual(statusBefore, STATUS_OK, "Server MUST be alive before SIGTERM");
 
     // Send SIGTERM — this is what happens when the process is killed normally
@@ -122,19 +93,9 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
 
     // THE KEY ASSERTION: The log MUST contain a shutdown message.
     // Currently FAILS: SIGTERM kills the process silently, no shutdown logged.
-    assert.ok(
-      logContent.includes("shutting down") || logContent.includes("Shutting down") ||
-      logContent.includes("SIGTERM") || logContent.includes("Server stopped"),
-      `Log MUST contain shutdown/SIGTERM message on graceful exit. ` +
-      `Got log:\n${logContent}`,
-    );
+    assertShutdownMarker(logContent, "Log");
 
     // Verify stderr also got the message (for console visibility)
-    const stderrText = stderr.join("");
-    assert.ok(
-      stderrText.includes("shutting down") || stderrText.includes("Shutting down") ||
-      stderrText.includes("SIGTERM") || stderrText.includes("Server stopped"),
-      `Stderr MUST contain shutdown message. Got:\n${stderrText.substring(0, 500)}`,
-    );
+    assertShutdownMarker(stderr.join(""), "Stderr");
   });
 });

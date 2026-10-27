@@ -8,61 +8,28 @@
 /// Reset should clear transient data (locks, messages, plans)
 /// but preserve agent identities so agents can reconnect.
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import fs from 'node:fs';
+import { bindTestDb } from "./support/db_fixture.js";
+import { expectOk } from "./support/assertions.js";
 
-import {
-  type TooManyCooksDb,
-  createDataConfig,
-} from 'too-many-cooks-core';
-import { createDb } from '../src/db-sqlite.js';
-
-const TEST_DB_PATH = '.test_admin_reset_identity.db' as const;
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  } catch {
-    // ignore
-  }
-};
+const TEST_DB_PATH = '.test_admin_reset_identity.db';
 
 describe('admin_reset_preserves_identity_test', () => {
-  let db: TooManyCooksDb | undefined;
-
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (result.ok) {
-      db = result.value;
-    }
-  });
-
-  afterEach(async () => {
-    await db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  const testDb = bindTestDb(TEST_DB_PATH);
 
   it('agent can reconnect with saved key after adminReset', async () => {
     // 1. Register an agent and save the key
-    const regResult = await db!.register('persistent-agent');
-    assert.strictEqual(regResult.ok, true);
-    if (!regResult.ok) {return;}
-    const reg = regResult.value;
+    const reg = expectOk(await testDb.db().register('persistent-agent'), 'reg must be ok');
     assert.strictEqual(reg.agentKey.length, 64);
 
     // 2. Call adminReset (should clear transient data)
-    const resetResult = await db!.adminReset();
+    const resetResult = await testDb.db().adminReset();
     assert.strictEqual(resetResult.ok, true);
 
     // 3. Try to reconnect with the saved key
-    const lookupResult = await db!.lookupByKey(reg.agentKey);
+    const lookupResult = await testDb.db().lookupByKey(reg.agentKey);
 
     // 4. ASSERT: reconnection MUST succeed
     assert.strictEqual(lookupResult.ok, true);
@@ -73,31 +40,28 @@ describe('admin_reset_preserves_identity_test', () => {
 
   it('adminReset clears locks and plans', async () => {
     // Register and create transient data
-    const regResult = await db!.register('transient-agent');
-    assert.strictEqual(regResult.ok, true);
-    if (!regResult.ok) {return;}
-    const reg = regResult.value;
-    await db!.activate('transient-agent');
-    await db!.acquireLock(
+    const reg = expectOk(await testDb.db().register('transient-agent'), 'reg must be ok');
+    await testDb.db().activate('transient-agent');
+    await testDb.db().acquireLock(
       'test.dart',
       reg.agentName,
       reg.agentKey,
       'testing',
       600000,
     );
-    await db!.updatePlan(reg.agentName, reg.agentKey, 'test goal', 'test task');
+    await testDb.db().updatePlan(reg.agentName, reg.agentKey, 'test goal', 'test task');
 
     // Reset
-    await db!.adminReset();
+    await testDb.db().adminReset();
 
     // Locks and plans should be empty
-    const locksResult = await db!.listLocks();
+    const locksResult = await testDb.db().listLocks();
     assert.strictEqual(locksResult.ok, true);
     if (locksResult.ok) {
       assert.strictEqual(locksResult.value.length, 0);
     }
 
-    const plansResult = await db!.listPlans();
+    const plansResult = await testDb.db().listPlans();
     assert.strictEqual(plansResult.ok, true);
     if (plansResult.ok) {
       assert.strictEqual(plansResult.value.length, 0);

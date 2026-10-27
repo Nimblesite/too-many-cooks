@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+### Fixed
+- The extension's local server launch (`npx -y too-many-cooks@latest`) no longer fails during database creation: the server now migrates with a bundled DataProviderMigrate binary instead of spawning `npx prisma`.
+
+### Changed
+- Built with TypeScript 7; linted with `oxlint --type-aware`. Dev dependencies upgraded (mocha 12, @vscode/test-electron 3.1); `npm audit` clean.
+
 ## 0.4.0
 
 ### Added

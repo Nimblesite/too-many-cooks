@@ -3,10 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import fs from "node:fs";
-
 import {
-  createDataConfig,
   ERR_NOT_FOUND,
   ERR_UNAUTHORIZED,
   ERR_LOCK_HELD,
@@ -14,67 +11,30 @@ import {
   ERR_VALIDATION,
   ERR_DATABASE,
 } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  } catch {
-    // ignore
-  }
-};
-
-const deleteDirIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.rmSync(path, { recursive: true });
-    }
-  } catch {
-    // ignore
-  }
-};
+import { deleteDirIfExists, deleteIfExists } from "./support/fs_helpers.js";
+import { freshTestDb } from "./support/db_fixture.js";
 
 describe("database", () => {
   it("createDb succeeds with valid path", async () => {
-    const testDbPath = ".test_create_db.db" as const;
-    deleteIfExists(testDbPath);
-
-    const config = createDataConfig({ dbPath: testDbPath });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-
-    if (result.ok) {
-      await result.value.close();
-    }
+    const testDbPath = ".test_create_db.db";
+    const { db } = freshTestDb(testDbPath);
+    await db.close();
     deleteIfExists(testDbPath);
   });
 
   it("createDb creates parent directory if needed", async () => {
-    const testDir = ".test_nested_dir" as const;
+    const testDir = ".test_nested_dir";
     const testDbPath = `${testDir}/subdir/data.db`;
     deleteDirIfExists(testDir);
 
-    const config = createDataConfig({ dbPath: testDbPath });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-
-    if (result.ok) {
-      await result.value.close();
-    }
+    const { db } = freshTestDb(testDbPath);
+    await db.close();
     deleteDirIfExists(testDir);
   });
 
   it("close succeeds", async () => {
-    const testDbPath = ".test_close.db" as const;
-    deleteIfExists(testDbPath);
-
-    const config = createDataConfig({ dbPath: testDbPath });
-    const createResult = createDb(config);
-    assert.strictEqual(createResult.ok, true);
-    if (!createResult.ok) {return;}
-    const db = createResult.value;
+    const testDbPath = ".test_close.db";
+    const { db } = freshTestDb(testDbPath);
 
     const closeResult = await db.close();
     assert.strictEqual(closeResult.ok, true);

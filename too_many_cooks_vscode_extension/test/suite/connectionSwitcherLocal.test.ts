@@ -21,7 +21,10 @@ import {
   resetServerState,
   assertOk,
   assertEqual,
+  TEST_PORT,
 } from './testHelpers';
+
+import { isRecord } from '../../src/services/httpClient';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,6 +54,37 @@ async function registerAgent(name: string): Promise<string> {
   const api = getTestAPI();
   const result: string = await callToolString(api, 'register', { name });
   return extractKeyFromResult(result);
+}
+
+/** Read an MCP config file and return its mcpServers object. */
+function readMcpServers(filePath: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  if (!isRecord(parsed)) {
+    throw new Error(`MCP config is not an object: ${filePath}`);
+  }
+  const servers = parsed['mcpServers'];
+  if (!isRecord(servers)) {
+    throw new Error(`MCP config mcpServers is not an object: ${filePath}`);
+  }
+  return servers;
+}
+
+/** Return a named MCP server entry, throwing when it is not an object. */
+function getServerEntry(servers: Record<string, unknown>, name: string): Record<string, unknown> {
+  const entry = servers[name];
+  if (!isRecord(entry)) {
+    throw new Error(`MCP server "${name}" is not an object`);
+  }
+  return entry;
+}
+
+/** Return the env object of an MCP server entry, throwing when missing. */
+function getEnvObject(server: Record<string, unknown>): Record<string, unknown> {
+  const env = server['env'];
+  if (!isRecord(env)) {
+    throw new Error('MCP server env is not an object');
+  }
+  return env;
 }
 
 suite('Connection Switcher', () => {
@@ -233,7 +267,7 @@ suite('Connection Switcher', () => {
     // setTarget to a local target and verify it doesn't break existing connection
     // (StoreManager.setTarget just reconfigures URL, doesn't reconnect)
     const sm = api.getStoreManager();
-    sm.setTarget({ mode: 'local', port: 4040, transport: 'http-streamable' });
+    sm.setTarget({ mode: 'local', port: Number(TEST_PORT), transport: 'http-streamable' });
     assertEqual(sm.getConnectionMode(), 'local', 'mode is local');
     const target = sm.getTarget();
     assertOk(target !== null, 'target not null');
@@ -246,7 +280,7 @@ suite('Connection Switcher', () => {
     assertEqual(sm.getTarget(), null, 'target null after disconnect');
 
     // Reconnect works after setTarget
-    sm.setTarget({ mode: 'local', port: 4040, transport: 'http-streamable' });
+    sm.setTarget({ mode: 'local', port: Number(TEST_PORT), transport: 'http-streamable' });
     await sm.connect();
     await waitForConnection();
     assertEqual(sm.getConnectionMode(), 'local', 'mode after reconnect');
@@ -287,28 +321,31 @@ suite('Connection Switcher', () => {
 
       // ── Write HTTP config ──
       mgr.writeHttpStreamableConfig(agents, 4040);
-      const httpJson = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
-      assertEqual(httpJson.mcpServers['too-many-cooks'].url, 'http://localhost:4040/mcp', 'http url');
-      assertEqual(httpJson.mcpServers['other-mcp'].url, 'http://other:9999', 'other preserved after http write');
+      const httpServers = readMcpServers(mcpConfigPath);
+      const httpTmc = getServerEntry(httpServers, 'too-many-cooks');
+      const httpOther = getServerEntry(httpServers, 'other-mcp');
+      assertEqual(httpTmc['url'], 'http://localhost:4040/mcp', 'http url');
+      assertEqual(httpOther['url'], 'http://other:9999', 'other preserved after http write');
       assertOk(logs.some((l) => l.includes('claude-code')), 'log mentions agent');
 
       // ── Overwrite with stdio ──
       mgr.writeStdioConfig(agents, { apiKey: 'k', workspaceId: 'w', passphrase: 'p' });
-      const stdioJson = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
-      const tmc = stdioJson.mcpServers['too-many-cooks'];
-      assertEqual(tmc.command, 'npx', 'stdio command');
-      assertOk(Array.isArray(tmc.args), 'stdio args array');
-      assertEqual(tmc.env.TMC_API_KEY, 'k', 'stdio api key');
-      assertEqual(tmc.env.TMC_WORKSPACE_ID, 'w', 'stdio workspace id');
-      assertEqual(tmc.env.TMC_WORKSPACE_SECRET, 'p', 'stdio passphrase');
-      assertOk(tmc.url === undefined, 'http url gone after stdio overwrite');
-      assertEqual(stdioJson.mcpServers['other-mcp'].url, 'http://other:9999', 'other preserved after stdio write');
+      const stdioServers = readMcpServers(mcpConfigPath);
+      const tmc = getServerEntry(stdioServers, 'too-many-cooks');
+      assertEqual(tmc['command'], 'npx', 'stdio command');
+      assertOk(Array.isArray(tmc['args']), 'stdio args array');
+      const tmcEnv = getEnvObject(tmc);
+      assertEqual(tmcEnv['TMC_API_KEY'], 'k', 'stdio api key');
+      assertEqual(tmcEnv['TMC_WORKSPACE_ID'], 'w', 'stdio workspace id');
+      assertEqual(tmcEnv['TMC_WORKSPACE_SECRET'], 'p', 'stdio passphrase');
+      assertOk(tmc['url'] === undefined, 'http url gone after stdio overwrite');
+      assertEqual(getServerEntry(stdioServers, 'other-mcp')['url'], 'http://other:9999', 'other preserved after stdio write');
 
       // ── Remove ──
       mgr.removeConfig(agents);
-      const afterRemove = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
-      assertEqual(afterRemove.mcpServers['too-many-cooks'], undefined, 'tmc removed');
-      assertEqual(afterRemove.mcpServers['other-mcp'].url, 'http://other:9999', 'other preserved after remove');
+      const afterRemoveServers = readMcpServers(mcpConfigPath);
+      assertEqual(afterRemoveServers['too-many-cooks'], undefined, 'tmc removed');
+      assertEqual(getServerEntry(afterRemoveServers, 'other-mcp')['url'], 'http://other:9999', 'other preserved after remove');
 
       // ── getConfigPath ──
       assertOk(mgr.getConfigPath('claude-code').endsWith('.mcp.json'), 'claude path');

@@ -2,30 +2,39 @@ name: Release
 
 # Tag → release. The tagged SHA is built verbatim: NO branch detection, NO
 # commit, NO push, NO tag mutation. Version is stamped runner-local from the tag
-# in each build job. [CI-RELEASE]
+# in each build job, BEFORE build/pack. [SWR-VERSION-BUILD-STAMPING]
 #
-# Shape: build jobs produce ARTIFACTS only (never touch the GitHub release);
-# one github-release job creates the release from those artifacts (no parallel
-# softprops race); the registry publish jobs consume the same VSIX artifact so
-# identical bytes ship everywhere.
+# Shape: scope (what changed) → CodeQL + full CI gate on the tagged SHA → build
+# jobs produce ARTIFACTS only (provenance + CycloneDX SBOM attested per artifact)
+# → one github-release job publishes them with a cosign-signed SHA256SUMS → the
+# registry jobs consume the SAME artifacts, so identical bytes ship everywhere.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
 
-# Least-privilege default: every job is read-only unless it explicitly escalates
-# (github-release needs contents: write; OIDC jobs need id-token: write).
+# Least-privilege default: every job is read-only unless it explicitly escalates.
 # [SWR-SEC-TOKEN-PRIVILEGE]
 permissions:
   contents: read
 
 jobs:
+  # [SWR-REL-CHANGES-*] Diff this tag against the previous one. A server change
+  # (`binary`) releases everything; an extension-only or website-only change
+  # skips the npm publish. Unclassified paths fail safe to a full release.
+  scope:
+    name: Release scope
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-change-detection.yml
+    with:
+      shipwright_rev: 369a32556f44c8db581b5886bc47756d3ad660a4
+
   # CodeQL release gate ([GITHUB-CODE-SCANNING]). Scans the tagged SHA with the
-  # current query set and FAILS on any High/Critical finding. Both build jobs and
-  # deploy-website `needs:` this (the registry publishes transitively via
-  # build-vsix), so a dirty scan BLOCKS the release — code CodeQL flagged can
-  # never ship. Reuses codeql.yml via workflow_call (DRY — no duplicated matrix).
+  # current query set and FAILS on any High/Critical finding, so code CodeQL
+  # flagged can never ship. Reuses codeql.yml via workflow_call.
   codeql:
     name: CodeQL release gate
     permissions:
@@ -36,47 +45,44 @@ jobs:
     with:
       gate: true
 
+  # [SWR-REL-WORKFLOW] lint + test (coverage gate) + build + vuln scan +
+  # supply-chain lint on the exact tagged SHA, before anything publishes.
+  ci:
+    name: CI gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   build-mcp:
     name: Build & Publish npm Packages
     runs-on: ubuntu-latest
-    needs: codeql
+    needs: [scope, codeql, ci]
+    if: needs.scope.outputs.full == 'true'
     environment: NPM Deployment
     permissions:
       contents: read
-      id-token: write # npm Trusted Publisher (OIDC) — no NPM_TOKEN
+      id-token: write     # npm Trusted Publisher (OIDC) + Sigstore attestations
+      attestations: write # [SWR-SEC-PROVENANCE] [SWR-SEC-SBOM]
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '22'
+          persist-credentials: false
+
+      # Node 24 bundles npm >= 11.5.1 (required for Trusted Publisher OIDC), so
+      # no `npm install -g npm@latest` floats an unpinned npm into the job that
+      # publishes. No dependency cache on a publishing job (cache poisoning).
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'npm'
-          cache-dependency-path: too-many-cooks/package-lock.json
+          package-manager-cache: false
 
-      - name: Upgrade npm to >= 11.5 (Trusted Publisher OIDC auth)
-        run: npm install -g npm@latest
-
-      - name: Install dependencies
-        working-directory: too-many-cooks
-        run: npm ci
-
-      - name: Build all packages
-        working-directory: too-many-cooks
-        run: npm run build
-
-      - name: Verify server binary
+      - name: Require npm >= 11.5.1 (Trusted Publisher OIDC)
         run: |
-          set -e
-          test -f too-many-cooks/packages/too-many-cooks/build/bin/server.js || (echo "Server build failed!" && exit 1)
-          echo "MCP server built successfully"
-
-      - name: Verify core build
-        run: |
-          set -e
-          test -f too-many-cooks/packages/core/build/index.js || (echo "Core build failed!" && exit 1)
-          echo "Core package built successfully"
+          set -euo pipefail
+          npm --version
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)"
 
       - name: Set version and npm tag from git tag
         id: version
@@ -87,116 +93,206 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "NPM_TAG=$NPM_TAG" >> "$GITHUB_OUTPUT"
 
-      # First-class package.json mutation via `npm version` / `npm pkg set` — no
-      # ad hoc sed on a structured file. [SWR-VERSION-BUILD-STAMPING]
-      - name: Stamp versions for publishing
+      # Same stamper release_version_stamp_test.ts and
+      # release_stamped_version_reported_test.ts exercise with a test version.
+      - name: Stamp versions
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: bash scripts/stamp-version.sh "$VERSION"
+
+      - name: Install dependencies
+        working-directory: too-many-cooks
+        run: npm ci
+
+      - name: Build all packages
+        working-directory: too-many-cooks
+        run: npm run build
+
+      - name: Verify builds and --version
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -euo pipefail
-          VERSION=${{ steps.version.outputs.VERSION }}
-          cd too-many-cooks/packages/core
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          cd ../too-many-cooks
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          npm pkg set "dependencies.too-many-cooks-core=^$VERSION"
+          test -f too-many-cooks/packages/core/build/index.js
+          out="$(node too-many-cooks/packages/too-many-cooks/build/bin/server.js --version | head -n1)"
+          echo "$out"
+          test "$out" = "too-many-cooks ${VERSION}"
 
-      - name: Publish too-many-cooks-core to npm
-        working-directory: too-many-cooks/packages/core
-        run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
+      - name: Pack tarballs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          (cd too-many-cooks/packages/core && npm pack --pack-destination "$GITHUB_WORKSPACE/dist")
+          (cd too-many-cooks/packages/too-many-cooks && npm pack --pack-destination "$GITHUB_WORKSPACE/dist")
+          ls -l dist
 
-      - name: Publish too-many-cooks to npm
-        working-directory: too-many-cooks/packages/too-many-cooks
-        run: npm publish --tag ${{ steps.version.outputs.NPM_TAG }} --provenance --access public
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: too-many-cooks
+          format: cyclonedx-json
+          output-file: dist/too-many-cooks-${{ steps.version.outputs.VERSION }}.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
 
-      - name: Pack core tarball
-        working-directory: too-many-cooks/packages/core
-        run: npm pack
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.tgz
 
-      - name: Pack MCP server tarball
-        working-directory: too-many-cooks/packages/too-many-cooks
-        run: npm pack
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/*.tgz
+          sbom-path: dist/too-many-cooks-${{ steps.version.outputs.VERSION }}.cdx.json
 
-      - name: Upload npm tarballs as artifacts
+      # Publishes the exact attested tarballs. Core first (the server depends on
+      # it). Skip-if-published makes a re-run over a released version safe.
+      - name: Publish to npm (OIDC, provenance)
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          NPM_TAG: ${{ steps.version.outputs.NPM_TAG }}
+        run: |
+          set -euo pipefail
+          for pkg in too-many-cooks-core too-many-cooks; do
+            if npm view "${pkg}@${VERSION}" version >/dev/null 2>&1; then
+              echo "${pkg}@${VERSION} already published; skipping"
+              continue
+            fi
+            npm publish "dist/${pkg}-${VERSION}.tgz" --tag "$NPM_TAG" --provenance --access public
+          done
+
+      - name: Upload npm artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-tarballs
-          path: |
-            too-many-cooks/packages/core/too-many-cooks-core-${{ steps.version.outputs.VERSION }}.tgz
-            too-many-cooks/packages/too-many-cooks/too-many-cooks-${{ steps.version.outputs.VERSION }}.tgz
+          path: dist/
           if-no-files-found: error
 
-  # Build the VSIX exactly once and publish it as an artifact. The github-release,
-  # Marketplace and Open VSX jobs consume that SAME artifact, so identical bytes
-  # ship everywhere. The extension bundles NO native binaries (pure JS that talks
-  # to the MCP server over HTTP), so a single universal VSIX is correct — no
-  # per-target build, and no dependency on build-mcp.
+  # [SWR-VSIX-PACKAGE] One VSIX per target, built AND booted on its native
+  # runner, contents verified — the same workflow every PR runs. A vsix-only
+  # release still rebuilds the server at the new version: the extension checks
+  # --version == its own version ([SWR-REL-CHANGES-CONTRACT]).
   build-vsix:
-    name: Build VSCode Extension
-    runs-on: ubuntu-latest
-    needs: codeql
+    name: Build VSCode Extensions
+    needs: [scope, codeql, ci]
+    if: needs.scope.outputs.vsix == 'true'
     permissions:
       contents: read
+    uses: ./.github/workflows/vsix-platforms.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  # Attest the four verified packages. The github-release, Marketplace and
+  # Open VSX jobs consume THIS `vsix` artifact, so identical, verified bytes
+  # ship everywhere.
+  verify-vsix:
+    name: Attest VSIX packages
+    runs-on: ubuntu-24.04
+    needs: build-vsix
+    permissions:
+      contents: read
+      id-token: write     # Sigstore attestations
+      attestations: write # [SWR-VSIX-PROVENANCE] [SWR-SEC-SBOM]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: vsix-*
+          path: dist
+          merge-multiple: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: too_many_cooks_vscode_extension/package-lock.json
+          package-manager-cache: false
 
-      - name: Install extension dependencies
+      - name: Install extension dependencies (SBOM input)
         working-directory: too_many_cooks_vscode_extension
         run: npm ci
 
-      - name: Set version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/too-many-cooks-vscode-${{ github.ref_name }}.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
 
-      # vsce is version-pinned: a floating `npx @vscode/vsce` would fetch and run
-      # the latest release at package time — a supply-chain risk. Bump deliberately.
-      - name: Package VSCode extension
-        working-directory: too_many_cooks_vscode_extension
-        run: |
-          set -euo pipefail
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
-          npx --yes @vscode/vsce@3.9.2 package --out "too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.vsix
 
-      - name: Upload VSIX artifact
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/*.vsix
+          sbom-path: dist/too-many-cooks-vscode-${{ github.ref_name }}.cdx.json
+
+      - name: Upload verified VSIX artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vsix
-          path: too_many_cooks_vscode_extension/too-many-cooks-${{ steps.version.outputs.VERSION }}.vsix
+          path: dist/
           if-no-files-found: error
 
-  # Single owner of the GitHub release — no parallel softprops race. Creates the
-  # release once from the build artifacts (npm tarballs + VSIX).
+  # Single owner of the GitHub release — no parallel softprops race. Publishes
+  # every built artifact plus one cosign keyless-signed SHA256SUMS over them.
+  # [SWR-SEC-CHECKSUM]
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs:
-      - build-mcp
-      - build-vsix
+    needs: [build-mcp, verify-vsix]
+    # A skipped (out-of-scope) build must not skip the release; a failed one must.
+    if: >-
+      !cancelled()
+      && !contains(needs.*.result, 'failure')
+      && contains(needs.*.result, 'success')
     permissions:
-      contents: write
+      contents: write # create the release
+      id-token: write # cosign keyless signing
     steps:
+      # Only the published sets: the per-target vsix-* intermediates are already
+      # inside the verified `vsix` artifact.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          path: artifacts
+          pattern: '{npm-tarballs,vsix}'
+          path: dist
           merge-multiple: true
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless: the Fulcio cert binds the signature to THIS workflow at this tag.
+      # Verify immediately, pinned to that identity, so a bad signature fails here.
+      - name: Sign and verify SHA256SUMS (cosign keyless)
+        working-directory: dist
+        env:
+          IDENTITY: ^https://github.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+          cosign verify-blob --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity-regexp "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            SHA256SUMS
 
       - name: Create release with all assets
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
-          # Recursive globs: upload-artifact roots a multi-path artifact at the
-          # least-common-ancestor of its inputs, so the two npm tarballs download
-          # one directory deep (artifacts/core/*.tgz, artifacts/too-many-cooks/*.tgz).
-          # A non-recursive artifacts/*.tgz would silently match neither. **/* also
-          # matches the flat single-file VSIX. fail_on_unmatched_files makes a future
-          # layout drift FAIL loudly instead of shipping a release missing assets.
-          files: |
-            artifacts/**/*.tgz
-            artifacts/**/*.vsix
+          files: dist/*
           fail_on_unmatched_files: true
           name: Too Many Cooks ${{ github.ref_name }}
           draft: false
@@ -205,21 +301,22 @@ jobs:
   publish-marketplace:
     name: Publish VSIX to VS Code Marketplace
     runs-on: ubuntu-latest
-    needs: build-vsix
+    needs: verify-vsix
     # Passwordless publish via Microsoft Entra ID OIDC — NO long-lived PAT.
     # Binding the job to the `release` environment makes the GitHub OIDC subject
     # deterministic (repo:Nimblesite/too-many-cooks:environment:release), so ONE
     # federated credential covers every v* tag — Entra rejects tag wildcards in an
     # explicit federated subject. AZURE_CLIENT_ID / AZURE_TENANT_ID (neither
-    # sensitive) live on the `release` environment / org. [SWR-SEC-TOKEN-PRIVILEGE]
+    # sensitive) live on the `release` environment / org. [SWR-VSIX-PUBLISH-OIDC]
     environment: release
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+          package-manager-cache: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -273,7 +370,7 @@ jobs:
   publish-openvsx:
     name: Publish VSIX (Open VSX)
     runs-on: ubuntu-latest
-    needs: build-vsix
+    needs: verify-vsix
     # Independent of publish-marketplace: the Open VSX push (which serves the
     # VS Code forks — Cursor, Windsurf, Antigravity) must not be gated on the MS
     # Marketplace publish, and vice versa. Open VSX has no OIDC/trusted-publishing
@@ -282,9 +379,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+          package-manager-cache: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -321,14 +419,14 @@ jobs:
           fi
           echo "Published ${published} VSIX(es) to Open VSX"
 
-  # Website deploys only after the CodeQL gate passes, so the live site never
-  # gets ahead of an unscanned release. Stable tags only: hyphenated SemVer
+  # Website deploys only after the CodeQL and CI gates pass, so the live site
+  # never gets ahead of an unscanned release. Stable tags only: hyphenated SemVer
   # prerelease tags (v0.14.0-rc.1, …) never overwrite the live site.
   deploy-website:
     name: Deploy Website to GitHub Pages
     runs-on: ubuntu-latest
-    needs: codeql
-    if: ${{ !contains(github.ref_name, '-') }}
+    needs: [scope, codeql, ci]
+    if: needs.scope.outputs.website == 'true' && !contains(github.ref_name, '-')
     permissions:
       contents: read
       pages: write
@@ -340,14 +438,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: website/package-lock.json
+          package-manager-cache: false
 
       - name: Install website dependencies
         working-directory: website
@@ -358,13 +458,13 @@ jobs:
         run: npm run build
 
       - name: Setup Pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: website/_site
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

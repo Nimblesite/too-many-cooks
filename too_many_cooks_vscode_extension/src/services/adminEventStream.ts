@@ -1,21 +1,18 @@
 // Admin event stream client for real-time server-pushed notifications.
 // Automatically reconnects when the SSE connection drops.
 
-import { streamableHttpPost } from './httpClient';
+import { DATA_PREFIX } from './httpClient';
+import type { LogFn } from './logging';
+import { initMcpSession } from './mcpProtocol';
 
 const ADMIN_EVENTS_PATH: string = '/admin/events';
-const INITIALIZED_NOTIFICATION: string = 'notifications/initialized';
-const MCP_VERSION: string = '2025-03-26';
 const CLIENT_NAME: string = 'too-many-cooks-vsix-admin';
-const CLIENT_VERSION: string = '1.0.0';
 const LOG_PREVIEW_LENGTH: number = 80;
 const RECONNECT_BASE_DELAY_MS: number = 200;
 const RECONNECT_MAX_DELAY_MS: number = 30000;
 const BACKOFF_MULTIPLIER: number = 2;
 const SSE_ACCEPT: string = 'application/json, text/event-stream';
-const DATA_PREFIX: string = 'data: ';
 
-type LogFn = (msg: string) => void;
 
 export interface AdminEventStreamConfig {
   readonly baseUrl: string;
@@ -23,32 +20,6 @@ export interface AdminEventStreamConfig {
   readonly onEvent: () => void;
   // Test-only: called each time a new inner read starts, with a function to abort it.
   readonly onInnerAbort?: (abort: () => void) => void;
-}
-
-async function initAdminSession(baseUrl: string): Promise<string> {
-  const url: string = `${baseUrl}${ADMIN_EVENTS_PATH}`;
-  const body: string = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
-      protocolVersion: MCP_VERSION,
-    },
-  });
-  const response: Response = await streamableHttpPost(url, body, null);
-  const sessionId: string | null = response.headers.get('mcp-session-id');
-  if (sessionId === null || sessionId === '') {
-    throw new Error('No admin session ID in response');
-  }
-  const notifyBody: string = JSON.stringify({
-    jsonrpc: '2.0',
-    method: INITIALIZED_NOTIFICATION,
-    params: {},
-  });
-  await streamableHttpPost(url, notifyBody, sessionId);
-  return sessionId;
 }
 
 async function readEventStream(
@@ -164,8 +135,9 @@ export async function startAdminEventStream(
   config: Readonly<AdminEventStreamConfig>,
 ): Promise<void> {
   const { signal }: { readonly signal: AbortSignal } = abortController;
-  const sessionId: string = await initAdminSession(config.baseUrl);
+  const sessionId: string = await initMcpSession(config.baseUrl, ADMIN_EVENTS_PATH, CLIENT_NAME);
   config.log(`[AdminEventStream] Session started: ${sessionId}`);
-  // eslint-disable-next-line no-void
-  void reconnectLoop(sessionId, signal, config);
+  reconnectLoop(sessionId, signal, config).catch((err: unknown): void => {
+    config.log(`[AdminEventStream] Reconnect loop crashed: ${String(err)}`);
+  });
 }

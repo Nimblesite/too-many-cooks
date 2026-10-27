@@ -2,7 +2,7 @@
   "name": "too-many-cooks",
   "displayName": "Too Many Cooks",
   "description": "Visualize multi-agent coordination - see file locks, messages, and plans across AI agents working on your codebase",
-  "version": "0.4.1",
+  "version": "0.0.0-dev",
   "publisher": "Nimblesite",
   "license": "MIT",
   "icon": "media/icons/chef-128.png",
@@ -237,7 +237,13 @@
         "tooManyCooks.autoConnect": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically connect to server on startup (requires npm install -g too-many-cooks)"
+          "description": "Automatically connect to server on startup"
+        },
+        "tooManyCooks.serverPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to a too-many-cooks server binary to use instead of the one bundled with the extension. Its --version must match the extension version."
         },
         "tooManyCooks.port": {
           "type": "number",
@@ -285,14 +291,12 @@
     "compile": "tsc -p ./",
     "compile:test": "tsc -p tsconfig.test.json",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src/**/*.ts --max-warnings=0",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "lint:strict": "eslint src/**/*.ts --max-warnings=0 --rule 'no-warning-comments: [\"error\", {\"terms\": [\"todo\", \"fixme\", \"xxx\"], \"location\": \"anywhere\"}]'",
+    "lint": "oxlint --type-aware --deny-warnings src test",
     "pretest": "npm run compile && npm run compile:test",
     "test": "node scripts/runTests.js",
-    "test:pure": "npm run compile:test && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
-    "test:coverage": "npm run compile:test && c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
-    "test:coverage:integration": "npm run pretest && rm -rf .v8-coverage && NODE_V8_COVERAGE=.v8-coverage node scripts/runTests.js && c8 report --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage-integration --src=src --temp-directory=.v8-coverage",
+    "test:pure": "npm run compile:test && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
+    "test:coverage": "npm run compile:test && c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js",
+    "test:coverage:integration": "npm run pretest && rm -rf .v8-coverage && NODE_V8_COVERAGE=.v8-coverage node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../bail-reporter.mjs --test-reporter-destination=stderr out/test/pure/*.test.js && NODE_V8_COVERAGE=.v8-coverage node scripts/runTests.js && c8 report --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage-integration --src=src --include='out/src/**' --temp-directory=.v8-coverage",
     "package": "vsce package"
   },
   "_moduleAliases": {
@@ -302,24 +306,24 @@
     "ui": "./out/src/ui"
   },
   "dependencies": {
+    "@nimblesite/shipwright-vscode": "^0.11.0",
     "module-alias": "^2.2.3"
   },
+  "overrides": {
+    "mocha": "^12.0.3"
+  },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/eslint": "^9.6.1",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.6.5",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^8.61.1",
-    "@typescript-eslint/parser": "^8.61.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^3.0.0",
-    "c8": "^11.0.0",
-    "eslint": "^10.5.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "c8": "^12.0.0",
     "glob": "^13.0.6",
-    "mocha": "^11.7.6",
+    "mocha": "^12.0.3",
+    "oxlint": "^1.89.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "6.0.3",
-    "typescript-eslint": "^8.61.1"
+    "typescript": "^7.0.2"
   }
 }

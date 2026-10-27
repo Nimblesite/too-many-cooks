@@ -1,6 +1,6 @@
 {
   "name": "too-many-cooks",
-  "version": "0.5.0",
+  "version": "0.0.0-dev",
   "description": "Too Many Cooks MCP server — SQLite (local) or encrypted cloud backend",
   "type": "module",
   "main": "build/src/index.js",
@@ -10,7 +10,8 @@
   },
   "files": [
     "build",
-    "prisma",
+    "schema",
+    "dataprovider",
     "README.md",
     "LICENSE"
   ],
@@ -20,23 +21,25 @@
     "directory": "too-many-cooks/packages/too-many-cooks"
   },
   "scripts": {
+    "prebuild": "node ../../../scripts/fetch-dataprovider.mjs",
     "build": "tsc",
     "start": "node build/bin/server.js",
+    "pretest": "node ../../../scripts/fetch-dataprovider.mjs",
     "test": "node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts",
-    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
+    "pretest:coverage": "node ../../../scripts/fetch-dataprovider.mjs",
+    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage --src=src node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../../bail-reporter.mjs --test-reporter-destination=stderr test/*.ts"
   },
   "dependencies": {
-    "too-many-cooks-core": "*",
-    "better-sqlite3": "^12.11.1",
-    "prisma": "^7.8.0"
+    "@nimblesite/shipwright-mcp": "^0.11.0",
+    "better-sqlite3": "^13.0.3",
+    "too-many-cooks-core": "*"
   },
   "devDependencies": {
-    "@prisma/client": "^7.8.0",
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^25.9.3",
-    "c8": "^11.0.0",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "c8": "^12.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "license": "MIT"
 }

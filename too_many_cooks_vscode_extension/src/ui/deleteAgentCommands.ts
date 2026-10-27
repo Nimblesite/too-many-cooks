@@ -1,36 +1,13 @@
 // Delete agent commands — extracted from extension.ts to keep file under 300 LOC.
 
 import * as vscode from 'vscode';
+import { attemptOrReport, reportFailure } from './commandFailure';
 import type { DialogService } from '../services/dialogService';
+import type { FailureContext } from './commandFailure';
+import type { LogFn } from '../services/logging';
 import type { StoreManager } from '../services/storeManager';
-import { getAgentNameFromItem } from './tree/treeItemUtils';
+import { collectAgentNames } from './tree/treeItemUtils';
 import { getDialogService } from '../services/dialogService';
-
-type LogFn = (msg: string) => void;
-
-function pickItems(
-   
-  item: vscode.TreeItem | undefined,
-  selection: readonly vscode.TreeItem[] | undefined,
-): readonly vscode.TreeItem[] {
-  if (typeof selection !== 'undefined' && selection.length > 0) { return selection; }
-  if (typeof item === 'undefined') { return []; }
-  return [item];
-}
-
-function collectAgentNames(
-   
-  item: vscode.TreeItem | undefined,
-  selection: readonly vscode.TreeItem[] | undefined,
-): readonly string[] {
-  const source: readonly vscode.TreeItem[] = pickItems(item, selection);
-  const names: string[] = [];
-  for (const candidate of source) {
-    const name: string | null = getAgentNameFromItem(candidate);
-    if (name !== null && !names.includes(name)) { names.push(name); }
-  }
-  return names;
-}
 
 async function deleteAgents(
   storeManager: Readonly<StoreManager>,
@@ -38,15 +15,15 @@ async function deleteAgents(
   names: readonly string[],
 ): Promise<void> {
   const dialogs: DialogService = getDialogService();
+  const failure: FailureContext = { dialogs, logFn };
   for (const name of names) {
-    try {
-      await storeManager.deleteAgent(name);
-      logFn(`Removed agent: ${name}`);
-    } catch (err: unknown) {
-      logFn(`Failed to remove agent ${name}: ${String(err)}`);
-      await dialogs.showErrorMessage(`Failed to remove agent ${name}: ${String(err)}`);
-      return;
-    }
+    const removed: boolean = await attemptOrReport(
+      failure,
+      `Failed to remove agent ${name}`,
+      async (): Promise<void> => { await storeManager.deleteAgent(name); },
+    );
+    if (!removed) { return; }
+    logFn(`Removed agent: ${name}`);
   }
   await dialogs.showInformationMessage(`Removed ${String(names.length)} agent(s)`);
 }
@@ -103,8 +80,7 @@ export function registerDeleteAllAgentsCommand(
         logFn(`Removed all ${String(count)} agents`);
         await dialogs.showInformationMessage(`All ${String(count)} agents removed`);
       } catch (err: unknown) {
-        logFn(`Failed to remove all agents: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to remove all agents: ${String(err)}`);
+        await reportFailure({ dialogs, logFn }, 'Failed to remove all agents', err);
       }
     },
   );

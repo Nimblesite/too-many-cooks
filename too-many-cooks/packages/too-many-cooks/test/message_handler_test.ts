@@ -1,185 +1,141 @@
 /// Tests for message tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { SessionGetter, TooManyCooksDb } from "too-many-cooks-core";
 import {
-  type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
-  createMessageHandler,
-} from "too-many-cooks-core";
-import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+  type RegisteredAgent,
+  bindAgentsDb,
+} from "./support/db_fixture.js";
+import {
+  agentSession,
+  messageHandlerFor,
+  runToolErr,
+  runToolOk,
+} from "./support/handlers.js";
+import { assertNonNullish } from "./support/assertions.js";
+import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_message_handler.db";
+const AGENT_LABELS: readonly string[] = ["msg-agent-1", "msg-agent-2"];
+const SENDER = 0;
+const RECIPIENT = 1;
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
+/** One message-tool validation failure: the case name and its arguments. */
+type MessageErrorCase = {
+  readonly name: string;
+  readonly args: () => Record<string, unknown>;
 };
-
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
 
 describe("message handler", () => {
-  let db: TooManyCooksDb | undefined;
-  let agentName = "";
-  let agentKey = "";
-  let agent2Name = "";
-  let agent2Key = "";
+  const agentsDb = bindAgentsDb(TEST_DB_PATH, AGENT_LABELS);
 
-  beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
+  const db = (): TooManyCooksDb => agentsDb.db();
 
-    const reg1 = await db.register("msg-agent-1");
-    if (!reg1.ok) { throw new Error("expected ok"); }
-    agentName = reg1.value.agentName;
-    agentKey = reg1.value.agentKey;
+  const agentAt = (index: number): RegisteredAgent => agentsDb.agentAt(index);
 
-    const reg2 = await db.register("msg-agent-2");
-    if (!reg2.ok) { throw new Error("expected ok"); }
-    agent2Name = reg2.value.agentName;
-    agent2Key = reg2.value.agentKey;
-  });
+  const sessionFor = (index: number): SessionGetter => agentSession(agentAt(index));
 
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  const unauthenticated = (): SessionGetter => () => null;
 
-  const makeSession = (): (() => SessionIdentity) =>
-    () => ({ agentName, agentKey });
+  /** Sends `content` from the sender to the recipient through the tool. */
+  const sendFromSender = async (
+    content: string,
+  ): Promise<Record<string, unknown>> =>
+    await runToolOk(
+      messageHandlerFor(db(), sessionFor(SENDER)),
+      { action: "send", to_agent: agentAt(RECIPIENT).agentName, content },
+    );
 
-  const makeSession2 = (): (() => SessionIdentity) =>
-    () => ({ agentName: agent2Name, agentKey: agent2Key });
+  /** Reads the recipient's inbox through the tool, asserting success. */
+  const recipientInbox = async (): Promise<Array<Record<string, unknown>>> => {
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
+      { action: "get" },
+    );
+    assert.strictEqual(Array.isArray(parsed.messages), true);
+    return getRecordArrayField(parsed, "messages");
+  };
+
+  const errorCases: readonly MessageErrorCase[] = [
+    { name: "fails when action is missing", args: (): Record<string, unknown> => ({}) },
+    {
+      name: "fails with unknown action",
+      args: (): Record<string, unknown> => ({ action: "invalid" }),
+    },
+    {
+      name: "send fails without to_agent",
+      args: (): Record<string, unknown> => ({ action: "send", content: "hello" }),
+    },
+    {
+      name: "send fails without content",
+      args: (): Record<string, unknown> => ({
+        action: "send",
+        to_agent: agentAt(RECIPIENT).agentName,
+      }),
+    },
+    {
+      name: "mark_read fails without message_id",
+      args: (): Record<string, unknown> => ({ action: "mark_read" }),
+    },
+  ];
 
   it("send succeeds between agents", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "send", to_agent: agent2Name, content: "hello" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await sendFromSender("hello");
     assert.strictEqual(parsed.sent, true);
     assert.strictEqual(typeof parsed.message_id, "string");
   });
 
   it("get returns messages for agent", async () => {
-    if (!db) { throw new Error("expected db"); }
-    // Send a message from agent1 to agent2
-    const handler1 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    await handler1({ action: "send", to_agent: agent2Name, content: "test msg" }, {});
+    await sendFromSender("test msg");
 
-    // Agent2 gets messages
-    const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
-    const result = await handler2({ action: "get" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    assert.strictEqual(Array.isArray(parsed.messages), true);
-    const messages = parsed.messages as Record<string, unknown>[];
+    const messages = await recipientInbox();
     assert.ok(messages.length > 0);
-    assert.strictEqual(messages[0].content, "test msg");
+    const first = assertNonNullish(messages[0], "first inbox message");
+    assert.strictEqual(first.content, "test msg");
   });
 
   it("get with unread_only false returns all", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler1 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    await handler1({ action: "send", to_agent: agent2Name, content: "msg1" }, {});
+    await sendFromSender("msg1");
 
-    const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
-    const result = await handler2({ action: "get", unread_only: false }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
+      { action: "get", unread_only: false },
+    );
     assert.strictEqual(Array.isArray(parsed.messages), true);
   });
 
   it("mark_read succeeds for valid message", async () => {
-    if (!db) { throw new Error("expected db"); }
-    // Send message
-    const handler1 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const sendResult = await handler1({ action: "send", to_agent: agent2Name, content: "to mark" }, {});
-    const sendParsed = JSON.parse(sendResult.content[0].text) as Record<string, unknown>;
-    const messageId = sendParsed.message_id as string;
+    const sendResult = await sendFromSender("to mark");
+    const messageId = getStringField(sendResult, "message_id");
 
-    // Mark read
-    const handler2 = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession2());
-    const result = await handler2({ action: "mark_read", message_id: messageId }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
+      { action: "mark_read", message_id: messageId },
+    );
     assert.strictEqual(parsed.marked, true);
   });
 
-  it("fails when action is missing", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({}, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("fails with unknown action", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "invalid" }, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("send fails without to_agent", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "send", content: "hello" }, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("send fails without content", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "send", to_agent: agent2Name }, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("mark_read fails without message_id", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "mark_read" }, {});
-    assert.strictEqual(result.isError, true);
-  });
+  for (const testCase of errorCases) {
+    it(testCase.name, async () => {
+      await runToolErr(messageHandlerFor(db(), sessionFor(SENDER)), testCase.args());
+    });
+  }
 
   it("fails when not registered and no session", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "get" }, {});
-    assert.strictEqual(result.isError, true);
+    await runToolErr(messageHandlerFor(db(), unauthenticated()), { action: "get" });
   });
 
   it("works with agent_key override", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createMessageHandler(db, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "send", to_agent: agent2Name, content: "via key", agent_key: agentKey }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), unauthenticated()),
+      {
+        action: "send",
+        to_agent: agentAt(RECIPIENT).agentName,
+        content: "via key",
+        agent_key: agentAt(SENDER).agentKey,
+      },
+    );
     assert.strictEqual(parsed.sent, true);
   });
 });

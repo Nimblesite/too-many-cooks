@@ -4,6 +4,15 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { parseStatusResponse } from '../../src/services/statusParser';
 
+/** Parse a payload and assert every collection came back empty. */
+function assertEmptyCollections(payload: Record<string, unknown>): void {
+  const result = parseStatusResponse(payload);
+  assert.strictEqual(result.agents.length, 0);
+  assert.strictEqual(result.locks.length, 0);
+  assert.strictEqual(result.messages.length, 0);
+  assert.strictEqual(result.plans.length, 0);
+}
+
 describe('parseStatusResponse', () => {
   it('parses full status response', () => {
     const json: Record<string, unknown> = {
@@ -53,24 +62,16 @@ describe('parseStatusResponse', () => {
   });
 
   it('returns empty arrays for missing fields', () => {
-    const result = parseStatusResponse({});
-    assert.strictEqual(result.agents.length, 0);
-    assert.strictEqual(result.locks.length, 0);
-    assert.strictEqual(result.messages.length, 0);
-    assert.strictEqual(result.plans.length, 0);
+    assertEmptyCollections({});
   });
 
   it('returns empty arrays for non-array fields', () => {
-    const result = parseStatusResponse({
+    assertEmptyCollections({
       agents: 'not-array',
       locks: 42,
       messages: null,
       plans: {},
     });
-    assert.strictEqual(result.agents.length, 0);
-    assert.strictEqual(result.locks.length, 0);
-    assert.strictEqual(result.messages.length, 0);
-    assert.strictEqual(result.plans.length, 0);
   });
 
   it('filters out non-record items in arrays', () => {

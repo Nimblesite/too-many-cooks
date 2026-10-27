@@ -6,27 +6,16 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import { existsSync, unlinkSync } from "node:fs";
-import Database from "better-sqlite3";
-
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
+import { execRawSql } from "./support/sqlite_rows.js";
 
 const TEST_DB_PATH = ".test_stale_db_recreate.db";
 
-const deleteIfExists = (path: string): void => {
-  try {
-    if (existsSync(path)) { unlinkSync(path); }
-  } catch {
-    // ignore
-  }
-};
-
 /** Create a stale SQLite DB WITHOUT the `active` column on identity. */
 const createStaleDb = (dbPath: string): void => {
-  const db = new Database(dbPath);
-  db.pragma("foreign_keys = ON");
-  db.exec(`
+  execRawSql(dbPath, `
     CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
     INSERT INTO schema_version (version) VALUES (1);
 
@@ -36,8 +25,7 @@ const createStaleDb = (dbPath: string): void => {
       registered_at INTEGER NOT NULL,
       last_active INTEGER NOT NULL
     );
-  `);
-  db.close();
+  `, "ON");
 };
 
 describe("stale DB produces a clear error from createDb", () => {

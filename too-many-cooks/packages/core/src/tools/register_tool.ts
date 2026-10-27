@@ -1,5 +1,7 @@
 /// Register tool - agent registration and reconnection.
 
+import { z } from "zod";
+
 import type { Logger } from "../logger.js";
 import type { NotificationEmitter } from "../notifications.js";
 import {
@@ -9,87 +11,55 @@ import {
 import type { TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
 import type { AgentRegistration, DbError } from "../types.js";
-import { agentRegistrationToJson, dbErrorToJson } from "../types.js";
+import { agentRegistrationToJson } from "../types.js";
 import {
   type CallToolResult,
   type SessionSetter,
   type ToolCallback,
   textContent,
 } from "../mcp-types.js";
-import { errorContent } from "./tool_utils.js";
+import { errorContent, makeErrorResult, toJsonSchema, toolConfig } from "./tool_utils.js";
 
-/** Input schema for register tool. */
-export const REGISTER_INPUT_SCHEMA: {
-  readonly type: "object";
-  readonly properties: {
-    readonly name: { readonly type: "string"; readonly description: string };
-    readonly key: { readonly type: "string"; readonly description: string };
-  };
-} = {
-  type: "object",
-  properties: {
-    name: {
-      type: "string",
-      description:
-        "Your unique agent name, 1-50 chars. " +
-        "For FIRST registration only. Do NOT send with key.",
-    },
-    key: {
-      type: "string",
-      description:
-        "Your secret key from a previous registration. " +
-        "For RECONNECT only. Do NOT send with name.",
-    },
-  },
-} as const;
+/** Register tool input — the ONE source of the wire schema. */
+export const REGISTER_INPUT_SHAPE: z.ZodRawShape = {
+  name: z.string().optional().describe(
+    "Your unique agent name, 1-50 chars. For FIRST registration only. Do NOT send with key.",
+  ),
+  key: z.string().optional().describe(
+    "Your secret key from a previous registration. For RECONNECT only. Do NOT send with name.",
+  ),
+};
+
+/** JSON Schema of the register input (derived from the zod shape). */
+export const REGISTER_INPUT_SCHEMA: Record<string, unknown> = toJsonSchema(REGISTER_INPUT_SHAPE);
 
 /** Tool config for register. */
-export const REGISTER_TOOL_CONFIG: {
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: typeof REGISTER_INPUT_SCHEMA;
-  readonly outputSchema: null;
-  readonly annotations: null;
-} = {
-  title: "Register Agent",
-  description:
-    "Register a new agent or reconnect with an existing key. " +
+export const REGISTER_TOOL_CONFIG = toolConfig(
+  "Register Agent",
+  "Register a new agent or reconnect with an existing key. " +
     'FIRST TIME: pass "name" only. Returns key \u2014 store it! ' +
     'RECONNECT: pass "key" only. Server looks up your name. ' +
     "Passing both name and key is an error. " +
     'Example first: {"name": "my-agent"} ' +
     'Example reconnect: {"key": "abc123..."}',
-  inputSchema: REGISTER_INPUT_SCHEMA,
-  outputSchema: null,
-  annotations: null,
-} as const;
+  REGISTER_INPUT_SCHEMA
+);
 
 // ---------------------------------------------------------------------------
 // Reconnect handler
 // ---------------------------------------------------------------------------
 
-const handleReconnect: (
+const handleReconnect = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   setSession: SessionSetter,
-  keyArg: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  setSession: SessionSetter,
-  keyArg: string,
+  keyArg: string
 ): Promise<CallToolResult> => {
   const lookupResult: Result<string, DbError> = await db.lookupByKey(keyArg);
   if (!lookupResult.ok) {
     log.warn(`Reconnect failed: ${lookupResult.error.code}`);
-    return {
-      content: [
-        textContent(JSON.stringify(dbErrorToJson(lookupResult.error))),
-      ],
-      isError: true,
-    };
+    return makeErrorResult(lookupResult.error);
   }
   setSession(lookupResult.value, keyArg);
   await db.activate(lookupResult.value);
@@ -103,7 +73,7 @@ const handleReconnect: (
         JSON.stringify({
           agent_name: lookupResult.value,
           agent_key: keyArg,
-        }),
+        })
       ),
     ],
     isError: false,
@@ -114,18 +84,12 @@ const handleReconnect: (
 // First registration handler
 // ---------------------------------------------------------------------------
 
-const handleFirstRegistration: (
+const handleFirstRegistration = async (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   log: Logger,
   setSession: SessionSetter,
-  nameArg: string,
-) => Promise<CallToolResult> = async (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  log: Logger,
-  setSession: SessionSetter,
-  nameArg: string,
+  nameArg: string
 ): Promise<CallToolResult> => {
   let reg: Result<AgentRegistration, DbError> = await db.register(nameArg);
 
@@ -133,22 +97,14 @@ const handleFirstRegistration: (
     const resetResult: Result<AgentRegistration, DbError> = await db.adminResetKey(nameArg);
     if (!resetResult.ok) {
       log.warn(`Re-registration failed: ${resetResult.error.code}`);
-      return {
-        content: [
-          textContent(JSON.stringify(dbErrorToJson(resetResult.error))),
-        ],
-        isError: true,
-      };
+      return makeErrorResult(resetResult.error);
     }
     reg = resetResult;
   }
 
   if (!reg.ok) {
     log.warn(`Registration failed: ${reg.error.code}`);
-    return {
-      content: [textContent(JSON.stringify(dbErrorToJson(reg.error)))],
-      isError: true,
-    };
+    return makeErrorResult(reg.error);
   }
 
   setSession(reg.value.agentName, reg.value.agentKey);
@@ -174,13 +130,10 @@ type RegisterInputReconnect = { readonly mode: "reconnect"; readonly keyArg: str
 type RegisterInputNew = { readonly mode: "new"; readonly nameArg: string };
 type RegisterInputError = { readonly mode: "error"; readonly result: CallToolResult };
 
-const extractNonEmptyString: (value: unknown) => string | null = (value: unknown): string | null =>
-  {return typeof value === "string" && value.length > 0 ? value : null};
+const extractNonEmptyString = (value: unknown): string | null => {return typeof value === "string" && value.length > 0 ? value : null};
 
-const parseRegisterArgs: (
-  args: Record<string, unknown>,
-) => RegisterInputError | RegisterInputNew | RegisterInputReconnect = (
-  args: Record<string, unknown>,
+const parseRegisterArgs = (
+  args: Record<string, unknown>
 ): RegisterInputError | RegisterInputNew | RegisterInputReconnect => {
   const nameArg: string | null = extractNonEmptyString(args.name);
   const keyArg: string | null = extractNonEmptyString(args.key);
@@ -201,18 +154,13 @@ const parseRegisterArgs: (
 };
 
 /** Create register tool handler. */
-export const createRegisterHandler: (
+export const createRegisterHandler = (
   db: TooManyCooksDb,
   emitter: NotificationEmitter,
   logger: Logger,
-  setSession: SessionSetter,
-) => ToolCallback = (
-  db: TooManyCooksDb,
-  emitter: NotificationEmitter,
-  logger: Logger,
-  setSession: SessionSetter,
-): ToolCallback =>
-  {return async (args: Record<string, unknown>): Promise<CallToolResult> => {
+  setSession: SessionSetter
+): ToolCallback => {
+  return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const parsed: RegisterInputError | RegisterInputNew | RegisterInputReconnect = parseRegisterArgs(args);
 
     if (parsed.mode === "error") {
@@ -225,4 +173,5 @@ export const createRegisterHandler: (
 
     const log: Logger = logger.child({ tool: "register", agentName: parsed.nameArg });
     return await handleFirstRegistration(db, emitter, log, setSession, parsed.nameArg);
-  }};
+  };
+};

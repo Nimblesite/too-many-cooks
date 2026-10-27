@@ -12,6 +12,7 @@ import type { ConnectionMode, ConnectionTarget } from './connectionTypes';
 import { LOCAL_BASE_URL_PREFIX, buildAuthHeaders, buildBaseUrl, ensureStatusOk, fetchWithAuth, postJsonWithAuth } from './storeManagerHelpers';
 import { checkServerAvailable, isRecord } from './httpClient';
 import { extractToolResultText, initMcpSession, mcpJsonRpcRequest } from './mcpProtocol';
+import type { LogFn } from './logging';
 import type { StatusData } from './statusParser';
 import { Store } from '../state/store';
 import { parseStatusResponse } from './statusParser';
@@ -30,7 +31,6 @@ const SERVER_NOT_RUNNING_MSG: string =
 const STALE_SESSION_ID: string = 'stale-session-00000000';
 const NOT_CONNECTED_JSON: string = '{"error":"Not connected"}';
 
-type LogFn = (msg: string) => void;
 
 export class StoreManager {
   private readonly store: Store;
@@ -226,21 +226,11 @@ export class StoreManager {
   }
 
   public async forceReleaseLock(filePath: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/delete-lock`,
-      { filePath },
-      this.authHeaders,
-    );
-    await this.refreshStatus();
+    await this.postAdmin('/admin/delete-lock', { filePath });
   }
 
   public async deleteAgent(agentName: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/delete-agent`,
-      { agentName },
-      this.authHeaders,
-    );
-    await this.refreshStatus();
+    await this.postAdmin('/admin/delete-agent', { agentName });
   }
 
   public async deleteAllAgents(): Promise<void> {
@@ -256,11 +246,11 @@ export class StoreManager {
   }
 
   public async sendMessage(fromAgent: string, toAgent: string, content: string): Promise<void> {
-    await postJsonWithAuth(
-      `${this.baseUrl}/admin/send-message`,
-      { content, fromAgent, toAgent },
-      this.authHeaders,
-    );
+    await this.postAdmin('/admin/send-message', { content, fromAgent, toAgent });
+  }
+
+  private async postAdmin(path: string, body: Readonly<Record<string, unknown>>): Promise<void> {
+    await postJsonWithAuth(`${this.baseUrl}${path}`, body, this.authHeaders);
     await this.refreshStatus();
   }
 

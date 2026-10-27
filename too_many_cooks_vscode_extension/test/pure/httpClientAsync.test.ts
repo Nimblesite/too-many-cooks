@@ -1,17 +1,18 @@
 /// Tests for httpClient async functions using a local HTTP server.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
 import { streamableHttpPost, postJsonRequest, checkServerAvailable } from '../../src/services/httpClient';
+import { useTestServer } from './testSupport';
 
 const TEST_PORT: number = 19876;
 const BASE_URL: string = `http://localhost:${String(TEST_PORT)}`;
 
 let server: http.Server;
 
-function startTestServer(): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => {
+async function startTestServer(): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => {
     server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse): void => {
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer): void => { chunks.push(chunk); });
@@ -45,20 +46,14 @@ function startTestServer(): Promise<void> {
   });
 }
 
-function stopTestServer(): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => {
+async function stopTestServer(): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => {
     server.close((): void => { resolve(); });
   });
 }
 
 describe('httpClient async functions', () => {
-  before(async (): Promise<void> => {
-    await startTestServer();
-  });
-
-  after(async (): Promise<void> => {
-    await stopTestServer();
-  });
+  useTestServer(startTestServer, stopTestServer);
 
   it('streamableHttpPost sends POST and returns response', async () => {
     const response: Response = await streamableHttpPost(

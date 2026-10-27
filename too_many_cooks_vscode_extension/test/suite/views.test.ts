@@ -3,23 +3,43 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForMessageInTree,
-  safeDisconnect,
-  getTestAPI,
+  assertEqual,
+  assertMessageRow,
+  assertOk,
   callToolString,
   extractKeyFromResult,
-  restoreDialogMocks,
-  resetServerState,
-  getLabel,
-  getDescription,
   getChildren,
-  assertOk,
-  assertEqual,
+  getTestAPI,
+  reconnectFreshAndReset,
+  requireMessageLabel,
+  restoreDialogMocks,
+  sendBroadcastAndWait,
+  sendMessageToolCall,
+  startAgentSuite,
+  waitForExtensionActivation,
 } from './testHelpers';
 
 restoreDialogMocks();
+
+const VIEW_CONTAINER = 'workbench.view.extension.tooManyCooks';
+const CMD_AGENTS_FOCUS = 'tooManyCooksAgents.focus';
+const CMD_LOCKS_FOCUS = 'tooManyCooksLocks.focus';
+const CMD_MESSAGES_FOCUS = 'tooManyCooksMessages.focus';
+
+/** One focusable view: test name plus the command that reveals it. */
+const VIEW_CASES: readonly (readonly [string, string])[] = [
+  ['Agents view is accessible', CMD_AGENTS_FOCUS],
+  ['Locks view is accessible', CMD_LOCKS_FOCUS],
+  ['Messages view is accessible', CMD_MESSAGES_FOCUS],
+];
+
+/** Reveal the view container, then focus one of its views if focus is supported. */
+async function focusView(viewCommand: string): Promise<void> {
+  await vscode.commands.executeCommand(VIEW_CONTAINER);
+  try {
+    await vscode.commands.executeCommand(viewCommand);
+  } catch { /* View focus may not work in test environment */ }
+}
 
 suite('Views', () => {
   suiteSetup(async () => {
@@ -27,86 +47,34 @@ suite('Views', () => {
   });
 
   test('Too Many Cooks view container is registered', async () => {
-    await vscode.commands.executeCommand('workbench.view.extension.tooManyCooks');
+    await vscode.commands.executeCommand(VIEW_CONTAINER);
   });
 
-  test('Agents view is accessible', async () => {
-    await vscode.commands.executeCommand('workbench.view.extension.tooManyCooks');
-    try {
-      await vscode.commands.executeCommand('tooManyCooksAgents.focus');
-    } catch { /* View focus may not work in test environment */ }
-  });
-
-  test('Locks view is accessible', async () => {
-    await vscode.commands.executeCommand('workbench.view.extension.tooManyCooks');
-    try {
-      await vscode.commands.executeCommand('tooManyCooksLocks.focus');
-    } catch { /* View focus may not work in test environment */ }
-  });
-
-  test('Messages view is accessible', async () => {
-    await vscode.commands.executeCommand('workbench.view.extension.tooManyCooks');
-    try {
-      await vscode.commands.executeCommand('tooManyCooksMessages.focus');
-    } catch { /* View focus may not work in test environment */ }
+  VIEW_CASES.forEach(([name, viewCommand]) => {
+    test(name, async () => {
+      await focusView(viewCommand);
+    });
   });
 });
 
 suite('UI Bug Fixes', () => {
   const testId = Date.now();
-  const agentName = `ui-test-agent-${testId}`;
-  let agentKey = '';
-
-  suiteSetup(async () => {
-    await waitForExtensionActivation();
-    await safeDisconnect();
-
-    const api = getTestAPI();
-    await api.connect();
-    await waitForConnection();
-    await resetServerState();
-
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { agentName, requireKey } = startAgentSuite(`ui-test-agent-${testId}`, reconnectFreshAndReset);
 
   test('BUG FIX: Messages show as single row (no 4-row expansion)', async () => {
     const api = getTestAPI();
+    const agentKey = requireKey();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: '*',
-      content: 'Test message for UI verification',
-    });
+    await sendBroadcastAndWait(api, agentName, agentKey, 'Test message for UI verification', 'Test message');
 
-    await waitForMessageInTree(api, 'Test message');
-
-    const msgItem = api.findMessageInTree('Test message');
-    assertOk(msgItem, 'Message must appear in tree');
-
-    const children = getChildren(msgItem!);
+    const msgItem = assertMessageRow(api, 'Test message', [agentName, '\u2192'], 'Test message');
+    const children = getChildren(msgItem);
     assertEqual(children, undefined, 'BUG FIX: Message items must NOT have children');
-
-    const label = getLabel(msgItem!);
-    assertOk(label.includes(agentName), `Label should include sender: ${label}`);
-    assertOk(label.includes('\u2192'), `Label should have arrow separator: ${label}`);
-
-    const description = getDescription(msgItem!);
-    assertOk(description.includes('Test message'), `Description should be message content: ${description}`);
   });
 
   test('BUG FIX: Message format is "from → to | time [unread]"', async () => {
     const api = getTestAPI();
-    const msgItem = api.findMessageInTree('Test message');
-    assertOk(msgItem, 'Message must exist from previous test');
-
-    const label = getLabel(msgItem!);
+    const label = requireMessageLabel(api, 'Test message', 'Message must exist from previous test');
     assertOk(label.includes('\u2192'), `Label should match format "from → to | time [unread]", got: ${label}`);
   });
 
@@ -119,18 +87,13 @@ suite('UI Bug Fixes', () => {
 
   test('BUG FIX: Auto-mark-read works when agent fetches messages', async () => {
     const api = getTestAPI();
+    const agentKey = requireKey();
 
     const receiver = `ui-receiver-${testId}`;
     const regResult = await callToolString(api, 'register', { name: receiver });
     const receiverKey = extractKeyFromResult(regResult);
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: receiver,
-      content: 'This should be auto-marked read',
-    });
+    await sendMessageToolCall(api, agentName, agentKey, receiver, 'This should be auto-marked read');
 
     const fetched = await callToolString(api, 'message', {
       action: 'get',
@@ -138,7 +101,7 @@ suite('UI Bug Fixes', () => {
       agent_key: receiverKey,
       unread_only: true,
     });
-    assertOk(/"messages"\s*:\s*\[/.test(fetched), 'Get messages should return messages array');
+    assertOk(/"messages"\s*:\s*\[/u.test(fetched), 'Get messages should return messages array');
     assertOk(fetched.includes('auto-marked'), 'Message should be in fetched results');
 
     const fetched2 = await callToolString(api, 'message', {
@@ -156,24 +119,10 @@ suite('UI Bug Fixes', () => {
 
   test('BROADCAST: Messages to "*" appear in tree as "all"', async () => {
     const api = getTestAPI();
+    const agentKey = requireKey();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agentName,
-      agent_key: agentKey,
-      to_agent: '*',
-      content: 'Broadcast test message to everyone',
-    });
+    await sendBroadcastAndWait(api, agentName, agentKey, 'Broadcast test message to everyone', 'Broadcast test');
 
-    await waitForMessageInTree(api, 'Broadcast test');
-
-    const msgItem = api.findMessageInTree('Broadcast test');
-    assertOk(msgItem, 'Broadcast message MUST appear in tree');
-
-    const label = getLabel(msgItem!);
-    assertOk(label.includes('\u2192 all'), `Broadcast messages should show "→ all" in label, got: ${label}`);
-
-    const description = getDescription(msgItem!);
-    assertOk(description.includes('Broadcast test'), `Description should contain message content, got: ${description}`);
+    assertMessageRow(api, 'Broadcast test', ['\u2192 all'], 'Broadcast test');
   });
 });

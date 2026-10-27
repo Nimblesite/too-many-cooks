@@ -19,68 +19,29 @@ import {
   selectUnreadMessageCount,
 } from '../../src/state/selectors';
 
-const AGENT_1: AgentIdentity = { agentName: 'agent-1', registeredAt: 1000, lastActive: 2000 };
-const AGENT_2: AgentIdentity = { agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 };
+import { makeAgentIdentity, makeFileLock, makeMessage, makePlan } from './testSupport';
+
+const AGENT_1: AgentIdentity = makeAgentIdentity();
+const AGENT_2: AgentIdentity = makeAgentIdentity({ agentName: 'agent-2', registeredAt: 1100, lastActive: 2100 });
 
 const FAR_FUTURE: number = Date.now() + 600000;
 const FAR_PAST: number = 1000;
 
-const ACTIVE_LOCK: FileLock = {
-  filePath: '/active.ts',
-  agentName: 'agent-1',
-  acquiredAt: 1000,
-  expiresAt: FAR_FUTURE,
-  reason: 'editing',
-  version: 1,
-};
+const ACTIVE_LOCK: FileLock = makeFileLock({ filePath: '/active.ts', expiresAt: FAR_FUTURE });
+const EXPIRED_LOCK: FileLock = makeFileLock({ filePath: '/expired.ts', agentName: 'agent-2', expiresAt: FAR_PAST, reason: null });
 
-const EXPIRED_LOCK: FileLock = {
-  filePath: '/expired.ts',
-  agentName: 'agent-2',
-  acquiredAt: 1000,
-  expiresAt: FAR_PAST,
-  reason: null,
-  version: 1,
-};
+const MSG_UNREAD: Message = makeMessage();
+const MSG_READ: Message = makeMessage({ id: 'msg-2', fromAgent: 'agent-2', toAgent: 'agent-1', content: 'hi back', createdAt: 1100, readAt: 1200 });
+const BROADCAST_MSG: Message = makeMessage({ id: 'msg-3', toAgent: '*', content: 'everyone', createdAt: 1300 });
 
-const MSG_UNREAD: Message = {
-  id: 'msg-1',
-  fromAgent: 'agent-1',
-  toAgent: 'agent-2',
-  content: 'hello',
-  createdAt: 1000,
-  readAt: null,
-};
+const PLAN_1: AgentPlan = makePlan();
 
-const MSG_READ: Message = {
-  id: 'msg-2',
-  fromAgent: 'agent-2',
-  toAgent: 'agent-1',
-  content: 'hi back',
-  createdAt: 1100,
-  readAt: 1200,
-};
-
-const BROADCAST_MSG: Message = {
-  id: 'msg-3',
-  fromAgent: 'agent-1',
-  toAgent: '*',
-  content: 'everyone',
-  createdAt: 1300,
-  readAt: null,
-};
-
-const PLAN_1: AgentPlan = {
-  agentName: 'agent-1',
-  goal: 'Fix bugs',
-  currentTask: 'Reading code',
-  updatedAt: 1000,
-};
-
-const makeState = (overrides: Partial<AppState> = {}): AppState => ({
-  ...initialState,
-  ...overrides,
-});
+function makeState(overrides: Partial<AppState> = {}): AppState {
+  return {
+    ...initialState,
+    ...overrides,
+  };
+}
 
 describe('basic selectors', () => {
   it('selectConnectionStatus returns status', () => {
@@ -129,21 +90,39 @@ describe('count selectors', () => {
   });
 });
 
-describe('lock filtering selectors', () => {
-  it('selectActiveLocks filters to non-expired', () => {
-    const state: AppState = makeState({ locks: [ACTIVE_LOCK, EXPIRED_LOCK] });
-    const active: readonly FileLock[] = selectActiveLocks(state);
-    assert.strictEqual(active.length, 1);
-    assert.strictEqual(active[0]?.filePath, '/active.ts');
-  });
+/** Each lock-filtering selector with the single path it must keep. */
+const LOCK_FILTER_CASES: readonly {
+  readonly expectedPath: string;
+  readonly name: string;
+  readonly select: (state: AppState) => readonly FileLock[];
+}[] = [
+  { expectedPath: '/active.ts', name: 'selectActiveLocks filters to non-expired', select: selectActiveLocks },
+  { expectedPath: '/expired.ts', name: 'selectExpiredLocks filters to expired', select: selectExpiredLocks },
+];
 
-  it('selectExpiredLocks filters to expired', () => {
-    const state: AppState = makeState({ locks: [ACTIVE_LOCK, EXPIRED_LOCK] });
-    const expired: readonly FileLock[] = selectExpiredLocks(state);
-    assert.strictEqual(expired.length, 1);
-    assert.strictEqual(expired[0]?.filePath, '/expired.ts');
-  });
+describe('lock filtering selectors', () => {
+  for (const lockCase of LOCK_FILTER_CASES) {
+    it(lockCase.name, () => {
+      const selected: readonly FileLock[] = lockCase.select(makeState({ locks: [ACTIVE_LOCK, EXPIRED_LOCK] }));
+      assert.strictEqual(selected.length, 1);
+      assert.strictEqual(selected[0]?.filePath, lockCase.expectedPath);
+    });
+  }
 });
+
+/** Expected derived details for one agent in the selection fixture. */
+interface DetailExpectation {
+  readonly agentName: string;
+  readonly locks: number;
+  readonly planGoal: string | null;
+  readonly received: number;
+  readonly sent: number;
+}
+
+const DETAIL_EXPECTATIONS: readonly DetailExpectation[] = [
+  { agentName: 'agent-1', locks: 1, planGoal: 'Fix bugs', received: 2, sent: 2 },
+  { agentName: 'agent-2', locks: 1, planGoal: null, received: 2, sent: 1 },
+];
 
 describe('selectAgentDetails', () => {
   it('computes details for each agent', () => {
@@ -154,21 +133,16 @@ describe('selectAgentDetails', () => {
       plans: [PLAN_1],
     });
     const details = selectAgentDetails(state);
-    assert.strictEqual(details.length, 2);
+    assert.strictEqual(details.length, DETAIL_EXPECTATIONS.length);
 
-    const detail1 = details[0];
-    assert.strictEqual(detail1?.agent.agentName, 'agent-1');
-    assert.strictEqual(detail1?.locks.length, 1);
-    assert.strictEqual(detail1?.plan?.goal, 'Fix bugs');
-    assert.strictEqual(detail1?.sentMessages.length, 2);
-    assert.strictEqual(detail1?.receivedMessages.length, 2);
-
-    const detail2 = details[1];
-    assert.strictEqual(detail2?.agent.agentName, 'agent-2');
-    assert.strictEqual(detail2?.locks.length, 1);
-    assert.strictEqual(detail2?.plan, null);
-    assert.strictEqual(detail2?.sentMessages.length, 1);
-    assert.strictEqual(detail2?.receivedMessages.length, 2);
+    for (const expected of DETAIL_EXPECTATIONS) {
+      const detail = details.find((entry) => entry.agent.agentName === expected.agentName);
+      assert.strictEqual(detail?.agent.agentName, expected.agentName);
+      assert.strictEqual(detail?.locks.length, expected.locks);
+      assert.strictEqual(detail?.plan?.goal ?? null, expected.planGoal);
+      assert.strictEqual(detail?.sentMessages.length, expected.sent);
+      assert.strictEqual(detail?.receivedMessages.length, expected.received);
+    }
   });
 
   it('returns empty for no agents', () => {

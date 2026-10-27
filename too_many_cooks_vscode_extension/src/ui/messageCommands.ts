@@ -3,96 +3,83 @@
 // Multi-select context-menu invocations copy the whole selection.
 
 import * as vscode from 'vscode';
+import { collectDistinct, pickSelection } from './treeSelection';
 import type { DialogService } from '../services/dialogService';
 import type { Message } from '../state/types';
 import { getDialogService } from '../services/dialogService';
 
 const BROADCAST_TARGET: string = '*';
 const BROADCAST_LABEL: string = 'all';
+const MESSAGE_KEY: string = 'message';
+const AGENT_NAME_KEY: string = 'agentName';
 
-function hasMessage(value: object): value is { readonly message: unknown } {
-  return 'message' in value;
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
 }
 
-function hasStringProp(
+function hasPrimitiveProp(
   value: Readonly<Record<string, unknown>>,
   key: string,
+  kind: 'number' | 'string',
 ): boolean {
-  return typeof value[key] === 'string';
+  return typeof value[key] === kind;
 }
 
-function hasNumberProp(
-  value: Readonly<Record<string, unknown>>,
-  key: string,
-): boolean {
-  return typeof value[key] === 'number';
+/** Copy an unknown value into a plain record, or null when it is not an object. */
+function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  if (typeof value !== 'object' || value === null) { return null; }
+  return { ...value };
 }
 
 function isMessage(value: unknown): value is Message {
-  if (typeof value !== 'object' || value === null) { return false; }
-  const record: Readonly<Record<string, unknown>> = { ...value };
+  const record: Readonly<Record<string, unknown>> | null = asRecord(value);
+  if (record === null) { return false; }
   return (
-    hasStringProp(record, 'id') &&
-    hasStringProp(record, 'fromAgent') &&
-    hasStringProp(record, 'toAgent') &&
-    hasStringProp(record, 'content') &&
-    hasNumberProp(record, 'createdAt')
+    hasPrimitiveProp(record, 'id', 'string') &&
+    hasPrimitiveProp(record, 'fromAgent', 'string') &&
+    hasPrimitiveProp(record, 'toAgent', 'string') &&
+    hasPrimitiveProp(record, 'content', 'string') &&
+    hasPrimitiveProp(record, 'createdAt', 'number')
   );
 }
 
-function extractMessage(item: unknown): Message | null {
-  if (typeof item !== 'object' || item === null) { return null; }
-  if (!hasMessage(item)) { return null; }
-  const candidate: unknown = item.message;
-  if (!isMessage(candidate)) { return null; }
-  return candidate;
+/** Read `key` off `item`, returning it only when `guard` accepts the value. */
+function extractField<T>(
+  item: unknown,
+  key: string,
+  guard: (value: unknown) => value is T,
+): T | null {
+  const record: Readonly<Record<string, unknown>> | null = asRecord(item);
+  if (record === null) { return null; }
+  const candidate: unknown = record[key];
+  return guard(candidate) ? candidate : null;
 }
 
-function hasAgentName(value: object): value is { readonly agentName: unknown } {
-  return 'agentName' in value;
+function extractMessage(item: unknown): Message | null {
+  return extractField(item, MESSAGE_KEY, isMessage);
 }
 
 function extractAgentName(item: unknown): string | null {
-  if (typeof item !== 'object' || item === null) { return null; }
-  if (!hasAgentName(item)) { return null; }
-  const candidate: unknown = item.agentName;
-  if (typeof candidate !== 'string') { return null; }
-  return candidate;
+  return extractField(item, AGENT_NAME_KEY, isString);
 }
 
 function collectMessages(
   item: unknown,
   selection: readonly unknown[] | undefined,
 ): readonly Message[] {
-  const items: readonly unknown[] = pickItems(item, selection);
-  const out: Message[] = [];
-  for (const candidate of items) {
-    const msg: Message | null = extractMessage(candidate);
-    if (msg !== null) { out.push(msg); }
+  const extracted: ReadonlyArray<Message | null> = pickSelection(item, selection).map(extractMessage);
+  const messages: Message[] = [];
+  for (const msg of extracted) {
+    if (msg !== null) { messages.push(msg); }
   }
-  return out;
+  return messages;
 }
 
 function collectAgentNames(
   item: unknown,
   selection: readonly unknown[] | undefined,
 ): readonly string[] {
-  const items: readonly unknown[] = pickItems(item, selection);
-  const out: string[] = [];
-  for (const candidate of items) {
-    const name: string | null = extractAgentName(candidate);
-    if (name !== null && !out.includes(name)) { out.push(name); }
-  }
-  return out;
-}
-
-function pickItems(
-  item: unknown,
-  selection: readonly unknown[] | undefined,
-): readonly unknown[] {
-  if (typeof selection !== 'undefined' && selection.length > 0) { return selection; }
-  if (typeof item === 'undefined') { return []; }
-  return [item];
+  return collectDistinct(pickSelection(item, selection), extractAgentName);
 }
 
 function formatTarget(toAgent: string): string {
@@ -113,41 +100,61 @@ async function copyToClipboard(value: string, successMessage: string): Promise<v
   await dialogs.showInformationMessage(successMessage);
 }
 
-export function registerCopyMessageContentCommand(): vscode.Disposable {
+interface MapCopySpec {
+  readonly commandId: string;
+  readonly extractor: (msg: Readonly<Message>) => string;
+  readonly separator: string;
+  readonly successLabel: string;
+}
+
+function registerMapCopyCommand(spec: Readonly<MapCopySpec>): vscode.Disposable {
   return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageContent',
+    spec.commandId,
     async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
       const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => { return msg.content; })
-        .join('\n\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message(s) content`);
+      const text: string = messages.map(spec.extractor).join(spec.separator);
+      await copyToClipboard(text, `Copied ${String(messages.length)} ${spec.successLabel}`);
     },
   );
+}
+
+export function registerCopyMessageContentCommand(): vscode.Disposable {
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageContent',
+    extractor: (msg: Readonly<Message>): string => { return msg.content; },
+    separator: '\n\n',
+    successLabel: 'message(s) content',
+  });
 }
 
 export function registerCopyMessageAsQuoteCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageAsQuote',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages.map(formatMessageQuote).join('\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} quoted message(s)`);
-    },
-  );
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageAsQuote',
+    extractor: formatMessageQuote,
+    separator: '\n',
+    successLabel: 'quoted message(s)',
+  });
 }
 
 export function registerCopyMessageIdCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessageId',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => { return msg.id; })
-        .join('\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message ID(s)`);
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessageId',
+    extractor: (msg: Readonly<Message>): string => { return msg.id; },
+    separator: '\n',
+    successLabel: 'message ID(s)',
+  });
+}
+
+export function registerCopyMessagesCommand(): vscode.Disposable {
+  return registerMapCopyCommand({
+    commandId: 'tooManyCooks.copyMessages',
+    extractor: (msg: Readonly<Message>): string => {
+      return `[${new Date(msg.createdAt).toISOString()}] ` +
+        `${msg.fromAgent} → ${formatTarget(msg.toAgent)}\n${msg.content}`;
     },
-  );
+    separator: '\n\n---\n\n',
+    successLabel: 'message(s)',
+  });
 }
 
 export function registerCopyMessageSenderCommand(): vscode.Disposable {
@@ -178,22 +185,6 @@ export function registerCopyMessageRecipientCommand(): vscode.Disposable {
         recipients.join('\n'),
         `Copied ${String(recipients.length)} recipient(s)`,
       );
-    },
-  );
-}
-
-export function registerCopyMessagesCommand(): vscode.Disposable {
-  return vscode.commands.registerCommand(
-    'tooManyCooks.copyMessages',
-    async (item?: unknown, selection?: readonly unknown[]): Promise<void> => {
-      const messages: readonly Message[] = collectMessages(item, selection);
-      const text: string = messages
-        .map((msg: Readonly<Message>): string => {
-          return `[${new Date(msg.createdAt).toISOString()}] ` +
-            `${msg.fromAgent} → ${formatTarget(msg.toAgent)}\n${msg.content}`;
-        })
-        .join('\n\n---\n\n');
-      await copyToClipboard(text, `Copied ${String(messages.length)} message(s)`);
     },
   );
 }

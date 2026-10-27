@@ -3,28 +3,40 @@
 // NO MOCKING. NO SKIPPING. FAIL HARD.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  waitForCondition,
-  waitForLockInTree,
-  waitForLockGone,
-  waitForAgentInTree,
-  waitForMessageInTree,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  resetServerState,
-  restoreDialogMocks,
-  getLabel,
-  getDescription,
-  getChildren,
-  hasChildWithLabel,
-  findChildByLabel,
-  dumpTree,
-  assertOk,
+  acquireLockToolCall,
   assertEqual,
+  assertLocksInTree,
+  assertMessageRow,
+  assertMessagesInTree,
+  assertOk,
+  assertPlanChild,
+  assertSeededStore,
+  callToolString,
+  dumpTree,
+  ensureAgentRegistered,
+  ensureLockHeld,
+  ensureMessageSent,
+  ensurePlanUpdated,
+  ensureServerReady,
+  extractKeyFromResult,
+  getChildren,
+  getDescription,
+  getLabel,
+  getTestAPI,
+  hasChildWithLabel,
+  requireTreeItem,
+  restoreDialogMocks,
+  safeDisconnect,
+  sendMessageToolCall,
+  updatePlanToolCall,
+  waitForAgentInTree,
+  waitForCondition,
+  waitForConnection,
+  waitForLockGone,
+  waitForLockInTree,
+  waitForMessageInTree,
 } from './testHelpers';
+import type { TreeItemSnapshot } from '../../src/testApi';
 
 restoreDialogMocks();
 
@@ -36,15 +48,7 @@ suite('DB Integration - UI Verification', () => {
   const agent2Name = `test-agent-${testId}-2`;
 
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    // Connect to ensure server is running, reset state, then disconnect
-    // so the first test can verify the connect flow
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
     await safeDisconnect();
   });
 
@@ -79,11 +83,13 @@ suite('DB Integration - UI Verification', () => {
 
     assertEqual(agentsTree.length, 0, 'Agents tree should be empty');
 
-    const hasNoLocks = locksTree.some(i => getLabel(i) === 'No locks');
-    assertOk(hasNoLocks, 'Locks tree should show "No locks"');
-
-    const hasNoMessages = messagesTree.some(i => getLabel(i) === 'No messages');
-    assertOk(hasNoMessages, 'Messages tree should show "No messages"');
+    const emptyLabels: readonly (readonly [readonly TreeItemSnapshot[], string])[] = [
+      [locksTree, 'No locks'],
+      [messagesTree, 'No messages'],
+    ];
+    for (const [tree, label] of emptyLabels) {
+      assertOk(tree.some((i: TreeItemSnapshot): boolean => getLabel(i) === label), `Tree should show "${label}"`);
+    }
   });
 
   test('Register agent-1 → label APPEARS in agents tree', async () => {
@@ -97,7 +103,7 @@ suite('DB Integration - UI Verification', () => {
 
     const agentItem = api.findAgentInTree(agent1Name);
     assertOk(agentItem, `${agent1Name} MUST appear in the tree`);
-    assertEqual(getLabel(agentItem!), agent1Name, `Label must be exactly "${agent1Name}"`);
+    assertEqual(getLabel(requireTreeItem(agentItem, 'agentItem must exist')), agent1Name, `Label must be exactly "${agent1Name}"`);
   });
 
   test('Register agent-2 → both agents visible in tree', async () => {
@@ -122,13 +128,7 @@ suite('DB Integration - UI Verification', () => {
   test('Acquire lock on /src/main.ts → file path APPEARS in locks tree', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/main.ts',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      reason: 'Editing main',
-    });
+    await acquireLockToolCall(api, '/src/main.ts', agent1Name, agent1Key, 'Editing main');
 
     await waitForLockInTree(api, '/src/main.ts');
 
@@ -136,30 +136,18 @@ suite('DB Integration - UI Verification', () => {
     dumpTree('LOCKS after acquire', api.getLocksTreeSnapshot());
 
     assertOk(lockItem, '/src/main.ts MUST appear in the tree');
-    assertEqual(getLabel(lockItem!), '/src/main.ts', 'Label must be exact file path');
+    assertEqual(getLabel(requireTreeItem(lockItem, 'lockItem must exist')), '/src/main.ts', 'Label must be exact file path');
 
-    const desc = getDescription(lockItem!);
+    const desc = getDescription(requireTreeItem(lockItem, 'lockItem must exist'));
     assertOk(desc.startsWith(agent1Name), `Description should start with agent name. desc="${desc}", agent="${agent1Name}"`);
   });
 
   test('Acquire 2 more locks → all 3 file paths visible', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/utils.ts',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      reason: 'Utils',
-    });
+    await acquireLockToolCall(api, '/src/utils.ts', agent1Name, agent1Key, 'Utils');
 
-    await callToolString(api, 'lock', {
-      action: 'acquire',
-      file_path: '/src/types.ts',
-      agent_name: agent2Name,
-      agent_key: agent2Key,
-      reason: 'Types',
-    });
+    await acquireLockToolCall(api, '/src/types.ts', agent2Name, agent2Key, 'Types');
 
     await waitForCondition(
       () => api.getLockTreeItemCount() >= 3,
@@ -168,9 +156,7 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('LOCKS after 3 acquires', api.getLocksTreeSnapshot());
 
-    assertOk(api.findLockInTree('/src/main.ts'), '/src/main.ts MUST be in tree');
-    assertOk(api.findLockInTree('/src/utils.ts'), '/src/utils.ts MUST be in tree');
-    assertOk(api.findLockInTree('/src/types.ts'), '/src/types.ts MUST be in tree');
+    assertLocksInTree(api, ['/src/main.ts', '/src/utils.ts', '/src/types.ts'], true);
     assertEqual(api.getLockTreeItemCount(), 3, 'Exactly 3 lock items');
   });
 
@@ -188,22 +174,15 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('LOCKS after release', api.getLocksTreeSnapshot());
 
-    assertEqual(api.findLockInTree('/src/utils.ts'), null, '/src/utils.ts MUST NOT be in tree');
-    assertOk(api.findLockInTree('/src/main.ts'), '/src/main.ts MUST still be in tree');
-    assertOk(api.findLockInTree('/src/types.ts'), '/src/types.ts MUST still be in tree');
+    assertLocksInTree(api, ['/src/utils.ts'], false);
+    assertLocksInTree(api, ['/src/main.ts', '/src/types.ts'], true);
     assertEqual(api.getLockTreeItemCount(), 2, 'Exactly 2 lock items remain');
   });
 
   test('Update plan for agent-1 → plan content APPEARS in agent children', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'plan', {
-      action: 'update',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      goal: 'Implement feature X',
-      current_task: 'Writing tests',
-    });
+    await updatePlanToolCall(api, agent1Name, agent1Key, 'Implement feature X', 'Writing tests');
 
     await waitForCondition(() => {
       const agentItem = api.findAgentInTree(agent1Name);
@@ -213,62 +192,27 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('AGENTS after plan update', api.getAgentsTreeSnapshot());
 
-    const agentItem = api.findAgentInTree(agent1Name);
-    assertOk(agentItem, `${agent1Name} MUST be in tree`);
-    const children = getChildren(agentItem!);
-    assertOk(children, 'Agent should have children');
-
-    const planChild = findChildByLabel(agentItem!, 'Goal: Implement feature X');
-    assertOk(planChild, 'Plan goal "Implement feature X" MUST appear in agent children');
-
-    const planDesc = getDescription(planChild!);
-    assertOk(planDesc.includes('Writing tests'), `Plan description should contain task, got: ${planDesc}`);
+    assertPlanChild(api, agent1Name, 'Goal: Implement feature X', 'Writing tests');
   });
 
   test('Send message agent-1 → agent-2 → message APPEARS in tree', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: agent2Name,
-      content: 'Starting work on main.ts',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Starting work on main.ts');
 
     await waitForMessageInTree(api, 'Starting work');
 
     dumpTree('MESSAGES after send', api.getMessagesTreeSnapshot());
 
-    const msgItem = api.findMessageInTree('Starting work');
-    assertOk(msgItem, 'Message MUST appear in tree');
-
-    const msgLabel = getLabel(msgItem!);
-    assertOk(msgLabel.includes(agent1Name), `Message label should contain sender, got: ${msgLabel}`);
-    assertOk(msgLabel.includes(agent2Name), `Message label should contain recipient, got: ${msgLabel}`);
-
-    const msgDesc = getDescription(msgItem!);
-    assertOk(msgDesc.includes('Starting work'), `Description should contain content preview, got: ${msgDesc}`);
+    assertMessageRow(api, 'Starting work', [agent1Name, agent2Name], 'Starting work');
   });
 
   test('Send 2 more messages → all 3 messages visible with correct labels', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent2Name,
-      agent_key: agent2Key,
-      to_agent: agent1Name,
-      content: 'Acknowledged',
-    });
+    await sendMessageToolCall(api, agent2Name, agent2Key, agent1Name, 'Acknowledged');
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: agent2Name,
-      content: 'Done with main.ts',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, agent2Name, 'Done with main.ts');
 
     await waitForCondition(
       () => api.getMessageTreeItemCount() >= 3,
@@ -277,36 +221,20 @@ suite('DB Integration - UI Verification', () => {
 
     dumpTree('MESSAGES after 3 sends', api.getMessagesTreeSnapshot());
 
-    assertOk(api.findMessageInTree('Starting work'), 'First message MUST be in tree');
-    assertOk(api.findMessageInTree('Acknowledged'), 'Second message MUST be in tree');
-    assertOk(api.findMessageInTree('Done with main'), 'Third message MUST be in tree');
+    assertMessagesInTree(api, ['Starting work', 'Acknowledged', 'Done with main'], true);
     assertEqual(api.getMessageTreeItemCount(), 3, 'Exactly 3 message items');
   });
 
   test('Broadcast message to * → message APPEARS in tree with "all" label', async () => {
     const api = getTestAPI();
 
-    await callToolString(api, 'message', {
-      action: 'send',
-      agent_name: agent1Name,
-      agent_key: agent1Key,
-      to_agent: '*',
-      content: 'BROADCAST: Important announcement for all agents',
-    });
+    await sendMessageToolCall(api, agent1Name, agent1Key, '*', 'BROADCAST: Important announcement for all agents');
 
     await waitForMessageInTree(api, 'BROADCAST');
 
     dumpTree('MESSAGES after broadcast', api.getMessagesTreeSnapshot());
 
-    const broadcastMsg = api.findMessageInTree('BROADCAST');
-    assertOk(broadcastMsg, 'Broadcast message MUST appear in tree');
-
-    const label = getLabel(broadcastMsg!);
-    assertOk(label.includes(agent1Name), `Broadcast label should contain sender, got: ${label}`);
-    assertOk(label.includes('all'), `Broadcast label should show "all" for recipient, got: ${label}`);
-
-    const desc = getDescription(broadcastMsg!);
-    assertOk(desc.includes('BROADCAST'), `Description should contain message content, got: ${desc}`);
+    assertMessageRow(api, 'BROADCAST', [agent1Name, 'all'], 'BROADCAST');
     assertEqual(api.getMessageTreeItemCount(), 4, 'Should have 4 messages after broadcast');
   });
 
@@ -330,10 +258,7 @@ suite('DB Integration - UI Verification', () => {
     const api = getTestAPI();
     await api.refreshStatus();
 
-    assertOk(api.getAgentCount() >= 2, `At least 2 agents, got ${api.getAgentCount()}`);
-    assertOk(api.getLockCount() >= 2, `At least 2 locks, got ${api.getLockCount()}`);
-    assertOk(api.getPlans().length >= 1, `At least 1 plan, got ${api.getPlans().length}`);
-    assertOk(api.getMessages().length >= 4, `At least 4 messages, got ${api.getMessages().length}`);
+    assertSeededStore(api);
     assertOk(api.getAgentsTreeSnapshot().length >= 2, `At least 2 agents in tree`);
     assertOk(api.getLockTreeItemCount() >= 2, `At least 2 locks in tree`);
     assertOk(api.getMessageTreeItemCount() >= 4, `At least 4 messages in tree`);
@@ -365,94 +290,25 @@ suite('DB Integration - UI Verification', () => {
     await waitForConnection();
     await api.refreshStatus();
 
-    // Re-register agents if lost (WAL not checkpointed on server kill)
-    if (!api.findAgentInTree(agent1Name)) {
-      const result1 = await callToolString(api, 'register', { name: agent1Name });
-      agent1Key = extractKeyFromResult(result1);
-    }
-    if (!api.findAgentInTree(agent2Name)) {
-      const result2 = await callToolString(api, 'register', { name: agent2Name });
-      agent2Key = extractKeyFromResult(result2);
-    }
+    // Re-create whatever the server lost (WAL not checkpointed on server kill)
+    agent1Key = await ensureAgentRegistered(api, agent1Name, agent1Key);
+    agent2Key = await ensureAgentRegistered(api, agent2Name, agent2Key);
 
-    // Re-acquire locks if lost
-    if (!api.findLockInTree('/src/main.ts')) {
-      await api.callTool('lock', {
-        action: 'acquire',
-        file_path: '/src/main.ts',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        reason: 'Editing main',
-      });
-    }
-    if (!api.findLockInTree('/src/types.ts')) {
-      await api.callTool('lock', {
-        action: 'acquire',
-        file_path: '/src/types.ts',
-        agent_name: agent2Name,
-        agent_key: agent2Key,
-        reason: 'Types',
-      });
-    }
+    await ensureLockHeld(api, '/src/main.ts', agent1Name, agent1Key, 'Editing main');
+    await ensureLockHeld(api, '/src/types.ts', agent2Name, agent2Key, 'Types');
 
-    // Re-create plan if lost
-    const agentItemForPlan = api.findAgentInTree(agent1Name);
-    if (!agentItemForPlan || !hasChildWithLabel(agentItemForPlan, 'Goal:')) {
-      await api.callTool('plan', {
-        action: 'update',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        goal: 'Implement feature X',
-        current_task: 'Writing tests',
-      });
-    }
+    await ensurePlanUpdated(api, agent1Name, agent1Key, 'Implement feature X', 'Writing tests');
 
-    // Re-send messages if lost
-    if (!api.findMessageInTree('Starting work')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: agent2Name,
-        content: 'Starting work on main.ts',
-      });
-    }
-    if (!api.findMessageInTree('Acknowledged')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent2Name,
-        agent_key: agent2Key,
-        to_agent: agent1Name,
-        content: 'Acknowledged',
-      });
-    }
-    if (!api.findMessageInTree('Done with main')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: agent2Name,
-        content: 'Done with main.ts',
-      });
-    }
-    if (!api.findMessageInTree('BROADCAST')) {
-      await api.callTool('message', {
-        action: 'send',
-        agent_name: agent1Name,
-        agent_key: agent1Key,
-        to_agent: '*',
-        content: 'BROADCAST: Important announcement for all agents',
-      });
-    }
+    await ensureMessageSent(api, agent1Name, agent1Key, agent2Name, 'Starting work', 'Starting work on main.ts');
+    await ensureMessageSent(api, agent2Name, agent2Key, agent1Name, 'Acknowledged', 'Acknowledged');
+    await ensureMessageSent(api, agent1Name, agent1Key, agent2Name, 'Done with main', 'Done with main.ts');
+    await ensureMessageSent(api, agent1Name, agent1Key, '*', 'BROADCAST', 'BROADCAST: Important announcement for all agents');
 
     await waitForCondition(
       () => api.getAgentCount() >= 2 && api.getLockCount() >= 2,
       'state to be restored/recreated',
     );
 
-    assertOk(api.getAgentCount() >= 2, `At least 2 agents, got ${api.getAgentCount()}`);
-    assertOk(api.getLockCount() >= 2, `At least 2 locks, got ${api.getLockCount()}`);
-    assertOk(api.getPlans().length >= 1, `At least 1 plan, got ${api.getPlans().length}`);
-    assertOk(api.getMessages().length >= 4, `At least 4 messages, got ${api.getMessages().length}`);
+    assertSeededStore(api);
   });
 });

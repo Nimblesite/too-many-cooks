@@ -13,6 +13,7 @@ node_modules/glob/**
 node_modules/mocha/**
 *.vsix
 *.yaml
+!bin/**
 *.lock
 .vscode-test.mjs
 analysis_options.yaml

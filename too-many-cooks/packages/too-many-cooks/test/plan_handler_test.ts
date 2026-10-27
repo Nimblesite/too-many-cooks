@@ -1,171 +1,111 @@
 /// Tests for plan tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import fs from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  type TooManyCooksDb,
-  createDataConfig,
-  createNotificationEmitter,
-  createLoggerWithContext,
-  createLoggingContext,
-  createPlanHandler,
-} from "too-many-cooks-core";
-import type { SessionIdentity } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import type { SessionGetter, ToolCallback } from "too-many-cooks-core";
+import { bindAgentDb, registerAgent } from "./support/db_fixture.js";
+import { agentSession, planHandlerFor, runToolErr, runToolOk } from "./support/handlers.js";
+import { getArrayField, getRecordField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_plan_handler.db";
+const AGENT_LABEL = "plan-agent";
+const SECOND_AGENT_LABEL = "plan-agent-2";
 
-const deleteIfExists = (filePath: string): void => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch {
-    // Ignore
-  }
+/** One plan-tool validation failure: the case name and its arguments. */
+type PlanErrorCase = {
+  readonly name: string;
+  readonly args: Record<string, unknown>;
 };
 
-const createTestEmitter = () => {
-  const server = new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
-  return createNotificationEmitter(server);
-};
-
-const createTestLogger = () =>
-  createLoggerWithContext(createLoggingContext());
+const PLAN_ERROR_CASES: readonly PlanErrorCase[] = [
+  { name: "fails when action is missing", args: {} },
+  { name: "fails with unknown action", args: { action: "delete" } },
+  { name: "update fails without goal", args: { action: "update", current_task: "stuff" } },
+  { name: "update fails without current_task", args: { action: "update", goal: "stuff" } },
+];
 
 describe("plan handler", () => {
-  let db: TooManyCooksDb | undefined;
-  let agentName = "";
-  let agentKey = "";
+  const agentDb = bindAgentDb(TEST_DB_PATH, AGENT_LABEL);
 
-  beforeEach(async () => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (!result.ok) { throw new Error("expected ok"); }
-    db = result.value;
+  /** Sends an update through `handler` directly (setup step). */
+  const seedPlan = async (
+    handler: ToolCallback,
+    goal: string,
+    task: string,
+  ): Promise<void> => {
+    await handler({ action: "update", goal, current_task: task }, {});
+  };
 
-    const regResult = await db.register("plan-agent");
-    if (!regResult.ok) { throw new Error("expected ok"); }
-    agentName = regResult.value.agentName;
-    agentKey = regResult.value.agentKey;
-  });
+  const sessionFor = (): SessionGetter => agentSession(agentDb.agent());
 
-  afterEach(() => {
-    db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
-
-  const makeSession = (): (() => SessionIdentity) =>
-    () => ({ agentName, agentKey });
+  const unauthenticated = (): SessionGetter => () => null;
 
   it("update succeeds with goal and current_task", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "update", goal: "Fix bugs", current_task: "Reading code" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(
+      planHandlerFor(agentDb.db(), sessionFor()),
+      { action: "update", goal: "Fix bugs", current_task: "Reading code" },
+    );
     assert.strictEqual(parsed.updated, true);
   });
 
   it("get returns plan after update", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "update", goal: "Ship feature", current_task: "Writing tests" }, {});
-    const result = await handler({ action: "get" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    const plan = parsed.plan as Record<string, unknown>;
+    const handler = planHandlerFor(agentDb.db(), sessionFor());
+    await seedPlan(handler, "Ship feature", "Writing tests");
+    const parsed = await runToolOk(handler, { action: "get" });
+    const plan = getRecordField(parsed, "plan");
     assert.strictEqual(plan.goal, "Ship feature");
     assert.strictEqual(plan.current_task, "Writing tests");
   });
 
   it("get returns null when no plan", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "get" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(
+      planHandlerFor(agentDb.db(), sessionFor()),
+      { action: "get" },
+    );
     assert.strictEqual(parsed.plan, null);
   });
 
   it("list returns all plans", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    await handler({ action: "update", goal: "Goal A", current_task: "Task A" }, {});
+    const handler = planHandlerFor(agentDb.db(), sessionFor());
+    await seedPlan(handler, "Goal A", "Task A");
 
-    // Register second agent and set plan
-    const reg2 = await db.register("plan-agent-2");
-    if (!reg2.ok) { throw new Error("expected ok"); }
-    const getSession2 = (): SessionIdentity => ({
-      agentName: reg2.value.agentName,
-      agentKey: reg2.value.agentKey,
-    });
-    const handler2 = createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession2);
-    await handler2({ action: "update", goal: "Goal B", current_task: "Task B" }, {});
+    const agent2 = await registerAgent(agentDb.db(), SECOND_AGENT_LABEL);
+    const handler2 = planHandlerFor(agentDb.db(), agentSession(agent2));
+    await seedPlan(handler2, "Goal B", "Task B");
 
-    const result = await handler({ action: "list" }, {});
-    assert.strictEqual(result.isError, false);
-    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const parsed = await runToolOk(handler, { action: "list" });
     assert.strictEqual(Array.isArray(parsed.plans), true);
-    assert.strictEqual((parsed.plans as unknown[]).length, 2);
+    assert.strictEqual(getArrayField(parsed, "plans").length, 2);
   });
 
-  it("fails when action is missing", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({}, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("fails with unknown action", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "delete" }, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("update fails without goal", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "update", current_task: "stuff" }, {});
-    assert.strictEqual(result.isError, true);
-  });
-
-  it("update fails without current_task", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), makeSession());
-    const result = await handler({ action: "update", goal: "stuff" }, {});
-    assert.strictEqual(result.isError, true);
-  });
+  for (const testCase of PLAN_ERROR_CASES) {
+    it(testCase.name, async () => {
+      await runToolErr(planHandlerFor(agentDb.db(), sessionFor()), testCase.args);
+    });
+  }
 
   it("fails when not registered and no session", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "update", goal: "g", current_task: "t" }, {});
-    assert.strictEqual(result.isError, true);
+    await runToolErr(planHandlerFor(agentDb.db(), unauthenticated()), {
+      action: "update",
+      goal: "g",
+      current_task: "t",
+    });
   });
 
   it("works with agent_key override", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "update", goal: "via key", current_task: "testing", agent_key: agentKey }, {});
-    assert.strictEqual(result.isError, false);
+    const parsed = await runToolOk(
+      planHandlerFor(agentDb.db(), unauthenticated()),
+      {
+        action: "update",
+        goal: "via key",
+        current_task: "testing",
+        agent_key: agentDb.agent().agentKey,
+      },
+    );
+    assert.strictEqual(parsed.updated, true);
   });
 
   it("list works without registration", async () => {
-    if (!db) { throw new Error("expected db"); }
-    const getSession = (): SessionIdentity | null => null;
-    const handler = createPlanHandler(db, createTestEmitter(), createTestLogger(), getSession);
-    const result = await handler({ action: "list" }, {});
-    assert.strictEqual(result.isError, false);
+    await runToolOk(planHandlerFor(agentDb.db(), unauthenticated()), { action: "list" });
   });
 });

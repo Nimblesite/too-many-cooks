@@ -5,10 +5,18 @@
 
 import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
 
-import { SERVER_BINARY, SERVER_NODE_ARGS } from "../src/config.js";
+import {
+  STILL_RUNNING,
+  fetchAdminStatus,
+  spawnServer,
+  waitForExit,
+  waitForServer,
+  stopAndRemove,
+  stopAndRemoveAll,
+} from "./support/server_process.js";
+import { getArrayField } from "./support/json.js";
 
 // ============================================================
 // Constants
@@ -18,17 +26,12 @@ const PORT_STATUS_RESPONDS = 4050;
 const PORT_CUSTOM = 4051;
 const PORT_CONFLICT = 4052;
 const PORT_INITIAL_STATE = 4053;
-const MAX_POLL_ATTEMPTS = 30;
-const POLL_INTERVAL_MS = 200;
-const ADMIN_STATUS_PATH = "/admin/status";
 const TMP_PREFIX = "/tmp/tmc-startup-";
 const STATUS_OK = 200;
 
 /** How long to wait for the losing server to step aside and exit. */
 const STEP_ASIDE_TIMEOUT_MS = 10000;
 
-/** Sentinel returned by waitForExit when the process never exits. */
-const STILL_RUNNING = "still-running";
 const EMPTY_ARRAY_LENGTH = 0;
 const AGENTS_FIELD = "agents";
 const LOCKS_FIELD = "locks";
@@ -50,69 +53,31 @@ type StatusResponse = {
 // Helpers
 // ============================================================
 
-const buildBaseUrl = (port: number): string =>
-  `http://localhost:${String(port)}`;
-
-const spawnOnPort = (port: number): {
+/** Spawns the server on `port` and waits until /admin/status answers. */
+const spawnOnPort = async (port: number): Promise<{
   readonly proc: ChildProcess;
   readonly workspace: string;
-} => {
-  const workspace = mkdtempSync(TMP_PREFIX);
-  const proc = spawn("node", [...SERVER_NODE_ARGS, SERVER_BINARY], {
-    stdio: ["pipe", "pipe", "inherit"],
-    env: {
-      ...process.env,
-      TMC_PORT: String(port),
-      TMC_WORKSPACE: workspace,
-    },
-  });
-  return { proc, workspace };
-};
-
-const pollUntilReady = async (port: number): Promise<void> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.ok) { return; }
-    } catch {
-      // Not ready yet
-    }
-    if (i === MAX_POLL_ATTEMPTS - 1) {
-      throw new Error(`Server on port ${String(port)} failed to start`);
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
+}> => {
+  const spawned = spawnServer({ port, tmpPrefix: TMP_PREFIX });
+  await waitForServer(`http://localhost:${String(port)}`);
+  return { proc: spawned.proc, workspace: spawned.workspace };
 };
 
 const fetchStatus = async (port: number): Promise<{
   readonly status: number;
   readonly body: StatusResponse;
 }> => {
-  const url = `${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`;
-  const response = await fetch(url);
-  const body = (await response.json()) as StatusResponse;
-  return { status: response.status, body };
+  const { status, body } = await fetchAdminStatus(port);
+  return {
+    status,
+    body: {
+      agents: getArrayField(body, AGENTS_FIELD),
+      locks: getArrayField(body, LOCKS_FIELD),
+      plans: getArrayField(body, PLANS_FIELD),
+      messages: getArrayField(body, MESSAGES_FIELD),
+    },
+  };
 };
-
-const cleanup = (proc: ChildProcess, workspace: string): void => {
-  proc.kill();
-  rmSync(workspace, { recursive: true, force: true });
-};
-
-/** Wait for a process to exit, returning its exit code, or STILL_RUNNING on timeout. */
-const waitForExit = async (
-  proc: ChildProcess,
-  timeoutMs: number,
-): Promise<number | null | typeof STILL_RUNNING> =>
-  new Promise((resolve) => {
-    if (proc.exitCode !== null) { resolve(proc.exitCode); return; }
-    const timer = setTimeout((): void => { resolve(STILL_RUNNING); }, timeoutMs);
-    proc.once("exit", (code: number | null): void => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
 
 // ============================================================
 // Tests
@@ -122,14 +87,10 @@ describe("server starts and responds to /admin/status", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("returns 200 from /admin/status after startup", async () => {
-    const spawned = spawnOnPort(PORT_STATUS_RESPONDS);
-    proc = spawned.proc;
-    workspace = spawned.workspace;
-
-    await pollUntilReady(PORT_STATUS_RESPONDS);
+    ({ proc, workspace } = await spawnOnPort(PORT_STATUS_RESPONDS));
 
     const { status, body } = await fetchStatus(PORT_STATUS_RESPONDS);
     assert.strictEqual(status, STATUS_OK, "GET /admin/status MUST return 200");
@@ -144,14 +105,10 @@ describe("server starts on custom port via TMC_PORT", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("listens on port specified by TMC_PORT env var", async () => {
-    const spawned = spawnOnPort(PORT_CUSTOM);
-    proc = spawned.proc;
-    workspace = spawned.workspace;
-
-    await pollUntilReady(PORT_CUSTOM);
+    ({ proc, workspace } = await spawnOnPort(PORT_CUSTOM));
 
     const { status } = await fetchStatus(PORT_CUSTOM);
     assert.strictEqual(
@@ -171,19 +128,16 @@ describe("server does NOT kill an existing server on the same port — it steps 
   let firstWorkspace: string;
   let secondWorkspace: string;
 
-  after(() => {
-    secondProc.kill();
-    firstProc.kill();
-    rmSync(firstWorkspace, { recursive: true, force: true });
-    rmSync(secondWorkspace, { recursive: true, force: true });
+  after(async () => {
+    await stopAndRemoveAll([
+      { proc: secondProc, workspace: secondWorkspace },
+      { proc: firstProc, workspace: firstWorkspace },
+    ]);
   });
 
   it("loser of the port race exits non-zero while the owner stays alive", async () => {
     // Start the first server (project A) — it owns the port.
-    const first = spawnOnPort(PORT_CONFLICT);
-    firstProc = first.proc;
-    firstWorkspace = first.workspace;
-    await pollUntilReady(PORT_CONFLICT);
+    ({ proc: firstProc, workspace: firstWorkspace } = await spawnOnPort(PORT_CONFLICT));
 
     const beforeStatus = await fetchStatus(PORT_CONFLICT);
     assert.strictEqual(
@@ -193,7 +147,8 @@ describe("server does NOT kill an existing server on the same port — it steps 
     );
 
     // Start the second server (project B, different folder) on the SAME port.
-    const second = spawnOnPort(PORT_CONFLICT);
+    // It is NOT polled: it must give up on its own rather than ever become ready.
+    const second = spawnServer({ port: PORT_CONFLICT, tmpPrefix: TMP_PREFIX });
     secondProc = second.proc;
     secondWorkspace = second.workspace;
 
@@ -224,14 +179,10 @@ describe("/admin/status returns correct initial state", () => {
   let proc: ChildProcess;
   let workspace: string;
 
-  after(() => { cleanup(proc, workspace); });
+  after(async () => { await stopAndRemove({ proc, workspace }); });
 
   it("fresh server has empty agents, locks, plans, and messages", async () => {
-    const spawned = spawnOnPort(PORT_INITIAL_STATE);
-    proc = spawned.proc;
-    workspace = spawned.workspace;
-
-    await pollUntilReady(PORT_INITIAL_STATE);
+    ({ proc, workspace } = await spawnOnPort(PORT_INITIAL_STATE));
 
     const { status, body } = await fetchStatus(PORT_INITIAL_STATE);
     assert.strictEqual(status, STATUS_OK);

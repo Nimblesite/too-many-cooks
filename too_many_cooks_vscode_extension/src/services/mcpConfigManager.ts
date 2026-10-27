@@ -7,9 +7,8 @@
 import type { AgentType, HttpStreamableConfig, StdioConfig } from './connectionTypes';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-
-/** Log function signature. */
-type LogFn = (msg: string) => void;
+import type { LogFn } from './logging';
+import { isRecord } from './httpClient';
 
 /** MCP server entry name in agent config files. */
 const MCP_SERVER_NAME: string = 'too-many-cooks';
@@ -75,18 +74,13 @@ function buildHttpUrl(port: number): string {
   return `${HTTP_URL_PREFIX}${String(port)}${HTTP_URL_SUFFIX}`;
 }
 
-/** Type guard for plain objects. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** Read and parse a JSON config file, returning empty object if missing/invalid. */
 function readConfigFile(path: string): Record<string, unknown> {
   try {
     if (!existsSync(path)) { return {}; }
     const raw: string = readFileSync(path, 'utf-8');
     const parsed: unknown = JSON.parse(raw);
-    return isPlainObject(parsed) ? parsed : {};
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -102,7 +96,7 @@ function writeConfigFile(path: string, config: Readonly<Record<string, unknown>>
 /** Extract the mcpServers object from a config, or return empty object. */
 function extractServers(config: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const existing: unknown = config[MCP_SERVERS_KEY];
-  return isPlainObject(existing) ? { ...existing } : {};
+  return isRecord(existing) ? { ...existing } : {};
 }
 
 /** Set the MCP server entry in a config object. Returns a new object. */
@@ -118,10 +112,13 @@ function setMcpServer(
 /** Remove the MCP server entry from a config object. Returns a new object. */
 function removeMcpServer(config: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const existing: unknown = config[MCP_SERVERS_KEY];
-  if (!isPlainObject(existing)) { return { ...config }; }
-  const servers: Record<string, unknown> = { ...existing };
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-  delete servers[MCP_SERVER_NAME];
+  if (!isRecord(existing)) { return { ...config }; }
+  const servers: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(existing)) {
+    if (key !== MCP_SERVER_NAME) {
+      servers[key] = value;
+    }
+  }
   return { ...config, [MCP_SERVERS_KEY]: servers };
 }
 

@@ -6,11 +6,9 @@
 
 import type { CloudTarget, ConnectionMode, ConnectionTarget, LocalTarget } from './connectionTypes';
 import type { ChildProcess } from 'node:child_process';
+import type { LogFn } from './logging';
 import { checkServerAvailable } from './httpClient';
 import { spawn } from 'node:child_process';
-
-/** Log function signature (same as StoreManager). */
-type LogFn = (msg: string) => void;
 
 /** Default local server port. */
 const DEFAULT_LOCAL_PORT: number = 4040;
@@ -32,18 +30,6 @@ const TMC_WORKSPACE_ENV: string = 'TMC_WORKSPACE';
 
 /** Local base URL prefix. */
 const LOCAL_BASE_URL_PREFIX: string = 'http://localhost:';
-
-/** Command used to launch the local server. `npx` runs the published package
- *  without requiring a global install, so the VSIX "Start Local Server" command
- *  works on a clean machine (fixes the `spawn too-many-cooks ENOENT` failure). */
-const LOCAL_SERVER_COMMAND: string = 'npx';
-
-/** Package spec pinned to the `latest` dist-tag, so every start pulls the newest
- *  published server build instead of a stale globally-installed binary. */
-const LOCAL_SERVER_PACKAGE: string = 'too-many-cooks@latest';
-
-/** Auto-confirm flag for npx — skips the one-off package install prompt. */
-const NPX_YES_FLAG: string = '-y';
 
 /** Cloud validation endpoint (matches cloud-connection.ts pattern). */
 const CLOUD_VALIDATE_ENDPOINT: string = 'listAgents';
@@ -81,11 +67,22 @@ export interface LocalLaunchSpec {
   readonly command: string;
 }
 
-/** Build the default local-server launch invocation: `npx -y too-many-cooks@latest`.
- *  Using npx means no global install is required (no `spawn too-many-cooks ENOENT`)
- *  and the latest published server is fetched on every start. */
-export function buildLocalLaunchSpec(): LocalLaunchSpec {
-  return { args: [NPX_YES_FLAG, LOCAL_SERVER_PACKAGE], command: LOCAL_SERVER_COMMAND };
+/** Resolves the launch spec when a local server is started — in production
+ *  the bundled, version-verified binary (serverResolver.ts). */
+export type LaunchResolver = () => Promise<LocalLaunchSpec>;
+
+/** Message when no launch was wired (never the case in the extension). */
+const NO_LAUNCH_MESSAGE: string = 'No local server launch is configured';
+
+/** Default resolver: refuses rather than guessing a binary. */
+async function noLaunch(): Promise<LocalLaunchSpec> {
+  return await Promise.reject(new Error(NO_LAUNCH_MESSAGE));
+}
+
+/** A fixed launch spec (tests, explicit overrides) or a resolver, as a resolver. */
+function toLaunchResolver(launch: LaunchResolver | LocalLaunchSpec): LaunchResolver {
+  if (typeof launch === 'function') { return launch; }
+  return async (): Promise<LocalLaunchSpec> => { return await Promise.resolve(launch); };
 }
 
 /** Connection manager interface. */
@@ -117,12 +114,12 @@ function buildLocalBaseUrl(port: number): string {
   return `${LOCAL_BASE_URL_PREFIX}${String(port)}`;
 }
 
-/** Platform-aware spawn configuration for the local server (Issue #17).
- *  On Windows `npx` resolves to a `npx.cmd` shim that Node's spawn() can only
- *  run via the shell; on posix the shell is unnecessary (and lets a missing
- *  command surface as an ENOENT 'error' event instead of a shell exit code). */
-export function buildLocalSpawnConfig(platform: NodeJS.Platform): { readonly shell: boolean } {
-  return { shell: platform === 'win32' };
+/** Spawn configuration for the local server. The server is a real executable
+ *  (bundled .exe on Windows), so no platform needs a shell — and a shell would
+ *  split an extension path containing spaces and turn a missing binary into a
+ *  shell exit code instead of an ENOENT 'error' event (Issue #17). */
+export function buildLocalSpawnConfig(_platform: NodeJS.Platform): { readonly shell: boolean } {
+  return { shell: false };
 }
 
 /** Poll until the local server responds on /admin/status. Stops early if the
@@ -216,7 +213,12 @@ async function validateCloudCredentials(target: CloudTarget, log: LogFn): Promis
 }
 
 /** Create a connection manager instance. */
-export function createConnectionManager(workspaceFolder: string, log: LogFn, launch: LocalLaunchSpec = buildLocalLaunchSpec()): ConnectionManager {
+export function createConnectionManager(
+  workspaceFolder: string,
+  log: LogFn,
+  launch: LaunchResolver | LocalLaunchSpec = noLaunch,
+): ConnectionManager {
+  const resolveLaunch: LaunchResolver = toLaunchResolver(launch);
   const state: ManagerState = {
     localProcess: null,
     mode: 'disconnected',
@@ -235,7 +237,8 @@ export function createConnectionManager(workspaceFolder: string, log: LogFn, lau
 
   async function startLocal(port: number = DEFAULT_LOCAL_PORT): Promise<void> {
     if (state.mode !== 'disconnected') { disconnect(); }
-    const spec: LocalServerSpec = { args: launch.args, command: launch.command, port, workspaceFolder };
+    const { args, command }: LocalLaunchSpec = await resolveLaunch();
+    const spec: LocalServerSpec = { args, command, port, workspaceFolder };
     const child: ChildProcess = spawnLocalServer(spec, log);
     state.localProcess = child;
     await awaitServerReady(child, spec, log);

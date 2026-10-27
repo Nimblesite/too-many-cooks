@@ -3,15 +3,14 @@
 
 import * as vscode from 'vscode';
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  extractKeyFromResult,
-  restoreDialogMocks,
-  assertOk,
+  activateAndConnect,
   assertEqual,
+  assertOk,
+  callToolString,
+  getTestAPI,
+  restoreDialogMocks,
+  startAgentSuite,
+  waitForExtensionActivation,
 } from './testHelpers';
 
 const EXTENSION_ID = 'Nimblesite.too-many-cooks';
@@ -105,27 +104,11 @@ suite('Extension Activation', () => {
 
 suite('Database Feature Verification', () => {
   const testId = Date.now();
-  const agentName = `feature-verify-${testId}`;
-  let agentKey = '';
-
-  suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    const result = await callToolString(api, 'register', { name: agentName });
-    agentKey = extractKeyFromResult(result);
-  });
-
-  suiteTeardown(async () => {
-    await safeDisconnect();
-  });
+  const { requireKey } = startAgentSuite(`feature-verify-${testId}`, activateAndConnect);
 
   test('CRITICAL: Admin tool MUST exist on database', async () => {
     const api = getTestAPI();
-    assertOk(agentKey.length > 0, 'Should have agent key from suiteSetup');
+    assertOk(requireKey().length > 0, 'Should have agent key from suiteSetup');
 
     try {
       const resultStr = await callToolString(api, 'admin', {

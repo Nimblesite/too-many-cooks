@@ -6,11 +6,17 @@
 
 import * as vscode from 'vscode';
 
-// Register module-alias AFTER vscode import to avoid breaking
-// VSCode's built-in 'vscode' module resolution in Electron.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require('module-alias/register');
-import { getFilePathFromItem } from './ui/tree/treeItemUtils';
+import type { LaunchResolver, LocalLaunchSpec } from './services/connectionManager';
+import {
+  registerCopyAgentNameCommand,
+  registerCopyMessageAsQuoteCommand,
+  registerCopyMessageContentCommand,
+  registerCopyMessageIdCommand,
+  registerCopyMessageRecipientCommand,
+  registerCopyMessageSenderCommand,
+  registerCopyMessagesCommand,
+} from './ui/messageCommands';
+import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
 import { restoreLastConnection, showConnectionPicker } from './ui/connectionPicker';
 import { AgentsTreeProvider } from './ui/tree/agentsTreeProvider';
 import type { ConnectionPickerDeps } from './ui/connectionPicker';
@@ -25,17 +31,11 @@ import { createConnectionManager } from './services/connectionManager';
 import { createMcpConfigManager } from './services/mcpConfigManager';
 import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
-import { registerDeleteAgentCommand, registerDeleteAllAgentsCommand } from './ui/deleteAgentCommands';
-import {
-  registerCopyAgentNameCommand,
-  registerCopyMessageAsQuoteCommand,
-  registerCopyMessageContentCommand,
-  registerCopyMessageIdCommand,
-  registerCopyMessageRecipientCommand,
-  registerCopyMessageSenderCommand,
-  registerCopyMessagesCommand,
-} from './ui/messageCommands';
+import { getFilePathFromItem } from './ui/tree/treeItemUtils';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
+import { reportFailure } from './ui/commandFailure';
+import { resolveServerLaunch } from './services/serverResolver';
+import { shipwrightVscodeApi } from './services/shipwrightVscodeApi';
 
  
 const DEFAULT_PORT: number = 4040;
@@ -59,6 +59,13 @@ function resolvePort(): number {
 }
 
  
+/** [SWR-IDE-RESOLUTION] Launch the bundled, version-verified server binary. */
+function bundledServerLauncher(context: vscode.ExtensionContext): LaunchResolver {
+  return async (): Promise<LocalLaunchSpec> => {
+    return await resolveServerLaunch(context.extensionPath, shipwrightVscodeApi);
+  };
+}
+
 export function activate(context: vscode.ExtensionContext): TestAPI {
   outputChannel = vscode.window.createOutputChannel('Too Many Cooks');
   outputChannel.show(true);
@@ -70,7 +77,7 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
   log(`Using workspace folder: ${workspaceFolder}`);
 
   const storeManager: StoreManager = new StoreManager(workspaceFolder, log, resolvePort());
-  const connectionManager: ReturnType<typeof createConnectionManager> = createConnectionManager(workspaceFolder, log);
+  const connectionManager: ReturnType<typeof createConnectionManager> = createConnectionManager(workspaceFolder, log, bundledServerLauncher(context));
   const mcpConfigManager: ReturnType<typeof createMcpConfigManager> = createMcpConfigManager(workspaceFolder, log);
 
   const pickerDeps: ConnectionPickerDeps = {
@@ -86,8 +93,9 @@ export function activate(context: vscode.ExtensionContext): TestAPI {
   registerAllCommands(context, storeManager, pickerDeps);
   log('Extension activated');
 
-  // eslint-disable-next-line no-void
-  if (autoConnect) { void autoConnectOnActivation(pickerDeps, storeManager); }
+  if (autoConnect) {
+    startAutoConnect(pickerDeps, storeManager);
+  }
 
   context.subscriptions.push({
     dispose: (): void => {
@@ -142,6 +150,12 @@ function createProviders(storeManager: StoreManager): Providers {
     },
   );
   return { agentsProvider, agentsTreeView, locksProvider, messagesProvider, messagesTreeView };
+}
+
+function startAutoConnect(pickerDeps: ConnectionPickerDeps, storeManager: StoreManager): void {
+  autoConnectOnActivation(pickerDeps, storeManager).catch((err: unknown): void => {
+    log(`Auto-connect failed: ${String(err)}`);
+  });
 }
 
 async function autoConnectOnActivation(
@@ -202,8 +216,7 @@ function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Di
       log('Connected successfully');
       await dialogs.showInformationMessage('Connected to Too Many Cooks server');
     } catch (err: unknown) {
-      log(`Connection failed: ${String(err)}`);
-      await dialogs.showErrorMessage(`Failed to connect: ${String(err)}`);
+      await reportFailure({ dialogs, logFn: log }, 'Failed to connect', err);
     }
   });
 }
@@ -255,8 +268,7 @@ function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode
         log(`Force released lock: ${filePath}`);
         await dialogs.showInformationMessage(`Lock released: ${filePath}`);
       } catch (err: unknown) {
-        log(`Failed to release lock: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to release lock: ${String(err)}`);
+        await reportFailure({ dialogs, logFn: log }, 'Failed to release lock', err);
       }
     },
   );

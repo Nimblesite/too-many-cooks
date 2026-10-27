@@ -4,7 +4,7 @@
 /// Takes a TooManyCooksDb (any backend) and wires up all MCP tools.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import type { z } from "zod";
 
 import type { TooManyCooksDataConfig } from "./config.js";
 import type { TooManyCooksDb } from "./db-interface.js";
@@ -16,24 +16,17 @@ import {
   logLevelName,
   logTransport,
 } from "./logger.js";
-import type { EventPushFn, EventPushToAgentFn } from "./notifications.js";
+import type { EventPushFn, EventPushToAgentFn, NotificationEmitter } from "./notifications.js";
 import { createNotificationEmitter } from "./notifications.js";
 import type { Result } from "./result.js";
 import { success } from "./result.js";
-import { createLockHandler, LOCK_TOOL_CONFIG as lockToolConfig } from "./tools/lock_tool.js";
-import { createMessageHandler, MESSAGE_TOOL_CONFIG as messageToolConfig } from "./tools/message_tool.js";
-import { createPlanHandler, PLAN_TOOL_CONFIG as planToolConfig } from "./tools/plan_tool.js";
-import { createRegisterHandler, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
-import { createStatusHandler, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
-import type { CallToolResult, SessionIdentity, ToolCallback } from "./mcp-types.js";
-
-/** Server name constant. */
-const SERVER_NAME: string = "too-many-cooks";
-
-/** Server version constant. Must match the package.json `version` of
- * `packages/too-many-cooks` so the deploy-toolkit version check and the
- * MCP `serverInfo.version` response agree on a single truth. */
-const SERVER_VERSION: string = "0.5.0";
+import { type ServerInfo, serverInfoFor } from "./server_info.js";
+import { createLockHandler, LOCK_INPUT_SHAPE, LOCK_TOOL_CONFIG as lockToolConfig } from "./tools/lock_tool.js";
+import { createMessageHandler, messageInputShape, messageToolDescription } from "./tools/message_tool.js";
+import { createPlanHandler, planInputShape, planToolDescription } from "./tools/plan_tool.js";
+import { createRegisterHandler, REGISTER_INPUT_SHAPE, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
+import { createStatusHandler, STATUS_INPUT_SHAPE, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
+import type { CallToolResult, SessionGetter, SessionIdentity, SessionSetter, ToolCallback } from "./mcp-types.js";
 
 /** Log prefix for console output. */
 const LOG_PREFIX: string = "[TMC]";
@@ -44,34 +37,32 @@ export type ServerBundle = {
   readonly db: TooManyCooksDb;
 };
 
+/** Options for wiring an MCP server onto a shared DB. */
+type McpServerOptions = {
+  readonly adminPush?: EventPushFn;
+  readonly agentPush?: EventPushFn;
+  readonly agentPushToAgent?: EventPushToAgentFn;
+  readonly onSessionSet?: (agentName: string, agentKey: string) => void;
+  /** Defaults to this package's own (release-stamped) package.json. */
+  readonly serverInfo?: ServerInfo;
+};
+
 /** Create an MCP server instance wired to a shared DB (any backend). */
-export const createMcpServerForDb: (
+export const createMcpServerForDb = (
   db: TooManyCooksDb,
   config: TooManyCooksDataConfig,
   log: Logger,
-  options?: {
-    adminPush?: EventPushFn;
-    agentPush?: EventPushFn;
-    agentPushToAgent?: EventPushToAgentFn;
-    onSessionSet?: (agentName: string, agentKey: string) => void;
-  },
-) => Result<McpServer, string> = (
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  log: Logger,
-  options?: {
-    adminPush?: EventPushFn;
-    agentPush?: EventPushFn;
-    agentPushToAgent?: EventPushToAgentFn;
-    onSessionSet?: (agentName: string, agentKey: string) => void;
-  },
+  options?: McpServerOptions,
 ): Result<McpServer, string> => {
   const adminPush: EventPushFn | undefined = options?.adminPush;
   const agentPush: EventPushFn | undefined = options?.agentPush;
   const agentPushToAgent: EventPushToAgentFn | undefined = options?.agentPushToAgent;
   const onSessionSet: ((agentName: string, agentKey: string) => void) | undefined = options?.onSessionSet;
+  const info: Result<ServerInfo, string> =
+    options?.serverInfo === undefined ? serverInfoFor(import.meta.url) : success(options.serverInfo);
+  if (!info.ok) {return info;}
   const server: McpServer = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
+    info.value,
     { capabilities: { tools: { listChanged: true }, logging: {} } },
   );
   log.debug("MCP server created");
@@ -92,66 +83,10 @@ export const createMcpServerForDb: (
     log.info(`Session established for agent: ${name}`);
   };
 
-  registerTools(server, db, config, emitter, log, getSession, setSession);
+  registerTools({ server, db, config, emitter, log, getSession, setSession });
   log.info("Server initialized with all tools registered");
 
   return success(server);
-};
-
-/** Zod schema for register tool input. */
-const registerZodSchema: z.ZodRawShape = {
-  name: z.string().optional().describe(
-    "Your unique agent name, 1-50 chars. For FIRST registration only. Do NOT send with key.",
-  ),
-  key: z.string().optional().describe(
-    "Your secret key from a previous registration. For RECONNECT only. Do NOT send with name.",
-  ),
-};
-
-/** Zod schema for lock tool input. */
-const lockZodSchema: z.ZodRawShape = {
-  action: z.enum(["acquire", "release", "force_release", "renew", "query", "list"])
-    .describe("Lock action to perform"),
-  file_path: z.string().optional()
-    .describe("File path to lock (required except for list)"),
-  reason: z.string().optional()
-    .describe("Why you need this lock (optional, for acquire)"),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
-};
-
-/** Zod schema for message tool input. */
-const messageZodSchema: z.ZodRawShape = {
-  action: z.enum(["send", "get", "mark_read"])
-    .describe("Message action to perform"),
-  to_agent: z.string().optional()
-    .describe("Recipient name or * for broadcast (for send)"),
-  content: z.string().max(200).optional()
-    .describe("Message content (for send). MUST be 200 chars or less."),
-  message_id: z.string().optional()
-    .describe("Message ID (for mark_read)"),
-  unread_only: z.boolean().optional()
-    .describe("Only return unread messages (default: true)"),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
-};
-
-/** Zod schema for plan tool input. */
-const planZodSchema: z.ZodRawShape = {
-  action: z.enum(["update", "get", "list"])
-    .describe("Plan action to perform"),
-  goal: z.string().max(100).optional()
-    .describe("Your goal (for update). MUST be 100 chars or less."),
-  current_task: z.string().max(100).optional()
-    .describe("What you are doing now (for update). MUST be 100 chars or less."),
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
-};
-
-/** Zod schema for status tool input. */
-const statusZodSchema: z.ZodRawShape = {
-  agent_key: z.string().optional()
-    .describe("Agent key for authentication (optional, uses session if omitted)"),
 };
 
 /**
@@ -165,49 +100,43 @@ const wrapHandler: (handler: ToolCallback) => (args: Record<string, unknown>, ex
     return await handler(args, extra);
   };
 
-/** Register all tools on the MCP server. */
-const registerTools: (
+/** Register a single tool with a Zod schema and wrapped handler. */
+const registerOne: (
   server: McpServer,
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  emitter: ReturnType<typeof createNotificationEmitter>,
-  log: Logger,
-  getSession: () => SessionIdentity | null,
-  setSession: (name: string, key: string) => void,
+  name: string,
+  description: string,
+  inputSchema: z.ZodRawShape,
+  handler: ToolCallback,
 ) => void = (
   server: McpServer,
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  emitter: ReturnType<typeof createNotificationEmitter>,
-  log: Logger,
-  getSession: () => SessionIdentity | null,
-  setSession: (name: string, key: string) => void,
+  name: string,
+  description: string,
+  inputSchema: z.ZodRawShape,
+  handler: ToolCallback,
 ): void => {
-  server.registerTool(
-    "register",
-    { description: registerToolConfig.description, inputSchema: registerZodSchema },
-    wrapHandler(createRegisterHandler(db, emitter, log, setSession)),
-  );
-  server.registerTool(
-    "lock",
-    { description: lockToolConfig.description, inputSchema: lockZodSchema },
-    wrapHandler(createLockHandler(db, config, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "message",
-    { description: messageToolConfig.description, inputSchema: messageZodSchema },
-    wrapHandler(createMessageHandler(db, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "plan",
-    { description: planToolConfig.description, inputSchema: planZodSchema },
-    wrapHandler(createPlanHandler(db, emitter, log, getSession)),
-  );
-  server.registerTool(
-    "status",
-    { description: statusToolConfig.description, inputSchema: statusZodSchema },
-    wrapHandler(createStatusHandler(db, log, getSession)),
-  );
+  server.registerTool(name, { description, inputSchema }, wrapHandler(handler));
+};
+
+/** Everything needed to register the MCP tools. */
+type RegisterToolsParams = {
+  readonly server: McpServer;
+  readonly db: TooManyCooksDb;
+  readonly config: TooManyCooksDataConfig;
+  readonly emitter: NotificationEmitter;
+  readonly log: Logger;
+  readonly getSession: SessionGetter;
+  readonly setSession: SessionSetter;
+};
+
+/** Register all tools on the MCP server. */
+const registerTools = (params: RegisterToolsParams): void => {
+  const { server, db, config, emitter, log, getSession, setSession }: RegisterToolsParams = params;
+  // [MCP-TOOL-LIMITS] message/plan schemas and descriptions carry the CONFIGURED limits.
+  registerOne(server, "register", registerToolConfig.description, REGISTER_INPUT_SHAPE, createRegisterHandler(db, emitter, log, setSession));
+  registerOne(server, "lock", lockToolConfig.description, LOCK_INPUT_SHAPE, createLockHandler(db, config, emitter, log, getSession));
+  registerOne(server, "message", messageToolDescription(config.maxMessageLength), messageInputShape(config.maxMessageLength), createMessageHandler(db, emitter, log, getSession));
+  registerOne(server, "plan", planToolDescription(config.maxPlanLength), planInputShape(config.maxPlanLength), createPlanHandler(db, emitter, log, getSession));
+  registerOne(server, "status", statusToolConfig.description, STATUS_INPUT_SHAPE, createStatusHandler(db, log, getSession));
 };
 
 /** Creates a logger that writes to console.error. */

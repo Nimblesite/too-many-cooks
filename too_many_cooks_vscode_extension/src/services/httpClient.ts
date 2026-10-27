@@ -2,7 +2,8 @@
 
 const CONTENT_TYPE_JSON: string = 'application/json';
 const MCP_ACCEPT_HEADER: string = 'application/json, text/event-stream';
-const DATA_PREFIX: string = 'data: ';
+export const DATA_PREFIX: string = 'data: ';
+const NO_EXTRA_HEADERS: Readonly<Record<string, string>> = {};
 
 function buildMcpHeaders(sessionId: string | null): Headers {
   const headers: Headers = new Headers();
@@ -29,9 +30,13 @@ export async function streamableHttpPost(
 export async function postJsonRequest(
   url: string,
   body: Readonly<Record<string, unknown>>,
+  extraHeaders: Readonly<Record<string, string>> = NO_EXTRA_HEADERS,
 ): Promise<string> {
   const headers: Headers = new Headers();
   headers.set('content-type', CONTENT_TYPE_JSON);
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    headers.set(key, value);
+  }
   const response: Response = await fetch(url, {
     body: JSON.stringify(body),
     headers,

@@ -34,13 +34,16 @@ async function initMcpSession(baseUrl: string, endpoint: string, clientName: str
   return sessionId;
 }
 
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
 function extractToolResultText(result: Readonly<Record<string, unknown>>): string {
   const contentArray: unknown = result.content;
-  if (!Array.isArray(contentArray) || contentArray.length === 0) {
+  if (!isUnknownArray(contentArray) || contentArray.length === 0) {
     return '{"error":"No content"}';
   }
-  // eslint-disable-next-line prefer-destructuring
-  const firstItem: unknown = contentArray[0];
+  const [firstItem]: readonly unknown[] = contentArray;
   if (!isRecord(firstItem)) {
     return '{"error":"Invalid content"}';
   }

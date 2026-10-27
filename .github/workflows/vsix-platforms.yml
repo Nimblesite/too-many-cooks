@@ -1,0 +1,131 @@
+name: VSIX platforms
+
+# [SWR-VSIX-PACKAGE] [SWR-VSIX-VERIFY] One VSIX per target, each built on its
+# NATIVE runner so the bundled single-executable server is booted on the
+# platform it ships for before it is packaged, then every package's contents
+# are inspected. ci.yml runs this on every PR at the 0.0.0-dev source version;
+# release.yml runs it with the tag's version and attests the result.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version or tag (v1.2.3) to stamp and verify; empty keeps the 0.0.0-dev source version
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build VSIX (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-arm64, runner: macos-15 }
+          - { target: darwin-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: win32-x64, runner: windows-2025 }
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
+      STAMP_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Stamp versions
+        if: inputs.version != ''
+        run: bash scripts/stamp-version.sh "${STAMP_VERSION#v}"
+
+      - name: Resolve the version under test
+        id: version
+        run: echo "VERSION=$(node -p 'require("./too-many-cooks/packages/too-many-cooks/package.json").version')" >> "$GITHUB_OUTPUT"
+
+      # --ignore-scripts: no dependency install script runs. better-sqlite3 ships
+      # Node-API prebuilds for every target, so npm's default node-gyp rebuild
+      # (which needs a C++ toolchain, absent on some runners) is never needed.
+      - name: Install and build the server
+        working-directory: too-many-cooks
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run build
+
+      # Pinned Node runtime (SHA-256 verified) + bundled server, addon, schema
+      # and DataProviderMigrate under bin/$TARGET/. [SWR-VSIX-BUNDLE]
+      - name: Stage the single-executable server
+        run: bash scripts/stage-vsix-server.sh "$TARGET"
+
+      # --version must be exactly the version under test, and the binary must
+      # boot from an empty environment and create its DB, on this native runner.
+      - name: Verify the bundled server natively
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: bash scripts/verify-bundled-server.sh "$TARGET" "$VERSION"
+
+      - name: Install extension dependencies
+        working-directory: too_many_cooks_vscode_extension
+        run: npm ci
+
+      # vsce is version-pinned: a floating `npx @vscode/vsce` would fetch and run
+      # the latest release at package time — a supply-chain risk. Bump deliberately.
+      - name: Package the ${{ matrix.target }} VSIX
+        working-directory: too_many_cooks_vscode_extension
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          npx --yes @vscode/vsce@3.9.2 package --target "$TARGET" \
+            --out "$GITHUB_WORKSPACE/dist/too-many-cooks-${TARGET}-${VERSION}.vsix"
+
+      - name: Upload ${{ matrix.target }} VSIX
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vsix-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  verify:
+    name: Verify VSIX packages
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: vsix-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify every package's contents
+        env:
+          STAMP_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${STAMP_VERSION#v}"
+          VERSION="${VERSION:-$(jq -r .version too-many-cooks/packages/too-many-cooks/package.json)}"
+          for target in darwin-arm64 darwin-x64 linux-x64 win32-x64; do
+            bash scripts/verify-vsix.sh "dist/too-many-cooks-${target}-${VERSION}.vsix" "$target" "$VERSION"
+          done
+          test "$(find dist -name '*.vsix' | wc -l)" -eq 4

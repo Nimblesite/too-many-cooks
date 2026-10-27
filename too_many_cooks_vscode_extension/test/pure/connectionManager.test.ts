@@ -12,16 +12,15 @@ import assert from 'node:assert';
 import { createConnectionManager } from '../../src/services/connectionManager';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import type { CloudTarget } from '../../src/services/connectionTypes';
+import { assertMatches, createLogCollector } from './testSupport';
+import type { LogCollector } from './testSupport';
+
+/** Workspace folder every ConnectionManager test points at. */
+const WORKSPACE_FOLDER = '/tmp/tmc-test';
 
 /** A launch spec whose command can never resolve, so startLocal fails fast via
  *  an ENOENT 'error' event instead of npx reaching the network during tests. */
 const NONEXISTENT_LAUNCH: LocalLaunchSpec = { args: [], command: '/nonexistent/tmc-server-does-not-exist-zzz' };
-
-/** Collect log messages. */
-const createLogCollector = (): { readonly logs: string[]; readonly log: (msg: string) => void } => {
-  const logs: string[] = [];
-  return { logs, log: (msg: string): void => { logs.push(msg); } };
-};
 
 /** Cloud target pointing to an unreachable URL. */
 const UNREACHABLE_CLOUD_TARGET: CloudTarget = {
@@ -34,11 +33,43 @@ const UNREACHABLE_CLOUD_TARGET: CloudTarget = {
   workspaceId: 'test-workspace',
 };
 
+/** Message prefix the cloud validator emits when its HTTP probe fails. */
+const CLOUD_VALIDATION_FAILED = 'Cloud validation failed';
+
+/** ConnectionManager over a log collector, optionally with an injected launch spec. */
+function makeManager(collector: LogCollector, launch?: LocalLaunchSpec): ConnectionManager {
+  return createConnectionManager(WORKSPACE_FOLDER, collector.log, launch);
+}
+
+/** Assert the manager reports a fully disconnected state. */
+function assertManagerDisconnected(cm: ConnectionManager, suffix: string): void {
+  assert.strictEqual(cm.getMode(), 'disconnected', `mode disconnected ${suffix}`);
+  assert.strictEqual(cm.getTarget(), null, `target null ${suffix}`);
+}
+
+/** Assert connectCloud rejects for the unreachable cloud target. */
+async function expectCloudFailure(cm: ConnectionManager): Promise<void> {
+  try {
+    await cm.connectCloud(UNREACHABLE_CLOUD_TARGET);
+    assert.fail('Must throw for unreachable cloud URL');
+  } catch (err: unknown) {
+    assert.ok(err instanceof Error, 'Must throw an Error');
+    assert.ok(
+      err.message.includes(CLOUD_VALIDATION_FAILED) || err.message.includes('fetch'),
+      `Error must describe the failure: ${err.message}`,
+    );
+  }
+}
+
+/** Attempt a cloud connect and swallow the expected rejection. */
+async function ignoreCloudFailure(cm: ConnectionManager): Promise<void> {
+  try { await cm.connectCloud(UNREACHABLE_CLOUD_TARGET); } catch { /* expected */ }
+}
+
 describe('ConnectionManager', () => {
   describe('initial state', () => {
     it('starts in disconnected mode with null target', () => {
-      const { log } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const cm: ConnectionManager = makeManager(createLogCollector());
 
       assert.strictEqual(cm.getMode(), 'disconnected', 'Initial mode must be disconnected');
       assert.strictEqual(cm.getTarget(), null, 'Initial target must be null');
@@ -47,70 +78,55 @@ describe('ConnectionManager', () => {
 
   describe('disconnect', () => {
     it('disconnect from disconnected state is safe (no-op)', () => {
-      const { log, logs } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const collector: LogCollector = createLogCollector();
+      const cm: ConnectionManager = makeManager(collector);
 
       cm.disconnect();
-      assert.strictEqual(cm.getMode(), 'disconnected', 'Mode stays disconnected');
-      assert.strictEqual(cm.getTarget(), null, 'Target stays null');
-      assert.ok(logs.some((l: string) => l.includes('Disconnected')), 'Must log disconnect');
+      assertManagerDisconnected(cm, 'stays disconnected');
+      assert.ok(collector.logs.some((l: string) => l.includes('Disconnected')), 'Must log disconnect');
     });
 
     it('multiple disconnects are safe', () => {
-      const { log } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const cm: ConnectionManager = makeManager(createLogCollector());
 
       cm.disconnect();
       cm.disconnect();
       cm.disconnect();
-      assert.strictEqual(cm.getMode(), 'disconnected');
-      assert.strictEqual(cm.getTarget(), null);
+      assertManagerDisconnected(cm, 'after repeated disconnects');
     });
   });
 
   describe('connectCloud', () => {
     it('rejects unreachable cloud URL with descriptive error', async () => {
-      const { log, logs } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const collector: LogCollector = createLogCollector();
+      const cm: ConnectionManager = makeManager(collector);
 
-      try {
-        await cm.connectCloud(UNREACHABLE_CLOUD_TARGET);
-        assert.fail('Must throw for unreachable cloud URL');
-      } catch (err: unknown) {
-        assert.ok(err instanceof Error, 'Must throw an Error');
-        assert.ok(
-          err.message.includes('Cloud validation failed') || err.message.includes('fetch'),
-          `Error must describe the failure: ${err.message}`,
-        );
-      }
+      await expectCloudFailure(cm);
 
-      assert.strictEqual(cm.getMode(), 'disconnected', 'Mode must be disconnected after failure');
-      assert.strictEqual(cm.getTarget(), null, 'Target must be null after failure');
+      assertManagerDisconnected(cm, 'after failure');
       assert.ok(
-        logs.some((l: string) => l.includes('Validating cloud credentials')),
+        collector.logs.some((l: string) => l.includes('Validating cloud credentials')),
         'Must log validation attempt',
       );
     });
 
     it('preserves disconnected state after failed cloud connection', async () => {
-      const { log } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const cm: ConnectionManager = makeManager(createLogCollector());
 
-      try { await cm.connectCloud(UNREACHABLE_CLOUD_TARGET); } catch { /* expected */ }
+      await ignoreCloudFailure(cm);
 
-      assert.strictEqual(cm.getMode(), 'disconnected');
-      assert.strictEqual(cm.getTarget(), null);
+      assertManagerDisconnected(cm, 'after first failure');
 
       // Should be able to retry
-      try { await cm.connectCloud(UNREACHABLE_CLOUD_TARGET); } catch { /* expected */ }
-      assert.strictEqual(cm.getMode(), 'disconnected');
+      await ignoreCloudFailure(cm);
+      assertManagerDisconnected(cm, 'after retry failure');
     });
   });
 
   describe('startLocal', () => {
     it('rejects when server cannot be started (command not resolvable)', async () => {
-      const { log, logs } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log, NONEXISTENT_LAUNCH);
+      const collector: LogCollector = createLogCollector();
+      const cm: ConnectionManager = makeManager(collector, NONEXISTENT_LAUNCH);
 
       // The injected launch command can never resolve; the spawn fails fast
       // (ENOENT 'error', Issue #17). Both an ENOENT spawn failure and a startup
@@ -129,7 +145,7 @@ describe('ConnectionManager', () => {
       // State should remain disconnected after failure
       // (though localProcess may still exist briefly)
       assert.ok(
-        logs.some((l: string) => l.includes('Spawning local server')),
+        collector.logs.some((l: string) => l.includes('Spawning local server')),
         'Must log spawn attempt',
       );
     });
@@ -137,14 +153,14 @@ describe('ConnectionManager', () => {
 
   describe('logging', () => {
     it('logs all lifecycle events', () => {
-      const { log, logs } = createLogCollector();
-      const cm: ConnectionManager = createConnectionManager('/tmp/tmc-test', log);
+      const collector: LogCollector = createLogCollector();
+      const cm: ConnectionManager = makeManager(collector);
 
       cm.disconnect();
 
-      assert.ok(logs.length > 0, 'Must have logged something');
+      assert.ok(collector.logs.length > 0, 'Must have logged something');
       assert.ok(
-        logs.every((l: string) => l.includes('[ConnectionManager]')),
+        collector.logs.every((l: string) => l.includes('[ConnectionManager]')),
         'All logs must be prefixed with [ConnectionManager]',
       );
     });
@@ -152,13 +168,15 @@ describe('ConnectionManager', () => {
 
   describe('cloud target validation', () => {
     it('CloudTarget has all required fields', () => {
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.mode, 'cloud');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.apiUrl, 'http://127.0.0.1:1');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.apiKey, 'test-key');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.tenantId, 'test-tenant');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.workspaceId, 'test-workspace');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.passphrase, 'test-pass');
-      assert.strictEqual(UNREACHABLE_CLOUD_TARGET.transport, 'stdio');
+      assertMatches(UNREACHABLE_CLOUD_TARGET, {
+        mode: 'cloud',
+        apiUrl: 'http://127.0.0.1:1',
+        apiKey: 'test-key',
+        tenantId: 'test-tenant',
+        workspaceId: 'test-workspace',
+        passphrase: 'test-pass',
+        transport: 'stdio',
+      });
     });
   });
 });

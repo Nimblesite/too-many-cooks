@@ -10,77 +10,56 @@ const MCP_HEADERS = {
   'content-type': 'application/json',
 };
 
+import { delay, initDirectMcpSession, MCP_ENDPOINT } from './testHelpers';
+
 // ============================================================================
 // Helpers - minimal, no VSIX dependency
 // ============================================================================
 
+const ADMIN_CLIENT_NAME = 'streaming-unit-test';
+const SESSION_ID_HEADER = 'mcp-session-id';
+const STREAM_TIMEOUT_MS = 3000;
+const STREAM_SETTLE_MS = 500;
+const STREAM_WAIT_MS = 2000;
+const ADMIN_STREAM_START_MS = 1000;
+const STORE_WAIT_MS = 5000;
+const STORE_POLL_MS = 100;
+
+/** GET the admin event stream for a session, abortable by the caller. */
+async function openAdminEventStream(sessionId: string, signal: AbortSignal): Promise<Response> {
+  return await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
+    headers: { 'accept': MCP_HEADERS.accept, [SESSION_ID_HEADER]: sessionId },
+    method: 'GET',
+    signal,
+  });
+}
+
+/** Log a stream response's status and content-type under the given label. */
+function logStreamResponse(response: Response, label: string): void {
+  console.log(`[UNIT] ${label} status: ${response.status}`);
+  console.log(`[UNIT] ${label} content-type: ${response.headers.get('content-type')}`);
+}
+
+/**
+ * Describe a stream failure, or null when the caller aborted the stream.
+ * Logs the failure so a hung stream is diagnosable from the test output.
+ */
+function describeStreamFailure(err: unknown, controller: AbortController, prefix: string): string | null {
+  if (controller.signal.aborted) { return null; }
+  const message = `${prefix}: ${String(err)}`;
+  console.log(`[UNIT] ${message}`);
+  return message;
+}
+const MCP_CLIENT_NAME = 'streaming-unit-test-mcp';
+
 async function initAdminSessionDirect(): Promise<string> {
-  const body = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: 'streaming-unit-test', version: '1.0.0' },
-      protocolVersion: '2025-03-26',
-    },
-  });
-  const response = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-    body,
-    headers: MCP_HEADERS,
-    method: 'POST',
-  });
-  const sessionId = response.headers.get('mcp-session-id');
-  if (!sessionId) {
-    const text = await response.text();
-    throw new Error(`No admin session ID. Status: ${response.status}, Body: ${text}`);
-  }
-  // Send initialized notification
-  const notifyBody = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'notifications/initialized',
-    params: {},
-  });
-  const notifyResp = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-    body: notifyBody,
-    headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
-    method: 'POST',
-  });
-  console.log(`[UNIT] Admin session initialized: ${sessionId}, notify status: ${notifyResp.status}`);
+  const sessionId = await initDirectMcpSession(BASE_URL, ADMIN_EVENTS_PATH, ADMIN_CLIENT_NAME);
+  console.log(`[UNIT] Admin session initialized: ${sessionId}`);
   return sessionId;
 }
 
 async function initMcpSessionDirect(): Promise<string> {
-  const body = JSON.stringify({
-    id: 1,
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      capabilities: {},
-      clientInfo: { name: 'streaming-unit-test-mcp', version: '1.0.0' },
-      protocolVersion: '2025-03-26',
-    },
-  });
-  const response = await fetch(`${BASE_URL}/mcp`, {
-    body,
-    headers: MCP_HEADERS,
-    method: 'POST',
-  });
-  const sessionId = response.headers.get('mcp-session-id');
-  if (!sessionId) {
-    throw new Error(`No MCP session ID. Status: ${response.status}`);
-  }
-  const notifyBody = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'notifications/initialized',
-    params: {},
-  });
-  await fetch(`${BASE_URL}/mcp`, {
-    body: notifyBody,
-    headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
-    method: 'POST',
-  });
-  return sessionId;
+  return await initDirectMcpSession(BASE_URL, MCP_ENDPOINT, MCP_CLIENT_NAME);
 }
 
 async function registerAgentDirect(mcpSessionId: string, name: string): Promise<string> {
@@ -98,10 +77,6 @@ async function registerAgentDirect(mcpSessionId: string, name: string): Promise<
   const text = await response.text();
   console.log(`[UNIT] Register response (first 200): ${text.substring(0, 200)}`);
   return text;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ============================================================================
@@ -128,20 +103,12 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const sessionId = await initAdminSessionDirect();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => { controller.abort(); }, STREAM_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-        headers: {
-          'accept': 'application/json, text/event-stream',
-          'mcp-session-id': sessionId,
-        },
-        method: 'GET',
-        signal: controller.signal,
-      });
+      const response = await openAdminEventStream(sessionId, controller.signal);
 
-      console.log(`[UNIT] GET /admin/events status: ${response.status}`);
-      console.log(`[UNIT] GET /admin/events content-type: ${response.headers.get('content-type')}`);
+      logStreamResponse(response, 'GET /admin/events');
       console.log(`[UNIT] GET /admin/events headers:`);
       response.headers.forEach((value, key) => {
         console.log(`[UNIT]   ${key}: ${value}`);
@@ -177,7 +144,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // -------------------------------------------------------------------------
   // PIECE 3: Does the server PUSH events when state changes?
   // -------------------------------------------------------------------------
-  test('UNIT: Server pushes stream event when agent registered', async function () {
+  test('UNIT: Server pushes stream event when agent registered', async function serverPushesStreamEvent () {
     this.timeout(10000);
 
     const adminSessionId = await initAdminSessionDirect();
@@ -188,16 +155,8 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     const receivedChunks: string[] = [];
     let streamError: string | null = null;
 
-    const streamPromise = fetch(`${BASE_URL}${ADMIN_EVENTS_PATH}`, {
-      headers: {
-        'accept': 'application/json, text/event-stream',
-        'mcp-session-id': adminSessionId,
-      },
-      method: 'GET',
-      signal: controller.signal,
-    }).then(async (response) => {
-      console.log(`[UNIT] Stream response status: ${response.status}`);
-      console.log(`[UNIT] Stream content-type: ${response.headers.get('content-type')}`);
+    const streamPromise = openAdminEventStream(adminSessionId, controller.signal).then(async (response) => {
+      logStreamResponse(response, 'Stream response');
 
       if (!response.ok) {
         streamError = `Stream failed: ${response.status}`;
@@ -223,20 +182,14 @@ suite('Streaming Unit - Isolate Pipeline', () => {
           receivedChunks.push(chunk);
         }
       } catch (err: unknown) {
-        if (!controller.signal.aborted) {
-          streamError = `Stream read error: ${String(err)}`;
-          console.log(`[UNIT] ${streamError}`);
-        }
+        streamError = describeStreamFailure(err, controller, 'Stream read error') ?? streamError;
       }
     }).catch((err: unknown) => {
-      if (!controller.signal.aborted) {
-        streamError = `Fetch error: ${String(err)}`;
-        console.log(`[UNIT] ${streamError}`);
-      }
+      streamError = describeStreamFailure(err, controller, 'Fetch error') ?? streamError;
     });
 
     // Give the stream a moment to establish
-    await delay(500);
+    await delay(STREAM_SETTLE_MS);
 
     // Now trigger a state change by registering an agent
     const agentName = `unit-test-stream-${Date.now()}`;
@@ -245,19 +198,19 @@ suite('Streaming Unit - Isolate Pipeline', () => {
 
     // Wait for events to arrive
     console.log('[UNIT] Waiting for stream events...');
-    await delay(2000);
+    await delay(STREAM_WAIT_MS);
 
     // Abort the stream
     controller.abort();
 
     // Wait for stream promise to settle
-    await streamPromise.catch(() => {});
+    await streamPromise.catch(() => undefined);
 
     console.log(`[UNIT] Total chunks received: ${receivedChunks.length}`);
     console.log(`[UNIT] Stream error: ${streamError ?? 'none'}`);
 
     if (streamError) {
-      throw new Error(`Stream error: ${streamError}`);
+      throw new Error(`Stream error: ${String(streamError)}`);
     }
 
     // Check if we got any stream data
@@ -285,7 +238,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   test('UNIT: readEventStream parses stream data lines and calls onEvent', async () => {
     // Simulate a stream using a ReadableStream
     let eventCount = 0;
-    const onEvent = (): void => { eventCount += 1; };
+    function onEvent(): void { eventCount += 1; }
 
     const streamPayload = [
       'event: message\n',
@@ -336,7 +289,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // PIECE 5: Does the VSIX admin event stream actually connect and receive?
   // (Uses the actual startAdminEventStream from source)
   // -------------------------------------------------------------------------
-  test('UNIT: startAdminEventStream receives events from server', async function () {
+  test('UNIT: startAdminEventStream receives events from server', async function startAdminEventStreamReceivesEvents () {
     this.timeout(10000);
 
     // Import the actual function from source
@@ -361,7 +314,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     });
 
     // Wait for the session to initialize
-    await delay(1000);
+    await delay(ADMIN_STREAM_START_MS);
 
     console.log(`[UNIT] Logs after init: ${logs.length}`);
     for (const log of logs) {
@@ -389,7 +342,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
     await registerAgentDirect(mcpSessionId, agentName);
 
     // Wait for event to arrive
-    await delay(2000);
+    await delay(STREAM_WAIT_MS);
 
     abortController.abort();
 
@@ -410,7 +363,7 @@ suite('Streaming Unit - Isolate Pipeline', () => {
   // -------------------------------------------------------------------------
   // PIECE 6: Full StoreManager pipeline - does store update via streaming?
   // -------------------------------------------------------------------------
-  test('UNIT: StoreManager store updates via admin event stream', async function () {
+  test('UNIT: StoreManager store updates via admin event stream', async function storeManagerReceivesStreamedEvents () {
     this.timeout(15000);
 
     const { StoreManager } = await import('../../src/services/storeManager');
@@ -446,12 +399,12 @@ suite('Streaming Unit - Isolate Pipeline', () => {
 
     // Wait for the store to update via streaming
     const start = Date.now();
-    const waitTimeout = 5000;
+    const waitTimeout = STORE_WAIT_MS;
     while (Date.now() - start < waitTimeout) {
       if (sm.state.agents.some(a => a.agentName === agentName)) {
         break;
       }
-      await delay(100);
+      await delay(STORE_POLL_MS);
     }
 
     unsub();

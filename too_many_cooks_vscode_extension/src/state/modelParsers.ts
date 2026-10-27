@@ -12,9 +12,54 @@ import type {
   LockResult,
   Message,
 } from './types.gen';
+import { isRecord } from '../services/httpClient';
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export { isRecord };
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+/** Signature of a field reader that falls back when the field is absent or invalid. */
+type FieldReader<T> = (record: Readonly<Record<string, unknown>>, key: string) => T;
+
+/** Signature of a field reader that yields null when the field is absent or invalid. */
+type NullableFieldReader<T> = (record: Readonly<Record<string, unknown>>, key: string) => T | null;
+
+const STRING_FALLBACK: string = '';
+const NUMBER_FALLBACK: number = 0;
+const BOOLEAN_FALLBACK: boolean = false;
+
+function readField<T>(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+  guard: (value: unknown) => value is T,
+): T | null {
+  const value: unknown = record[key];
+  return guard(value) ? value : null;
+}
+
+function requiredReader<T>(
+  guard: (value: unknown) => value is T,
+  fallback: T,
+): FieldReader<T> {
+  return (record: Readonly<Record<string, unknown>>, key: string): T => {
+    return readField(record, key, guard) ?? fallback;
+  };
+}
+
+function nullableReader<T>(guard: (value: unknown) => value is T): NullableFieldReader<T> {
+  return (record: Readonly<Record<string, unknown>>, key: string): T | null => {
+    return readField(record, key, guard);
+  };
 }
 
 export function parseArray<T>(
@@ -29,44 +74,12 @@ export function parseArray<T>(
     .map(mapper);
 }
 
-export function stringField(record: Readonly<Record<string, unknown>>, key: string): string {
-  const value: unknown = record[key];
-  return typeof value === 'string' ? value : '';
-}
-
-export function numberField(record: Readonly<Record<string, unknown>>, key: string): number {
-  const value: unknown = record[key];
-  return typeof value === 'number' ? value : 0;
-}
-
-export function boolField(record: Readonly<Record<string, unknown>>, key: string): boolean {
-  const value: unknown = record[key];
-  return typeof value === 'boolean' ? value : false;
-}
-
-export function nullableStringField(
-  record: Readonly<Record<string, unknown>>,
-  key: string,
-): string | null {
-  const value: unknown = record[key];
-  return typeof value === 'string' ? value : null;
-}
-
-export function nullableNumberField(
-  record: Readonly<Record<string, unknown>>,
-  key: string,
-): number | null {
-  const value: unknown = record[key];
-  return typeof value === 'number' ? value : null;
-}
-
-export function nullableBoolField(
-  record: Readonly<Record<string, unknown>>,
-  key: string,
-): boolean | null {
-  const value: unknown = record[key];
-  return typeof value === 'boolean' ? value : null;
-}
+export const stringField: FieldReader<string> = requiredReader(isString, STRING_FALLBACK);
+export const numberField: FieldReader<number> = requiredReader(isNumber, NUMBER_FALLBACK);
+export const boolField: FieldReader<boolean> = requiredReader(isBoolean, BOOLEAN_FALLBACK);
+export const nullableStringField: NullableFieldReader<string> = nullableReader(isString);
+export const nullableNumberField: NullableFieldReader<number> = nullableReader(isNumber);
+export const nullableBoolField: NullableFieldReader<boolean> = nullableReader(isBoolean);
 
 export function parseAgentIdentity(raw: Readonly<Record<string, unknown>>): AgentIdentity {
   return {

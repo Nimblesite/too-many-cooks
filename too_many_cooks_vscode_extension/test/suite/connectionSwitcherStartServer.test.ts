@@ -7,9 +7,11 @@
 //
 // This test drives the REAL connection-manager lifecycle
 // (createConnectionManager().startLocal) to spawn a genuine too-many-cooks
-// server — the same build/bin/server.js that `npx too-many-cooks` executes — on
-// an isolated workspace and a dedicated port, proves it actually serves HTTP,
-// then proves disconnect() terminates the spawned process.
+// server on an isolated workspace and a dedicated port, proves it actually
+// serves HTTP, then proves disconnect() terminates the spawned process. It runs
+// both the built server (build/bin/server.js) and the production path: the
+// single-executable server bundled under bin/<target>/, resolved and
+// version-verified exactly as the extension does ([SWR-IDE-RESOLUTION]).
 //
 // Deliberately free of the `vscode` module so the exact same lifecycle can also
 // be validated outside the Extension Host under plain `mocha`.
@@ -19,13 +21,12 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  buildLocalLaunchSpec,
-  createConnectionManager,
-} from '../../src/services/connectionManager';
+import { createConnectionManager } from '../../src/services/connectionManager';
+import { resolveServerLaunch } from '../../src/services/serverResolver';
 import type { ConnectionManager, LocalLaunchSpec } from '../../src/services/connectionManager';
 import type { ConnectionTarget } from '../../src/services/connectionTypes';
 import { checkServerAvailable, isRecord } from '../../src/services/httpClient';
+import { removeDir } from '../pure/testSupport';
 
 /** Port distinct from the suite's shared 4040 server, so the two never clash. */
 const TEST_PORT: number = 4141;
@@ -43,8 +44,18 @@ const SERVER_ENTRY: string = path.resolve(
   'too-many-cooks', 'packages', 'too-many-cooks', 'build', 'bin', 'server.js',
 );
 
-/** Package the production default launches via npx (always-latest, no global install). */
-const EXPECTED_PACKAGE: string = 'too-many-cooks@latest';
+/** Extension root (out/test/suite -> root): holds shipwright.json and bin/<target>/,
+ *  staged by scripts/stage-vsix-server.sh before the suite runs. */
+const EXTENSION_ROOT: string = path.resolve(__dirname, '..', '..', '..');
+
+/** The bundled server for this machine, where the per-platform VSIX puts it. */
+const BUNDLED_SERVER: string = path.join(
+  EXTENSION_ROOT, 'bin', `${process.platform}-${process.arch}`,
+  process.platform === 'win32' ? 'too-many-cooks.exe' : 'too-many-cooks',
+);
+
+/** Port for the bundled-binary run (distinct from TEST_PORT and the shared 4040). */
+const BUNDLED_PORT: number = 4142;
 
 /** Top-level keys a healthy /admin/status payload must return. */
 const STATUS_KEYS: readonly string[] = ['agents', 'locks', 'plans', 'messages'];
@@ -64,15 +75,15 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
+async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, ms); });
 }
 
 /** Poll until the server stops responding (proves the spawned child was killed). */
-async function waitForServerDown(): Promise<boolean> {
+async function waitForServerDown(baseUrl: string = BASE_URL): Promise<boolean> {
   const deadline: number = Date.now() + DOWN_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const up: boolean = await checkServerAvailable(BASE_URL);
+    const up: boolean = await checkServerAvailable(baseUrl);
     if (!up) { return true; }
     await delay(DOWN_POLL_INTERVAL_MS);
   }
@@ -93,17 +104,39 @@ suite('Start Local Server spawns a real server (E2E)', () => {
 
   suiteTeardown(() => {
     if (manager !== null) { manager.disconnect(); manager = null; }
-    if (workspace !== null) { fs.rmSync(workspace, { recursive: true, force: true }); workspace = null; }
+    if (workspace !== null) { removeDir(workspace); workspace = null; }
   });
 
-  test('production default launches `npx -y too-many-cooks@latest` (no global install)', () => {
-    const spec: LocalLaunchSpec = buildLocalLaunchSpec();
-    assertEqual(spec.command, 'npx', 'default command must be npx');
-    assertOk(spec.args.includes(EXPECTED_PACKAGE), 'default must run too-many-cooks@latest');
-    assertOk(spec.args.includes('-y'), 'default must pass -y');
+  test('production launch resolves the bundled, version-verified server binary — never npx', async () => {
+    const spec: LocalLaunchSpec = await resolveServerLaunch(EXTENSION_ROOT);
+    assertEqual(spec.command, BUNDLED_SERVER, 'launches the binary bundled for this platform');
+    assertEqual(spec.args.length, 0, 'the bundled binary needs no arguments');
+    assertOk(!spec.command.includes('npx'), 'never launches through npx');
   });
 
-  test('startLocal spawns a real server, it serves HTTP, disconnect kills it', async function (): Promise<void> {
+  test('the bundled server spawns from a clean environment, serves HTTP, and is killed on disconnect', async function bundledServerLifecycle (): Promise<void> {
+    this.timeout(TEST_TIMEOUT_MS);
+    const bundledUrl: string = `http://localhost:${String(BUNDLED_PORT)}`;
+    assertOk(!(await checkServerAvailable(bundledUrl)), `port ${String(BUNDLED_PORT)} must be free before the test`);
+
+    const bundledWorkspace: string = fs.mkdtempSync(path.join(os.tmpdir(), 'tmc-e2e-bundled-'));
+    const bundled: ConnectionManager = createConnectionManager(bundledWorkspace, (): void => { /* quiet */ }, async (): Promise<LocalLaunchSpec> => {
+      return await resolveServerLaunch(EXTENSION_ROOT);
+    });
+    try {
+      await bundled.startLocal(BUNDLED_PORT);
+      assertEqual(bundled.getMode(), 'local', 'mode is local after the bundled server starts');
+      assertOk(await checkServerAvailable(bundledUrl), 'bundled server responds on /admin/status');
+      assertOk(fs.existsSync(path.join(bundledWorkspace, '.too_many_cooks', 'data.db')), 'bundled DataProviderMigrate created the DB');
+    } finally {
+      bundled.disconnect();
+      removeDir(bundledWorkspace);
+    }
+    assertEqual(bundled.getMode(), 'disconnected', 'mode is disconnected after disconnect');
+    assertOk(await waitForServerDown(bundledUrl), 'disconnect terminated the bundled server (port stops responding)');
+  });
+
+  test('startLocal spawns a real server, it serves HTTP, disconnect kills it', async function startLocalSpawnsRealServer (): Promise<void> {
     this.timeout(TEST_TIMEOUT_MS);
 
     assertOk(fs.existsSync(SERVER_ENTRY), `built server must exist at ${SERVER_ENTRY} — build the MCP server first`);

@@ -6,24 +6,16 @@
 // Every action MUST transparently reconnect on stale session.
 
 import {
-  waitForExtensionActivation,
-  waitForConnection,
-  safeDisconnect,
-  getTestAPI,
-  callToolString,
-  resetServerState,
   assertOk,
+  callToolString,
+  ensureServerReady,
+  getTestAPI,
+  safeDisconnect,
 } from './testHelpers';
 
 suite('Reconnection - stale MCP session recovery', () => {
   suiteSetup(async () => {
-    await waitForExtensionActivation();
-    const api = getTestAPI();
-    if (!api.isConnected()) {
-      await api.connect();
-      await waitForConnection();
-    }
-    await resetServerState();
+    await ensureServerReady();
   });
 
   suiteTeardown(async () => {

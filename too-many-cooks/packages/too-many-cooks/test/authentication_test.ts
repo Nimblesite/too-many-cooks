@@ -1,94 +1,69 @@
 /// Tests for agent authentication.
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import fs from "node:fs";
+import type { AgentIdentity } from "too-many-cooks-core";
+import { ERR_UNAUTHORIZED } from "too-many-cooks-core";
+import { type RegisteredAgent, bindTestDb } from "./support/db_fixture.js";
+import { expectErr, expectOk } from "./support/assertions.js";
 
-import {
-  type TooManyCooksDb,
-  createDataConfig,
-  ERR_UNAUTHORIZED,
-} from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+const TEST_DB_PATH = ".test_authentication.db";
 
-const TEST_DB_PATH = ".test_authentication.db" as const;
-
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  } catch {
-    // ignore
-  }
+/** One expected authentication failure: what to register, then what to present. */
+type AuthFailureCase = {
+  readonly name: string;
+  readonly agentName: string;
+  readonly presentKey: string;
+  readonly registerFirst: boolean;
 };
 
+const AUTH_FAILURE_CASES: readonly AuthFailureCase[] = [
+  { name: "authenticate fails with invalid key", agentName: "auth-agent2", presentKey: "wrong-key", registerFirst: true },
+  { name: "authenticate fails for nonexistent agent", agentName: "nonexistent", presentKey: "any-key", registerFirst: false },
+];
+
 describe("authentication", () => {
-  let db: TooManyCooksDb | undefined;
+  const testDb = bindTestDb(TEST_DB_PATH);
 
-  beforeEach(() => {
-    deleteIfExists(TEST_DB_PATH);
-    const config = createDataConfig({ dbPath: TEST_DB_PATH });
-    const result = createDb(config);
-    assert.strictEqual(result.ok, true);
-    if (result.ok) {
-      db = result.value;
-    }
-  });
-
-  afterEach(async () => {
-    await db?.close();
-    deleteIfExists(TEST_DB_PATH);
-  });
+  /** Registers `label` and authenticates it; returns both values. */
+  const registerAndAuthenticate = async (
+    label: string,
+  ): Promise<{ readonly reg: RegisteredAgent; readonly agent: AgentIdentity }> => {
+    const reg = expectOk(await testDb.db().register(label), "reg must be ok");
+    const agent = expectOk(
+      await testDb.db().authenticate(reg.agentName, reg.agentKey),
+      "authenticate must be ok",
+    );
+    return { reg, agent };
+  };
 
   it("authenticate succeeds with valid credentials", async () => {
-    const regResult = await db!.register("auth-agent");
-    assert.strictEqual(regResult.ok, true);
-    if (!regResult.ok) {return;}
-    const reg = regResult.value;
-
-    const authResult = await db!.authenticate(reg.agentName, reg.agentKey);
-    assert.strictEqual(authResult.ok, true);
-    if (!authResult.ok) {return;}
-    const agent = authResult.value;
+    const { agent } = await registerAndAuthenticate("auth-agent");
     assert.strictEqual(agent.agentName, "auth-agent");
   });
 
-  it("authenticate fails with invalid key", async () => {
-    await db!.register("auth-agent2");
+  for (const testCase of AUTH_FAILURE_CASES) {
+    it(testCase.name, async () => {
+      if (testCase.registerFirst) {
+        await testDb.db().register(testCase.agentName);
+      }
 
-    const authResult = await db!.authenticate("auth-agent2", "wrong-key");
-    assert.strictEqual(authResult.ok, false);
-    if (!authResult.ok) {
-      assert.strictEqual(authResult.error.code, ERR_UNAUTHORIZED);
-    }
-  });
-
-  it("authenticate fails for nonexistent agent", async () => {
-    const authResult = await db!.authenticate("nonexistent", "any-key");
-    assert.strictEqual(authResult.ok, false);
-    if (!authResult.ok) {
-      assert.strictEqual(authResult.error.code, ERR_UNAUTHORIZED);
-    }
-  });
+      const error = expectErr(
+        await testDb.db().authenticate(testCase.agentName, testCase.presentKey),
+        "authenticate must fail",
+      );
+      assert.strictEqual(error.code, ERR_UNAUTHORIZED);
+    });
+  }
 
   it("authenticate updates last_active timestamp", async () => {
-    const regResult = await db!.register("timestamp-agent");
-    assert.strictEqual(regResult.ok, true);
-    if (!regResult.ok) {return;}
-    const reg = regResult.value;
+    const { reg, agent: firstAgent } = await registerAndAuthenticate("timestamp-agent");
 
-    const firstAuth = await db!.authenticate(reg.agentName, reg.agentKey);
-    assert.strictEqual(firstAuth.ok, true);
-    if (!firstAuth.ok) {return;}
-    const firstAgent = firstAuth.value;
-
-    // Small delay to ensure timestamp changes
-    const secondAuth = await db!.authenticate(reg.agentName, reg.agentKey);
-    assert.strictEqual(secondAuth.ok, true);
-    if (!secondAuth.ok) {return;}
-    const secondAgent = secondAuth.value;
+    const secondAgent = expectOk(
+      await testDb.db().authenticate(reg.agentName, reg.agentKey),
+      "secondAgent must be ok",
+    );
 
     assert.ok(secondAgent.lastActive >= firstAgent.lastActive);
   });

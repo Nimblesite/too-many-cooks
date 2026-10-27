@@ -4,34 +4,18 @@
 /// backend in tmc-cloud. If these pass, the SQLite implementation
 /// conforms to the interface contract.
 
-import fs from "node:fs";
-
-import { createDataConfig, runDbContractTests } from "too-many-cooks-core";
-import { createDb } from "../src/db-sqlite.js";
+import { runDbContractTests } from "too-many-cooks-core";
+import { freshTestDb } from "./support/db_fixture.js";
+import { deleteIfExists } from "./support/fs_helpers.js";
 
 const TEST_DB_PATH = ".test_contract.db";
 
-const deleteIfExists = (path: string): void => {
-  try {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  } catch {
-    // ignore
-  }
-};
-
 runDbContractTests(async () => {
-  deleteIfExists(TEST_DB_PATH);
-  const config = createDataConfig({ dbPath: TEST_DB_PATH });
-  const result = createDb(config);
-  if (!result.ok) {
-    throw new Error(`Failed to create db: ${result.error}`);
-  }
+  const { db } = freshTestDb(TEST_DB_PATH);
   return await Promise.resolve({
-    db: result.value,
+    db,
     cleanup: async () => {
-      await result.value.close();
+      await db.close();
       deleteIfExists(TEST_DB_PATH);
     },
   });

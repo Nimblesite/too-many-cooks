@@ -17,6 +17,8 @@ import { success } from "too-many-cooks-core";
 
 import { deriveWorkspaceKey } from "../src/crypto.js";
 import { withEncryption } from "../src/encryption-middleware.js";
+import { createInMemoryDb } from "./support/in_memory_db.js";
+import { assertNonNullish, expectOk } from "./support/assertions.js";
 
 /** Test passphrase for key derivation. */
 const E2E_PASSPHRASE = "e2e-test-passphrase-42";
@@ -63,6 +65,64 @@ const LOCK_VERSION = 1;
 /** Default lock timeout. */
 const LOCK_TIMEOUT = 60000;
 
+/** Number of entities the "list" round-trip tests seed. */
+const SEEDED_PAIR = 2;
+
+/** `key`'s value in `map` as a successful single-row read. */
+const lookup = <K, V>(map: Map<K, V>, key: K) => success(map.get(key) ?? null);
+
+/** Every value in `map` as a successful list read. */
+const allValues = <K, V>(map: Map<K, V>) => success([...map.values()]);
+
+/** Result-bearing read of `db`'s lock on LOCK_FILE, asserted non-null. */
+const requireLock = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<FileLock> => assertNonNullish(
+  expectOk(await db.queryLock(LOCK_FILE), `${label} query must be ok`),
+  `${label} lock must exist`,
+);
+
+/** Result-bearing read of alice's plan through `db`, asserted non-null. */
+const requirePlan = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<AgentPlan> => assertNonNullish(
+  expectOk(await db.getPlan(AGENT_ALICE), `${label} plan must be ok`),
+  `${label} plan must exist`,
+);
+
+/** Seeds alice's message, plan and lock through `db`. */
+const seedAlice = async (db: TooManyCooksDb): Promise<void> => {
+  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
+  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
+  await db.acquireLock(LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT);
+};
+
+/** Asserts `values` holds exactly `count` entries, none equal to a plaintext. */
+const assertAllCiphertext = (
+  values: readonly string[],
+  plaintexts: readonly string[],
+  count: number,
+): void => {
+  assert.equal(values.length, count);
+  for (const value of values) {
+    for (const plaintext of plaintexts) {
+      assert.notEqual(value, plaintext);
+    }
+  }
+};
+
+/** Asserts `values` holds every expected plaintext. */
+const assertIncludesAll = (
+  values: readonly string[],
+  expected: readonly string[],
+): void => {
+  for (const item of expected) {
+    assert.ok(values.includes(item));
+  }
+};
+
 /**
  * In-memory db that stores values AS-IS (ciphertext when used behind middleware).
  * Simulates a real cloud database that never sees plaintext.
@@ -73,15 +133,21 @@ const createStorageDb = (): TooManyCooksDb => {
   const locks = new Map<string, FileLock>();
   let msgCounter = MSG_ID_START;
 
-  const notImpl = (): never => {
-    throw new Error("not used in e2e test");
+  const pushMessage = (from: string, to: string, content: string): string => {
+    const id = `msg-${String(msgCounter)}`;
+    msgCounter += 1;
+    messages.push({
+      id,
+      fromAgent: from,
+      toAgent: to,
+      content,
+      createdAt: FIXED_TS,
+      readAt: undefined,
+    });
+    return id;
   };
 
-  return {
-    register: notImpl,
-    authenticate: notImpl,
-    lookupByKey: notImpl,
-    listAgents: notImpl,
+  return createInMemoryDb({
     acquireLock: async (fp, an, _ak, reason, _t) => {
       const lock: FileLock = {
         filePath: fp,
@@ -98,31 +164,14 @@ const createStorageDb = (): TooManyCooksDb => {
       locks.delete(fp);
       return success(undefined);
     },
-    forceReleaseLock: notImpl,
-    queryLock: async (fp) => {
-      const lock = locks.get(fp);
-      return success(lock ?? null);
-    },
-    listLocks: async () => success([...locks.values()]),
-    renewLock: notImpl,
-    sendMessage: async (from, _key, to, content) => {
-      const id = `msg-${String(msgCounter)}`;
-      msgCounter += 1;
-      messages.push({
-        id,
-        fromAgent: from,
-        toAgent: to,
-        content,
-        createdAt: FIXED_TS,
-        readAt: undefined,
-      });
-      return success(id);
-    },
+    queryLock: async (fp) => lookup(locks, fp),
+    listLocks: async () => allValues(locks),
+    sendMessage: async (from, _key, to, content) =>
+      success(pushMessage(from, to, content)),
     getMessages: async (an) => {
       const filtered = messages.filter((m) => m.toAgent === an);
       return success(filtered);
     },
-    markRead: notImpl,
     updatePlan: async (an, _ak, goal, task) => {
       plans.set(an, {
         agentName: an,
@@ -132,118 +181,120 @@ const createStorageDb = (): TooManyCooksDb => {
       });
       return success(undefined);
     },
-    getPlan: async (an) => {
-      const plan = plans.get(an);
-      return success(plan ?? null);
-    },
-    listPlans: async () => success([...plans.values()]),
+    getPlan: async (an) => lookup(plans, an),
+    listPlans: async () => allValues(plans),
     listAllMessages: async () => success([...messages]),
-    getMessageOverview: notImpl,
-    activate: notImpl,
-    deactivate: notImpl,
-    deactivateAll: notImpl,
     close: async () => success(undefined),
-    adminDeleteLock: notImpl,
-    adminDeleteAgent: notImpl,
-    adminResetKey: notImpl,
-    adminSendMessage: async (from, to, content) => {
-      const id = `msg-${String(msgCounter)}`;
-      msgCounter += 1;
-      messages.push({
-        id,
-        fromAgent: from,
-        toAgent: to,
-        content,
-        createdAt: FIXED_TS,
-        readAt: undefined,
-      });
-      return success(id);
-    },
-    adminReset: notImpl,
-  };
+    adminSendMessage: async (from, to, content) =>
+      success(pushMessage(from, to, content)),
+  });
+};
+
+/** Fresh encrypted db plus its underlying storage db (which sees only ciphertext). */
+const createEncryptedDb = (): { readonly storageDb: TooManyCooksDb; readonly db: TooManyCooksDb } => {
+  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
+  const storageDb = createStorageDb();
+  const db = withEncryption(storageDb, wk, [wk]);
+  return { storageDb, db };
+};
+
+/** Message count a round-trip test expects in bob's inbox. */
+const SINGLE_MESSAGE = 1;
+
+/** Messages bob's inbox holds when read through `db`, asserting the count. */
+const bobInboxThrough = async (
+  db: TooManyCooksDb,
+  expectedCount: number,
+): Promise<readonly Message[]> => {
+  const messages = expectOk(
+    await db.getMessages(AGENT_BOB, BOB_KEY),
+    "get must be ok",
+  );
+  assert.equal(messages.length, expectedCount);
+  return messages;
+};
+
+/** The single message bob's inbox holds when read through `db`. */
+const soleBobMessage = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<Message> => assertNonNullish((await bobInboxThrough(db, SINGLE_MESSAGE))[0], label);
+
+/** Asserts `content` is ciphertext in `storageDb`, plaintext through `db`. */
+const assertMessageRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+  content: string,
+): Promise<Message> => {
+  const rawMsg = await soleBobMessage(storageDb, "raw message");
+  assert.notEqual(rawMsg.content, content);
+
+  const decMsg = await soleBobMessage(db, "decrypted message");
+  assert.equal(decMsg.content, content);
+  assert.equal(decMsg.fromAgent, AGENT_ALICE);
+  assert.equal(decMsg.toAgent, AGENT_BOB);
+  return decMsg;
+};
+
+/** Asserts alice's plan is ciphertext in `storageDb` and plaintext through `db`. */
+const assertPlanRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+): Promise<void> => {
+  const rawPlan = await requirePlan(storageDb, "raw");
+  assert.notEqual(rawPlan.goal, PLAN_GOAL);
+  assert.notEqual(rawPlan.currentTask, PLAN_TASK);
+  assert.equal(rawPlan.agentName, AGENT_ALICE);
+
+  const decPlan = await requirePlan(db, "dec");
+  assert.equal(decPlan.goal, PLAN_GOAL);
+  assert.equal(decPlan.currentTask, PLAN_TASK);
+  assert.equal(decPlan.agentName, AGENT_ALICE);
+};
+
+/** Asserts alice's lock is ciphertext in `storageDb` and plaintext through `db`. */
+const assertLockRoundTrip = async (
+  storageDb: TooManyCooksDb,
+  db: TooManyCooksDb,
+): Promise<void> => {
+  const rawLock = await requireLock(storageDb, "raw");
+  assert.notEqual(rawLock.reason, LOCK_REASON);
+  assert.equal(rawLock.agentName, AGENT_ALICE);
+
+  const decLock = await requireLock(db, "dec");
+  assert.equal(decLock.reason, LOCK_REASON);
+  assert.equal(decLock.filePath, LOCK_FILE);
+  assert.equal(decLock.agentName, AGENT_ALICE);
 };
 
 test("message round-trip: send encrypted, retrieve decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
-  const rawResult = await storageDb.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok) {
-    assert.equal(rawResult.value.length, 1);
-    const rawMsg = rawResult.value[0];
-    assert.ok(rawMsg !== undefined);
-    assert.notEqual(rawMsg.content, MSG_CONTENT);
-  }
-
-  const decResult = await db.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(decResult.ok, true);
-  if (decResult.ok) {
-    assert.equal(decResult.value.length, 1);
-    const decMsg = decResult.value[0];
-    assert.ok(decMsg !== undefined);
-    assert.equal(decMsg.content, MSG_CONTENT);
-    assert.equal(decMsg.fromAgent, AGENT_ALICE);
-    assert.equal(decMsg.toAgent, AGENT_BOB);
-  }
+  await assertMessageRoundTrip(storageDb, db, MSG_CONTENT);
 });
 
 test("plan round-trip: update encrypted, retrieve decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
 
-  const rawResult = await storageDb.getPlan(AGENT_ALICE);
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok && rawResult.value !== null) {
-    assert.notEqual(rawResult.value.goal, PLAN_GOAL);
-    assert.notEqual(rawResult.value.currentTask, PLAN_TASK);
-    assert.equal(rawResult.value.agentName, AGENT_ALICE);
-  }
-
-  const decResult = await db.getPlan(AGENT_ALICE);
-  assert.equal(decResult.ok, true);
-  if (decResult.ok && decResult.value !== null) {
-    assert.equal(decResult.value.goal, PLAN_GOAL);
-    assert.equal(decResult.value.currentTask, PLAN_TASK);
-    assert.equal(decResult.value.agentName, AGENT_ALICE);
-  }
+  await assertPlanRoundTrip(storageDb, db);
 });
 
 test("lock round-trip: acquire encrypted reason, query decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   await db.acquireLock(
     LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
   );
 
-  const rawResult = await storageDb.queryLock(LOCK_FILE);
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok && rawResult.value !== null) {
-    assert.notEqual(rawResult.value.reason, LOCK_REASON);
-    assert.equal(rawResult.value.agentName, AGENT_ALICE);
-  }
-
-  const decResult = await db.queryLock(LOCK_FILE);
-  assert.equal(decResult.ok, true);
-  if (decResult.ok && decResult.value !== null) {
-    assert.equal(decResult.value.reason, LOCK_REASON);
-    assert.equal(decResult.value.filePath, LOCK_FILE);
-    assert.equal(decResult.value.agentName, AGENT_ALICE);
-  }
+  await assertLockRoundTrip(storageDb, db);
 });
 
 test("listLocks round-trip: multiple locks encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const secondFile = "/src/auth/tokens.ts";
   const secondReason = "adding refresh token support";
@@ -254,121 +305,65 @@ test("listLocks round-trip: multiple locks encrypted, listed decrypted", async (
     secondFile, AGENT_BOB, BOB_KEY, secondReason, LOCK_TIMEOUT,
   );
 
-  const rawResult = await storageDb.listLocks();
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok) {
-    const expectedLockCount = 2;
-    assert.equal(rawResult.value.length, expectedLockCount);
-    for (const lock of rawResult.value) {
-      assert.notEqual(lock.reason, LOCK_REASON);
-      assert.notEqual(lock.reason, secondReason);
-    }
-  }
+  const rawLocks = expectOk(await storageDb.listLocks(), "raw list must be ok");
+  assertAllCiphertext(rawLocks.map((l) => l.reason ?? ""), [LOCK_REASON, secondReason], SEEDED_PAIR);
 
-  const decResult = await db.listLocks();
-  assert.equal(decResult.ok, true);
-  if (decResult.ok) {
-    const expectedLockCount = 2;
-    assert.equal(decResult.value.length, expectedLockCount);
-    const reasons = decResult.value.map((l) => l.reason);
-    assert.ok(reasons.includes(LOCK_REASON));
-    assert.ok(reasons.includes(secondReason));
-  }
+  const decLocks = expectOk(await db.listLocks(), "dec list must be ok");
+  assert.equal(decLocks.length, SEEDED_PAIR);
+  assertIncludesAll(decLocks.map((l) => l.reason ?? ""), [LOCK_REASON, secondReason]);
 });
 
 test("listPlans round-trip: multiple plans encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const bobGoal = "Set up CI/CD pipeline";
   const bobTask = "Configuring GitHub Actions";
   await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
   await db.updatePlan(AGENT_BOB, BOB_KEY, bobGoal, bobTask);
 
-  const rawResult = await storageDb.listPlans();
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok) {
-    const expectedPlanCount = 2;
-    assert.equal(rawResult.value.length, expectedPlanCount);
-    for (const plan of rawResult.value) {
-      assert.notEqual(plan.goal, PLAN_GOAL);
-      assert.notEqual(plan.goal, bobGoal);
-    }
-  }
+  const rawPlans = expectOk(await storageDb.listPlans(), "raw list must be ok");
+  assertAllCiphertext(rawPlans.map((p) => p.goal), [PLAN_GOAL, bobGoal], SEEDED_PAIR);
 
-  const decResult = await db.listPlans();
-  assert.equal(decResult.ok, true);
-  if (decResult.ok) {
-    const expectedPlanCount = 2;
-    assert.equal(decResult.value.length, expectedPlanCount);
-    const alicePlan = decResult.value.find((p) => p.agentName === AGENT_ALICE);
-    const bobPlan = decResult.value.find((p) => p.agentName === AGENT_BOB);
-    assert.ok(alicePlan !== undefined);
-    assert.ok(bobPlan !== undefined);
-    assert.equal(alicePlan.goal, PLAN_GOAL);
-    assert.equal(alicePlan.currentTask, PLAN_TASK);
-    assert.equal(bobPlan.goal, bobGoal);
-    assert.equal(bobPlan.currentTask, bobTask);
-  }
+  const decPlans = expectOk(await db.listPlans(), "dec list must be ok");
+  assert.equal(decPlans.length, SEEDED_PAIR);
+  const alicePlan = decPlans.find((p) => p.agentName === AGENT_ALICE);
+  const bobPlan = decPlans.find((p) => p.agentName === AGENT_BOB);
+  assert.ok(alicePlan !== undefined);
+  assert.ok(bobPlan !== undefined);
+  assert.equal(alicePlan.goal, PLAN_GOAL);
+  assert.equal(alicePlan.currentTask, PLAN_TASK);
+  assert.equal(bobPlan.goal, bobGoal);
+  assert.equal(bobPlan.currentTask, bobTask);
 });
 
 test("listAllMessages round-trip: all messages encrypted, listed decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const secondContent = "Looks good, merging now";
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
   await db.sendMessage(AGENT_BOB, BOB_KEY, AGENT_ALICE, secondContent);
 
-  const rawResult = await storageDb.listAllMessages();
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok) {
-    const expectedMsgCount = 2;
-    assert.equal(rawResult.value.length, expectedMsgCount);
-    for (const msg of rawResult.value) {
-      assert.notEqual(msg.content, MSG_CONTENT);
-      assert.notEqual(msg.content, secondContent);
-    }
-  }
+  const rawMessages = expectOk(
+    await storageDb.listAllMessages(),
+    "raw list must be ok",
+  );
+  assertAllCiphertext(rawMessages.map((m) => m.content), [MSG_CONTENT, secondContent], SEEDED_PAIR);
 
-  const decResult = await db.listAllMessages();
-  assert.equal(decResult.ok, true);
-  if (decResult.ok) {
-    const expectedMsgCount = 2;
-    assert.equal(decResult.value.length, expectedMsgCount);
-    const contents = decResult.value.map((m) => m.content);
-    assert.ok(contents.includes(MSG_CONTENT));
-    assert.ok(contents.includes(secondContent));
-  }
+  const decMessages = expectOk(
+    await db.listAllMessages(),
+    "dec list must be ok",
+  );
+  assert.equal(decMessages.length, SEEDED_PAIR);
+  assertIncludesAll(decMessages.map((m) => m.content), [MSG_CONTENT, secondContent]);
 });
 
 test("adminSendMessage round-trip: admin message encrypted, retrieved decrypted", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
   const adminContent = "System maintenance at 3am UTC";
   await db.adminSendMessage(AGENT_ALICE, AGENT_BOB, adminContent);
 
-  const rawResult = await storageDb.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(rawResult.ok, true);
-  if (rawResult.ok) {
-    assert.equal(rawResult.value.length, 1);
-    const rawMsg = rawResult.value[0];
-    assert.ok(rawMsg !== undefined);
-    assert.notEqual(rawMsg.content, adminContent);
-  }
-
-  const decResult = await db.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(decResult.ok, true);
-  if (decResult.ok) {
-    assert.equal(decResult.value.length, 1);
-    const decMsg = decResult.value[0];
-    assert.ok(decMsg !== undefined);
-    assert.equal(decMsg.content, adminContent);
-  }
+  await assertMessageRoundTrip(storageDb, db, adminContent);
 });
 
 test("key rotation: old ciphertext decryptable with keychain", async () => {
@@ -386,87 +381,58 @@ test("key rotation: old ciphertext decryptable with keychain", async () => {
   await oldDb.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
   const newDb = withEncryption(storageDb, newWk, keychain);
-  const result = await newDb.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.value.length, 1);
-    const msg = result.value[0];
-    assert.ok(msg !== undefined);
-    assert.equal(msg.content, MSG_CONTENT);
-  }
+  const msg = await soleBobMessage(newDb, "decrypted message");
+  assert.equal(msg.content, MSG_CONTENT);
 });
 
 test("routing fields remain plaintext through encryption", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
-  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
-  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
-  await db.acquireLock(
-    LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
-  );
+  await seedAlice(db);
 
-  const rawMsg = await storageDb.getMessages(AGENT_BOB, BOB_KEY);
-  assert.equal(rawMsg.ok, true);
-  if (rawMsg.ok) {
-    const msg = rawMsg.value[0];
-    assert.ok(msg !== undefined);
-    assert.equal(msg.fromAgent, AGENT_ALICE);
-    assert.equal(msg.toAgent, AGENT_BOB);
-  }
+  const msg = await soleBobMessage(storageDb, "raw message");
+  assert.equal(msg.fromAgent, AGENT_ALICE);
+  assert.equal(msg.toAgent, AGENT_BOB);
 
-  const rawPlan = await storageDb.getPlan(AGENT_ALICE);
-  assert.equal(rawPlan.ok, true);
-  if (rawPlan.ok && rawPlan.value !== null) {
-    assert.equal(rawPlan.value.agentName, AGENT_ALICE);
-  }
+  const rawPlan = await requirePlan(storageDb, "raw");
+  assert.equal(rawPlan.agentName, AGENT_ALICE);
 
-  const rawLock = await storageDb.queryLock(LOCK_FILE);
-  assert.equal(rawLock.ok, true);
-  if (rawLock.ok && rawLock.value !== null) {
-    assert.equal(rawLock.value.filePath, LOCK_FILE);
-    assert.equal(rawLock.value.agentName, AGENT_ALICE);
-  }
+  const rawLock = await requireLock(storageDb, "raw");
+  assert.equal(rawLock.filePath, LOCK_FILE);
+  assert.equal(rawLock.agentName, AGENT_ALICE);
 });
 
 test("server never sees plaintext content", async () => {
-  const wk = deriveWorkspaceKey(E2E_PASSPHRASE, E2E_WORKSPACE);
-  const storageDb = createStorageDb();
-  const db = withEncryption(storageDb, wk, [wk]);
+  const { storageDb, db } = createEncryptedDb();
 
-  await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
-  await db.updatePlan(AGENT_ALICE, ALICE_KEY, PLAN_GOAL, PLAN_TASK);
-  await db.acquireLock(
-    LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
+  await seedAlice(db);
+
+  const rawMessages = expectOk(
+    await storageDb.listAllMessages(),
+    "raw messages must be ok",
   );
-
-  const rawMessages = await storageDb.listAllMessages();
-  assert.equal(rawMessages.ok, true);
-  if (rawMessages.ok) {
-    for (const msg of rawMessages.value) {
-      assert.notEqual(msg.content, MSG_CONTENT);
-      assert.ok(!msg.content.includes(MSG_CONTENT));
-    }
+  for (const msg of rawMessages) {
+    assert.notEqual(msg.content, MSG_CONTENT);
+    assert.ok(!msg.content.includes(MSG_CONTENT));
   }
 
-  const rawPlans = await storageDb.listPlans();
-  assert.equal(rawPlans.ok, true);
-  if (rawPlans.ok) {
-    for (const plan of rawPlans.value) {
-      assert.notEqual(plan.goal, PLAN_GOAL);
-      assert.notEqual(plan.currentTask, PLAN_TASK);
-      assert.ok(!plan.goal.includes(PLAN_GOAL));
-      assert.ok(!plan.currentTask.includes(PLAN_TASK));
-    }
+  const rawPlans = expectOk(
+    await storageDb.listPlans(),
+    "raw plans must be ok",
+  );
+  for (const plan of rawPlans) {
+    assert.notEqual(plan.goal, PLAN_GOAL);
+    assert.notEqual(plan.currentTask, PLAN_TASK);
+    assert.ok(!plan.goal.includes(PLAN_GOAL));
+    assert.ok(!plan.currentTask.includes(PLAN_TASK));
   }
 
-  const rawLocks = await storageDb.listLocks();
-  assert.equal(rawLocks.ok, true);
-  if (rawLocks.ok) {
-    for (const lock of rawLocks.value) {
-      assert.notEqual(lock.reason, LOCK_REASON);
-      assert.ok(!lock.reason?.includes(LOCK_REASON));
-    }
+  const rawLocks = expectOk(
+    await storageDb.listLocks(),
+    "raw locks must be ok",
+  );
+  for (const lock of rawLocks) {
+    assert.notEqual(lock.reason, LOCK_REASON);
+    assert.ok(!lock.reason?.includes(LOCK_REASON));
   }
 });
