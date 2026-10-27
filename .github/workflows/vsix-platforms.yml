@@ -56,11 +56,14 @@ jobs:
         id: version
         run: echo "VERSION=$(node -p 'require("./too-many-cooks/packages/too-many-cooks/package.json").version')" >> "$GITHUB_OUTPUT"
 
+      # --ignore-scripts: no dependency install script runs. better-sqlite3 ships
+      # Node-API prebuilds for every target, so npm's default node-gyp rebuild
+      # (which needs a C++ toolchain, absent on some runners) is never needed.
       - name: Install and build the server
         working-directory: too-many-cooks
         run: |
           set -euo pipefail
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
       # Pinned Node runtime (SHA-256 verified) + bundled server, addon, schema
