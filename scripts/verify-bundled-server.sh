@@ -28,7 +28,14 @@ WS="$(mktemp -d)"
 # Windows needs SYSTEMROOT for its network stack; nothing else is inherited.
 env -i TMC_WORKSPACE="$WS" TMC_PORT="$PORT" SYSTEMROOT="${SYSTEMROOT:-}" "$EXE" > "$WS/server.out" 2>&1 &
 PID=$!
-trap 'kill "$PID" 2>/dev/null || true; rm -rf "$WS"' EXIT
+# Stop the server and wait for it, so Windows releases its file handles before
+# the workspace is removed; cleanup must never change the verdict.
+cleanup() {
+  kill "$PID" 2>/dev/null || true
+  wait "$PID" 2>/dev/null || true
+  rm -rf "$WS" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 for _ in $(seq "$ATTEMPTS"); do
   if curl -sf "http://127.0.0.1:$PORT/admin/status" > "$WS/status.json"; then break; fi
