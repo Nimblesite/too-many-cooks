@@ -15,7 +15,8 @@ import type { Result } from "../result.js";
 import type { DbError, FileLock, LockResult } from "../types.js";
 import { fileLockToJson, lockResultToJson } from "../types.js";
 import { type CallToolResult, type SessionGetter, type ToolCallback, textContent } from "../mcp-types.js";
-import { agentKeyField, errorContent, jsonResult, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { actionContext, agentKeyField, errorContent, jsonResult, listJsonResult, makeErrorResult, optionalString, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import type { ActionContext } from "./tool_utils.js";
 
 /** Lock tool input — the ONE source of the wire schema. */
 export const LOCK_INPUT_SHAPE: z.ZodRawShape = {
@@ -49,22 +50,16 @@ export const createLockHandler = (
   getSession: SessionGetter
 ): ToolCallback => {
   return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionOrError: string | CallToolResult = requireActionArg(args);
-    if (typeof actionOrError !== "string") {return actionOrError;}
-    const action: string = actionOrError;
-    const filePath: string | null = typeof args.file_path === "string" ? args.file_path : null;
-    const reason: string | null = typeof args.reason === "string" ? args.reason : null;
-    const log: Logger = logger.child({
-      tool: "lock",
-      action,
-      ...(filePath === null ? {} : { filePath }),
-    });
+    const filePath: string | null = optionalString(args, "file_path");
+    const reason: string | null = optionalString(args, "reason");
+    const ctx: ActionContext = actionContext(args, logger, "lock", filePath === null ? {} : { filePath });
+    if (ctx.isError) {return ctx.result;}
 
-    if (action === "query") {return await handleQuery(db, filePath);}
-    if (action === "list") {return await handleList(db);}
+    if (ctx.action === "query") {return await handleQuery(db, filePath);}
+    if (ctx.action === "list") {return await handleList(db);}
 
     return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> =>
-      await dispatchAction({ action, db, emitter, log, filePath, agentName, agentKey, reason, lockTimeoutMs: config.lockTimeoutMs }));
+      await dispatchAction({ action: ctx.action, db, emitter, log: ctx.log, filePath, agentName, agentKey, reason, lockTimeoutMs: config.lockTimeoutMs }));
   };
 };
 

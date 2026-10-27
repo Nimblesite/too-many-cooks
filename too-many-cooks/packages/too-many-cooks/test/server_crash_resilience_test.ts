@@ -34,19 +34,20 @@ const EXIT_SETTLE_MS = 1000;
 // Helpers
 // ============================================================
 
-const spawnOnPort = (port: number): {
+/** Spawns the server on `port`, waits until it answers, keeping its stderr. */
+const spawnOnPort = async (port: number): Promise<{
   readonly proc: ChildProcess;
   readonly workspace: string;
   readonly stderr: readonly string[];
-} => spawnServer({ port, tmpPrefix: TMP_PREFIX, captureStderr: true });
+}> => {
+  const spawned = spawnServer({ port, tmpPrefix: TMP_PREFIX, captureStderr: true });
+  await waitForServer(buildBaseUrl(port));
+  return spawned;
+};
 
 const fetchStatus = async (port: number): Promise<number> => {
   const response = await fetch(`${buildBaseUrl(port)}${ADMIN_STATUS_PATH}`);
   return response.status;
-};
-
-const pollUntilReady = async (port: number): Promise<void> => {
-  await waitForServer(buildBaseUrl(port));
 };
 
 // ============================================================
@@ -64,12 +65,7 @@ describe("server handles SIGTERM gracefully (not silent death)", () => {
   });
 
   it("logs shutdown message to log file on SIGTERM", async () => {
-    const spawned = spawnOnPort(PORT_SIGTERM_TEST);
-    proc = spawned.proc;
-    workspace = spawned.workspace;
-    stderr = spawned.stderr;
-
-    await pollUntilReady(PORT_SIGTERM_TEST);
+    ({ proc, workspace, stderr } = await spawnOnPort(PORT_SIGTERM_TEST));
 
     // Verify server is alive
     const statusBefore = await fetchStatus(PORT_SIGTERM_TEST);

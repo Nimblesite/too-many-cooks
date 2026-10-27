@@ -33,6 +33,7 @@ import { createTestAPI } from './testApi';
 import { getDialogService } from './services/dialogService';
 import { getFilePathFromItem } from './ui/tree/treeItemUtils';
 import { registerSendMessageCommand } from './ui/sendMessageCommand';
+import { reportFailure } from './ui/commandFailure';
 import { resolveServerLaunch } from './services/serverResolver';
 import { shipwrightVscodeApi } from './services/shipwrightVscodeApi';
 
@@ -215,8 +216,7 @@ function registerConnectCommand(storeManager: Readonly<StoreManager>): vscode.Di
       log('Connected successfully');
       await dialogs.showInformationMessage('Connected to Too Many Cooks server');
     } catch (err: unknown) {
-      log(`Connection failed: ${String(err)}`);
-      await dialogs.showErrorMessage(`Failed to connect: ${String(err)}`);
+      await reportFailure({ dialogs, logFn: log }, 'Failed to connect', err);
     }
   });
 }
@@ -268,8 +268,7 @@ function registerDeleteLockCommand(storeManager: Readonly<StoreManager>): vscode
         log(`Force released lock: ${filePath}`);
         await dialogs.showInformationMessage(`Lock released: ${filePath}`);
       } catch (err: unknown) {
-        log(`Failed to release lock: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to release lock: ${String(err)}`);
+        await reportFailure({ dialogs, logFn: log }, 'Failed to release lock', err);
       }
     },
   );

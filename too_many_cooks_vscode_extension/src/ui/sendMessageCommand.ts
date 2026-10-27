@@ -4,7 +4,10 @@ import * as vscode from 'vscode';
 import { collectAgentNames, getAgentNameFromItem } from './tree/treeItemUtils';
 import type { AgentIdentity } from '../state/types';
 import type { DialogService } from '../services/dialogService';
+import type { FailureContext } from './commandFailure';
+import type { LogFn } from '../services/logging';
 import type { StoreManager } from '../services/storeManager';
+import { attemptOrReport } from './commandFailure';
 import { getDialogService } from '../services/dialogService';
 
  
@@ -12,7 +15,7 @@ const MESSAGE_PREVIEW_LENGTH: number = 50;
 
 export function registerSendMessageCommand(
   storeManager: Readonly<StoreManager>,
-  logFn: (message: string) => void,
+  logFn: LogFn,
 ): vscode.Disposable {
   return vscode.commands.registerCommand(
     'tooManyCooks.sendMessage',
@@ -68,23 +71,23 @@ async function handleSendMessage(
 }
 
 async function deliverMessages(
-  logFn: (message: string) => void,
+  logFn: LogFn,
   args: Readonly<DeliverArgs>,
 ): Promise<void> {
   const dialogs: DialogService = getDialogService();
+  const failure: FailureContext = { dialogs, logFn };
   const { content, fromAgent, recipients, storeManager }: Readonly<DeliverArgs> = args;
   const preview: string = content.length > MESSAGE_PREVIEW_LENGTH
     ? `${content.substring(0, MESSAGE_PREVIEW_LENGTH)}...`
     : content;
   for (const toAgent of recipients) {
-    try {
-      await storeManager.sendMessage(fromAgent, toAgent, content);
-      logFn(`Message sent from ${fromAgent} to ${toAgent}: ${content}`);
-    } catch (err: unknown) {
-      logFn(`Failed to send message to ${toAgent}: ${String(err)}`);
-      await dialogs.showErrorMessage(`Failed to send message to ${toAgent}: ${String(err)}`);
-      return;
-    }
+    const sent: boolean = await attemptOrReport(
+      failure,
+      `Failed to send message to ${toAgent}`,
+      async (): Promise<void> => { await storeManager.sendMessage(fromAgent, toAgent, content); },
+    );
+    if (!sent) { return; }
+    logFn(`Message sent from ${fromAgent} to ${toAgent}: ${content}`);
   }
   await dialogs.showInformationMessage(
     `Message sent to ${String(recipients.length)} recipient(s): "${preview}"`,

@@ -7,10 +7,8 @@
 import type { AgentType, HttpStreamableConfig, StdioConfig } from './connectionTypes';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import type { LogFn } from './logging';
 import { isRecord } from './httpClient';
-
-/** Log function signature. */
-type LogFn = (msg: string) => void;
 
 /** MCP server entry name in agent config files. */
 const MCP_SERVER_NAME: string = 'too-many-cooks';

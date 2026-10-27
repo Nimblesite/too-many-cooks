@@ -10,41 +10,17 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
 import { existsSync } from "node:fs";
-import Database from "better-sqlite3";
 
 import type { Result } from "too-many-cooks-core";
 import { applyMigrations } from "../src/migrate.js";
 import { deleteIfExists } from "./support/fs_helpers.js";
+import { assertTablesPresent } from "./support/sqlite_rows.js";
 
 const TEST_DB_PATH: string = ".test_migrate_no_path_shim.db";
 
 /** Env key for the executable search path (case-insensitive on win32). */
 const PATH_KEY: string = "PATH";
 
-/** Tables that must exist after a successful migration. */
-const REQUIRED_TABLES: readonly string[] = [
-  "identity",
-  "locks",
-  "messages",
-  "message_reads",
-  "plans",
-];
-
-const tableNames = (dbPath: string): readonly string[] => {
-  const db: Database.Database = new Database(dbPath, { readonly: true });
-  try {
-    const rows: unknown[] = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all();
-    return rows.flatMap((row: unknown): readonly string[] =>
-      typeof row === "object" && row !== null && "name" in row && typeof row.name === "string"
-        ? [row.name]
-        : [],
-    );
-  } finally {
-    db.close();
-  }
-};
 
 /** Run applyMigrations with PATH emptied, restoring it afterwards. */
 const migrateWithoutPath = (dbPath: string): Result<void, string> => {
@@ -67,12 +43,6 @@ describe("schema migration must not depend on PATH-resolvable shims", () => {
 
     assert.strictEqual(result.ok, true, `applyMigrations must succeed without PATH, got: ${result.ok ? "" : result.error}`);
     assert.ok(existsSync(TEST_DB_PATH), `DB file must exist after applyMigrations: ${TEST_DB_PATH}`);
-    const present: readonly string[] = tableNames(TEST_DB_PATH);
-    for (const required of REQUIRED_TABLES) {
-      assert.ok(
-        present.includes(required),
-        `Table '${required}' must exist after migration. Got: ${present.join(", ")}`,
-      );
-    }
+    assertTablesPresent(TEST_DB_PATH, "After migration,");
   });
 });

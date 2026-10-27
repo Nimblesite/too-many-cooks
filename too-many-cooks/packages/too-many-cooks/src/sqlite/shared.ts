@@ -90,6 +90,20 @@ export const toRow = (value: unknown): Record<string, unknown> | undefined =>
 /** Narrow unknown SQLite rows array to ReadonlyArray<Record<string, unknown>>. */
 export const toRows = (value: unknown[]): ReadonlyArray<Record<string, unknown>> => value.filter(isRecord);
 
+/// Reads `column` from `row` and hands the string to `onValue`; a non-string
+/// column value is a database-shape error, not a crash ([DEDUP-DESLOP]).
+export const withStringColumn = <T>(
+  row: Record<string, unknown>,
+  column: string,
+  missingMessage: string,
+  onValue: (value: string) => Result<T, DbError>
+): Result<T, DbError> => {
+  const value: unknown = row[column];
+  return typeof value === "string"
+    ? onValue(value)
+    : error({ code: ERR_DATABASE, message: missingMessage });
+};
+
 /** Run a write; zero changes maps to `miss`, otherwise success(undefined). */
 export const runOrMiss = (stmt: Database.Statement, params: SqliteParams, miss: DbError): Result<void, DbError> => {
   const result: Database.RunResult = stmt.run(...params);

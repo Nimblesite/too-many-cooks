@@ -32,6 +32,7 @@ import {
   runOrMiss,
   selectMappedRows,
   toRow,
+  withStringColumn,
 } from "./shared.js";
 
 /** Fetch an agent's public identity columns. */
@@ -42,6 +43,12 @@ const SQL_LIST_AGENTS: string = "SELECT agent_name, registered_at, last_active F
 
 /** Resolve an agent name from a key. */
 const SQL_LOOKUP_BY_KEY: string = "SELECT agent_name FROM identity WHERE agent_key = ?";
+
+/** Column `lookupByKey` reads its result from. */
+const AGENT_NAME_COLUMN: string = "agent_name";
+
+/** Error when a looked-up row has no usable agent name. */
+const MISSING_AGENT_NAME: string = "Missing agent_name";
 
 /** Register a new agent or reactivate an inactive one. */
 const SQL_REGISTER_UPSERT: string = `
@@ -127,10 +134,7 @@ const lookupByKey = (db: Database.Database, log: Logger, key: string): Result<st
     if (row === undefined) {
       return error({ code: ERR_UNAUTHORIZED, message: "Invalid key" });
     }
-    const agentName: unknown = row.agent_name;
-    return typeof agentName === "string"
-      ? success(agentName)
-      : error({ code: ERR_DATABASE, message: "Missing agent_name" });
+    return withStringColumn(row, AGENT_NAME_COLUMN, MISSING_AGENT_NAME, success);
   });
 };
 

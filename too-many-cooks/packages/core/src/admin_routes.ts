@@ -9,6 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { TooManyCooksDb } from "./db-interface.js";
 import type { Result } from "./result.js";
+import { optionalString } from "./tools/tool_utils.js";
 import type { AgentIdentity, AgentPlan, AgentRegistration, DbError, FileLock, Message } from "./types.gen.js";
 import {
   agentIdentityToJson,
@@ -100,21 +101,15 @@ const sendError = (res: Response, code: number, message: string): void => {
   res.status(code).send(message);
 };
 
-/** Extract a string field from the request body, or undefined. */
-const stringField = (body: Record<string, unknown>, field: string): string | undefined => {
-  const value: unknown = body[field];
-  return typeof value === "string" ? value : undefined;
-};
-
 /** Send a database error as an HTTP error response. */
 const sendDbError = (res: Response, code: number, error: DbError): void => {
   sendError(res, code, JSON.stringify(dbErrorToJson(error)));
 };
 
 /** Extract a required string field, sending a 400 response when absent. */
-const requireStringField = (res: Response, body: Record<string, unknown>, field: string): string | undefined => {
-  const value: string | undefined = stringField(body, field);
-  if (value === undefined) {
+const requireStringField = (res: Response, body: Record<string, unknown>, field: string): string | null => {
+  const value: string | null = optionalString(body, field);
+  if (value === null) {
     sendError(res, 400, `${field} required`);
   }
   return value;
@@ -183,8 +178,8 @@ const registerDeleteRoute = (
   op: (value: string) => Promise<Result<void, DbError>>
 ): void => {
   app.post(routePath, async (req: Request, res: Response) => {
-    const value: string | undefined = requireStringField(res, extractBody(req), field);
-    if (value === undefined) { return; }
+    const value: string | null = requireStringField(res, extractBody(req), field);
+    if (value === null) { return; }
     const result: Result<void, DbError> = await op(value);
     if (result.ok) {
       hub.pushEvent(event, payload(value));
@@ -198,8 +193,8 @@ const registerDeleteRoute = (
 /** Register POST /admin/reset-key route. */
 const registerResetKeyRoute = (app: Express, db: TooManyCooksDb): void => {
   app.post("/admin/reset-key", async (req: Request, res: Response) => {
-    const agentName: string | undefined = requireStringField(res, extractBody(req), "agentName");
-    if (agentName === undefined) { return; }
+    const agentName: string | null = requireStringField(res, extractBody(req), "agentName");
+    if (agentName === null) { return; }
     const result: Result<AgentRegistration, DbError> = await db.adminResetKey(agentName);
     if (result.ok) {
       res.send(JSON.stringify(agentRegistrationToJson(result.value)));
@@ -213,10 +208,10 @@ const registerResetKeyRoute = (app: Express, db: TooManyCooksDb): void => {
 const registerSendMessageRoute = (app: Express, db: TooManyCooksDb, hub: AdminEventHub): void => {
   app.post("/admin/send-message", async (req: Request, res: Response) => {
     const body: Record<string, unknown> = extractBody(req);
-    const fromAgent: string | undefined = stringField(body, "fromAgent");
-    const toAgent: string | undefined = stringField(body, "toAgent");
-    const content: string | undefined = stringField(body, "content");
-    if (fromAgent === undefined || toAgent === undefined || content === undefined) {
+    const fromAgent: string | null = optionalString(body, "fromAgent");
+    const toAgent: string | null = optionalString(body, "toAgent");
+    const content: string | null = optionalString(body, "content");
+    if (fromAgent === null || toAgent === null || content === null) {
       sendError(res, 400, "fromAgent, toAgent, content required");
       return;
     }

@@ -6,6 +6,7 @@
 /// accepts initialize, resets the DB via admin between tests, and
 /// hands out fresh MCP clients.
 
+import assert from "node:assert";
 import { after, before, beforeEach } from "node:test";
 import type { ChildProcess } from "node:child_process";
 
@@ -28,7 +29,8 @@ import {
   type ClientInfo,
 } from "./mcp_http.js";
 import { removeTree } from "./fs_helpers.js";
-import { getStringField, parseJsonRecord } from "./json.js";
+import { getRecordArrayField, getStringField, parseJsonRecord } from "./json.js";
+import { assertDefined } from "./assertions.js";
 
 const HEALTH_CHECK_ATTEMPTS = 10;
 const HEALTH_POLL_INTERVAL_MS = 200;
@@ -170,3 +172,58 @@ export const registerAgents = async (
     };
   });
 };
+
+/** Registers two agents and returns them as a defined pair ([DEDUP-DESLOP]). */
+export const registerAgentPair = async (
+  client: McpHttpClient,
+  firstLabel: string,
+  secondLabel: string,
+): Promise<readonly [Agent, Agent]> => {
+  const agents = await registerAgents(client, 2);
+  const first = agents[0];
+  const second = agents[1];
+  assertDefined(first, firstLabel);
+  assertDefined(second, secondLabel);
+  return [first, second];
+};
+
+/** Registers exactly one agent; fails the test when registration returns none. */
+export const registerSingleAgent = async (
+  client: McpHttpClient,
+  label: string,
+): Promise<Agent> => {
+  const agents = await registerAgents(client, 1);
+  const agent = agents[0];
+  assertDefined(agent, label);
+  return agent;
+};
+
+/** Calls a tool and parses its JSON payload ([DEDUP-DESLOP]). */
+export const callToolJson = async (
+  client: McpHttpClient,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> =>
+  parseJsonRecord(await client.callTool(tool, args));
+
+/** Asserts every tool result in `results` reports `field === true`. */
+export const assertAllReportedTrue = (
+  results: readonly string[],
+  field: string,
+): void => {
+  for (const result of results) {
+    assert.strictEqual(parseJsonRecord(result)[field], true);
+  }
+};
+
+/** Text of the first content block of a tool result ([DEDUP-DESLOP]). */
+export const firstContentText = (result: Record<string, unknown>): string => {
+  const content = getRecordArrayField(result, "content")[0];
+  assertDefined(content, "content block");
+  return getStringField(content, "text");
+};
+
+/** Reads the server status payload ([DEDUP-DESLOP]). */
+export const statusJson = async (
+  client: McpHttpClient,
+): Promise<Record<string, unknown>> => await callToolJson(client, "status", {});

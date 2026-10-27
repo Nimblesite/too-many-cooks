@@ -8,34 +8,14 @@
 
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert";
-import Database from "better-sqlite3";
-
 import { createDataConfig } from "too-many-cooks-core";
 import { createDb } from "../src/db-sqlite.js";
 import { deleteIfExists } from "./support/fs_helpers.js";
-import { pragmaColumnNames } from "./support/sqlite_rows.js";
+import { columnNamesOf, dropColumn } from "./support/sqlite_rows.js";
 
 const TEST_DB_PATH: string = ".test_schema_repair.db";
 const TABLE_LOCKS: string = "locks";
 const COLUMN_REASON: string = "reason";
-
-const tableColumnNames = (dbPath: string, table: string): readonly string[] => {
-  const db: Database.Database = new Database(dbPath);
-  try {
-    return pragmaColumnNames(db.pragma(`table_info(${table})`));
-  } finally {
-    db.close();
-  }
-};
-
-const dropColumn = (dbPath: string, table: string, column: string): void => {
-  const db: Database.Database = new Database(dbPath);
-  try {
-    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
-  } finally {
-    db.close();
-  }
-};
 
 describe("schema repair without migration history", () => {
   afterEach(() => {
@@ -54,7 +34,7 @@ describe("schema repair without migration history", () => {
     if (!firstOpen.ok) { return; }
     await firstOpen.value.close();
 
-    const beforeDrop: readonly string[] = tableColumnNames(TEST_DB_PATH, TABLE_LOCKS);
+    const beforeDrop: readonly string[] = columnNamesOf(TEST_DB_PATH, TABLE_LOCKS);
     assert.ok(
       beforeDrop.includes(COLUMN_REASON),
       `precondition: ${TABLE_LOCKS}.${COLUMN_REASON} must exist on a fresh DB, got cols: ${beforeDrop.join(",")}`,
@@ -64,7 +44,7 @@ describe("schema repair without migration history", () => {
     // simulating a user/tool that mangled the DB outside the migration tool's knowledge.
     // There is NO migration history that records this column was ever removed.
     dropColumn(TEST_DB_PATH, TABLE_LOCKS, COLUMN_REASON);
-    const afterDrop: readonly string[] = tableColumnNames(TEST_DB_PATH, TABLE_LOCKS);
+    const afterDrop: readonly string[] = columnNamesOf(TEST_DB_PATH, TABLE_LOCKS);
     assert.ok(
       !afterDrop.includes(COLUMN_REASON),
       `setup: ${TABLE_LOCKS}.${COLUMN_REASON} must be gone after DROP COLUMN, got cols: ${afterDrop.join(",")}`,
@@ -82,7 +62,7 @@ describe("schema repair without migration history", () => {
     await secondOpen.value.close();
 
     // Step 4: the dropped column is back, NO migration history required.
-    const afterRepair: readonly string[] = tableColumnNames(TEST_DB_PATH, TABLE_LOCKS);
+    const afterRepair: readonly string[] = columnNamesOf(TEST_DB_PATH, TABLE_LOCKS);
     assert.ok(
       afterRepair.includes(COLUMN_REASON),
       `${TABLE_LOCKS}.${COLUMN_REASON} must be restored by DataProviderMigrate, got cols: ${afterRepair.join(",")}`,

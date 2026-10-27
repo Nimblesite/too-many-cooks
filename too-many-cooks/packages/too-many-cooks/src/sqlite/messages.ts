@@ -4,7 +4,6 @@ import type Database from "better-sqlite3";
 
 import {
   type DbError,
-  ERR_DATABASE,
   ERR_NOT_FOUND,
   type Logger,
   type Message,
@@ -30,7 +29,14 @@ import {
   toRow,
   toRows,
   validateContentLength,
+  withStringColumn,
 } from "./shared.js";
+
+/** Column `markMessageRead` reads the recipient from. */
+const TO_AGENT_COLUMN: string = "to_agent";
+
+/** Error when a message row carries no usable recipient. */
+const INVALID_TO_AGENT: string = "Invalid to_agent in message";
 
 /** Insert a message row. */
 const SQL_INSERT_MESSAGE: string =
@@ -223,10 +229,8 @@ const markMessageRead = (db: Database.Database, messageId: string, agentName: st
   if (row === undefined) {
     return error({ code: ERR_NOT_FOUND, message: "Message not found" });
   }
-  const toAgent: unknown = row.to_agent;
-  return typeof toAgent === "string"
-    ? recordRead(db, messageId, toAgent, agentName)
-    : error({ code: ERR_DATABASE, message: "Invalid to_agent in message" });
+  return withStringColumn(row, TO_AGENT_COLUMN, INVALID_TO_AGENT, (toAgent: string) =>
+    recordRead(db, messageId, toAgent, agentName));
 };
 
 /** Mark a message as read. */

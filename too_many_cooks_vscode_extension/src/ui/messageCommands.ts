@@ -10,9 +10,11 @@ import { getDialogService } from '../services/dialogService';
 
 const BROADCAST_TARGET: string = '*';
 const BROADCAST_LABEL: string = 'all';
+const MESSAGE_KEY: string = 'message';
+const AGENT_NAME_KEY: string = 'agentName';
 
-function hasMessage(value: object): value is { readonly message: unknown } {
-  return 'message' in value;
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
 }
 
 function hasPrimitiveProp(
@@ -23,9 +25,15 @@ function hasPrimitiveProp(
   return typeof value[key] === kind;
 }
 
+/** Copy an unknown value into a plain record, or null when it is not an object. */
+function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  if (typeof value !== 'object' || value === null) { return null; }
+  return { ...value };
+}
+
 function isMessage(value: unknown): value is Message {
-  if (typeof value !== 'object' || value === null) { return false; }
-  const record: Readonly<Record<string, unknown>> = { ...value };
+  const record: Readonly<Record<string, unknown>> | null = asRecord(value);
+  if (record === null) { return false; }
   return (
     hasPrimitiveProp(record, 'id', 'string') &&
     hasPrimitiveProp(record, 'fromAgent', 'string') &&
@@ -35,24 +43,24 @@ function isMessage(value: unknown): value is Message {
   );
 }
 
-function extractMessage(item: unknown): Message | null {
-  if (typeof item !== 'object' || item === null) { return null; }
-  if (!hasMessage(item)) { return null; }
-  const candidate: unknown = item.message;
-  if (!isMessage(candidate)) { return null; }
-  return candidate;
+/** Read `key` off `item`, returning it only when `guard` accepts the value. */
+function extractField<T>(
+  item: unknown,
+  key: string,
+  guard: (value: unknown) => value is T,
+): T | null {
+  const record: Readonly<Record<string, unknown>> | null = asRecord(item);
+  if (record === null) { return null; }
+  const candidate: unknown = record[key];
+  return guard(candidate) ? candidate : null;
 }
 
-function hasAgentName(value: object): value is { readonly agentName: unknown } {
-  return 'agentName' in value;
+function extractMessage(item: unknown): Message | null {
+  return extractField(item, MESSAGE_KEY, isMessage);
 }
 
 function extractAgentName(item: unknown): string | null {
-  if (typeof item !== 'object' || item === null) { return null; }
-  if (!hasAgentName(item)) { return null; }
-  const candidate: unknown = item.agentName;
-  if (typeof candidate !== 'string') { return null; }
-  return candidate;
+  return extractField(item, AGENT_NAME_KEY, isString);
 }
 
 function collectMessages(

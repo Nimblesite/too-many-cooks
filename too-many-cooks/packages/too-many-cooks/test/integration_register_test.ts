@@ -4,12 +4,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import { assertDefined } from "./support/assertions.js";
 import { getStringField, parseJsonRecord } from "./support/json.js";
 import {
   bindIntegrationLifecycle,
   createIntegrationServer,
-  registerAgents,
+  registerAgentPair,
 } from "./support/integration_server.js";
 
 const TEST_PORT = 4060;
@@ -61,11 +60,7 @@ describe("Too Many Cooks MCP Server Integration", () => {
   // MESSAGE TOOL: mark_read action
   it("message mark_read marks message as read", async () => {
     const client = suite.client();
-    const agents = await registerAgents(client, 2);
-    const sender = agents[0];
-    const recipient = agents[1];
-    assertDefined(sender, "sender agent");
-    assertDefined(recipient, "recipient agent");
+    const [sender, recipient] = await registerAgentPair(client, "sender agent", "recipient agent");
 
     // Send a message
     const sendResult = await client.callTool("message", {

@@ -5,6 +5,7 @@ import assert from "node:assert";
 
 import {
   type AgentIdentity,
+  type AgentRegistration,
   ERR_NOT_FOUND,
   ERR_UNAUTHORIZED,
 } from "too-many-cooks-core";
@@ -13,19 +14,25 @@ import { expectErr, expectOk } from "./support/assertions.js";
 
 const TEST_DB_PATH = ".test_admin.db";
 
+/** Lock timeout used by the admin lock fixtures. */
+const LOCK_TIMEOUT_MS = 60000;
+
 describe("admin_test", () => {
   const testDb = bindTestDb(TEST_DB_PATH);
 
+  /** Registers `name`, has it lock `filePath`, and returns its identity. */
+  const registeredLockHolder = async (
+    name: string,
+    filePath: string,
+  ): Promise<AgentRegistration> => {
+    const reg = expectOk(await testDb.db().register(name), "reg must be ok");
+    await testDb.db().acquireLock(filePath, reg.agentName, reg.agentKey, null, LOCK_TIMEOUT_MS);
+    return reg;
+  };
+
   it("adminDeleteLock removes lock", async () => {
     // Register agent and acquire lock
-    const reg = expectOk(await testDb.db().register("admin-test-agent"), "reg must be ok");
-    await testDb.db().acquireLock(
-      "/admin/file.dart",
-      reg.agentName,
-      reg.agentKey,
-      null,
-      60000,
-    );
+    await registeredLockHolder("admin-test-agent", "/admin/file.dart");
 
     // Admin deletes lock (no auth required)
     const result = await testDb.db().adminDeleteLock("/admin/file.dart");
@@ -45,17 +52,8 @@ describe("admin_test", () => {
   });
 
   it("adminDeleteAgent removes agent and all related data", async () => {
-    // Register agent
-    const reg = expectOk(await testDb.db().register("delete-me-agent"), "reg must be ok");
-
-    // Create agent data: lock, plan, message
-    await testDb.db().acquireLock(
-      "/delete/file.dart",
-      reg.agentName,
-      reg.agentKey,
-      null,
-      60000,
-    );
+    // Register agent, then create its data: lock, plan, message
+    const reg = await registeredLockHolder("delete-me-agent", "/delete/file.dart");
     await testDb.db().updatePlan(reg.agentName, reg.agentKey, "Goal", "Task");
 
     // Register another agent to send message
@@ -119,14 +117,7 @@ describe("admin_test", () => {
 
   it("adminResetKey releases locks held by agent", async () => {
     // Register agent and acquire lock
-    const reg = expectOk(await testDb.db().register("lock-reset-agent"), "reg must be ok");
-    await testDb.db().acquireLock(
-      "/reset/file.dart",
-      reg.agentName,
-      reg.agentKey,
-      null,
-      60000,
-    );
+    const reg = await registeredLockHolder("lock-reset-agent", "/reset/file.dart");
 
     // Reset key
     await testDb.db().adminResetKey(reg.agentName);

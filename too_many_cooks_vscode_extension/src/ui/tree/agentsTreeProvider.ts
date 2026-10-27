@@ -3,12 +3,11 @@
 import * as vscode from 'vscode';
 import type { AgentDetails, FileLock, Message } from '../../state/types';
 import { AgentTreeItem } from './agentTreeItem';
+import type { LockTiming } from './lockTiming';
 import type { StoreManager } from '../../services/storeManager';
 import { StoreTreeProviderBase } from './storeTreeProviderBase';
+import { getLockTiming } from './lockTiming';
 import { selectAgentDetails } from '../../state/selectors';
-
- 
-const MS_PER_SECOND: number = 1000;
 
 export class AgentsTreeProvider extends StoreTreeProviderBase<AgentTreeItem> {
   public constructor(storeManager: Readonly<StoreManager>) {
@@ -171,8 +170,7 @@ function createLockChild(
   agentName: string,
   now: number,
 ): AgentTreeItem {
-  const expiresIn: number = Math.max(0, Math.round((lock.expiresAt - now) / MS_PER_SECOND));
-  const expired: boolean = lock.expiresAt <= now;
+  const { expired, expiresIn }: LockTiming = getLockTiming(lock, now);
   const item: AgentTreeItem = new AgentTreeItem({
     agentName,
     collapsibleState: vscode.TreeItemCollapsibleState.None,

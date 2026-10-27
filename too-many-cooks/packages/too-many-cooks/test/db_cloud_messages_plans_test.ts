@@ -2,46 +2,25 @@
 /// plus the error-envelope and malformed-payload paths — driven black-box
 /// against the in-process fake cloud API (test/support/fake_cloud_api.ts).
 
-import { after, before, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 
-import { createCloudDb } from "../src/db-cloud.js";
-import { FakeCloudApi, errEnvelope, okEnvelope } from "./support/fake_cloud_api.js";
+import { errEnvelope, okEnvelope } from "./support/fake_cloud_api.js";
+import { bindCloudContract } from "./support/cloud_contract.js";
 
-const API_KEY = "test-api-key-123";
-const WORKSPACE_ID = "ws-42";
 const ERR_CODE = "VALIDATION_ERROR";
 const ERR_MSG = "nope";
 const NETWORK_CODE = "NETWORK_ERROR";
 const UNKNOWN_MSG = "Unknown API error";
 const OVERVIEW_LIMIT = 5;
 
-const cloud = new FakeCloudApi();
-
-/** The db under test, created in `before`. */
-let db: ReturnType<typeof createCloudDb> | undefined;
-
-before(async () => {
-  const url: string = await cloud.start();
-  db = createCloudDb(url, API_KEY, WORKSPACE_ID);
-});
-
-after(async () => {
-  await cloud.close();
-});
-
-/** Assert the transport contract on the most recent recorded call. */
-const assertTransport = (endpoint: string, expectedBody: unknown): void => {
-  const req = cloud.last(endpoint);
-  assert.strictEqual(req.httpMethod, "POST");
-  assert.strictEqual(req.headers.authorization, `Bearer ${API_KEY}`);
-  assert.strictEqual(req.headers["x-workspace-id"], WORKSPACE_ID);
-  assert.deepStrictEqual(req.body, expectedBody);
-};
+/** Fake cloud API, db-under-test and transport assertion ([CLOUD-API-CONTRACT]). */
+const contract = bindCloudContract();
+const { cloud, assertTransport } = contract;
 
 describe("db-cloud message endpoint contract", () => {
   it("sendMessage returns id; non-string value maps to empty string", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("sendMessage", 200, okEnvelope("mid-1"));
     const result = await db.sendMessage("a", "k", "b", "hi");
     if (!result.ok) { assert.fail("sendMessage failed"); }
@@ -55,7 +34,7 @@ describe("db-cloud message endpoint contract", () => {
   });
 
   it("getMessages forwards the unreadOnly option and maps message records", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("getMessages", 200, okEnvelope([
       { id: "m1", from_agent: "a", to_agent: "b", content: "hello", created_at: 9 },
       { id: "m2", from_agent: "c", to_agent: "b", content: "again", created_at: 10, read_at: 11 },
@@ -76,7 +55,7 @@ describe("db-cloud message endpoint contract", () => {
   });
 
   it("getMessageOverview maps total/unread/recent headers", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("getMessageOverview", 200, okEnvelope({
       total: 3,
       unread: 1,
@@ -93,7 +72,7 @@ describe("db-cloud message endpoint contract", () => {
   });
 
   it("markRead and listAllMessages hit their endpoints", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("markRead", 200, okEnvelope(null));
     const marked = await db.markRead("m1", "b", "k");
     assert.strictEqual(marked.ok, true);
@@ -111,7 +90,7 @@ describe("db-cloud message endpoint contract", () => {
 
 describe("db-cloud plan and admin endpoint contract", () => {
   it("updatePlan posts exact args; getPlan maps null and records", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("updatePlan", 200, okEnvelope(null));
     const updated = await db.updatePlan("a", "k", "goal", "task");
     assert.strictEqual(updated.ok, true);
@@ -139,7 +118,7 @@ describe("db-cloud plan and admin endpoint contract", () => {
   });
 
   it("admin endpoints post exact args and parse values", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("adminDeleteLock", 200, okEnvelope(null));
     assert.strictEqual((await db.adminDeleteLock("/x")).ok, true);
     assertTransport("adminDeleteLock", { filePath: "/x" });
@@ -168,7 +147,7 @@ describe("db-cloud plan and admin endpoint contract", () => {
 
 describe("db-cloud error envelope handling", () => {
   it("propagates the exact DbError code and message", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("register", 422, errEnvelope(ERR_CODE, ERR_MSG));
     const result = await db.register("dup");
     if (result.ok) { assert.fail("expected error"); }
@@ -176,7 +155,7 @@ describe("db-cloud error envelope handling", () => {
   });
 
   it("falls back to NETWORK_ERROR/Unknown API error without an error object", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("register", 200, { ok: false });
     const result = await db.register("dup");
     if (result.ok) { assert.fail("expected error"); }
@@ -184,7 +163,7 @@ describe("db-cloud error envelope handling", () => {
   });
 
   it("rejects non-envelope JSON payloads with the network fallback", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("listAgents", 200, ["not", "an", "envelope"]);
     const result = await db.listAgents();
     if (result.ok) { assert.fail("expected error"); }
@@ -192,7 +171,7 @@ describe("db-cloud error envelope handling", () => {
   });
 
   it("maps non-record values through empty-record defaults", async () => {
-    if (db === undefined) { assert.fail("db not created"); }
+    const db = contract.db();
     cloud.script("register", 200, okEnvelope("scalar"));
     const reg = await db.register("x");
     if (!reg.ok) { assert.fail("register scalar failed"); }

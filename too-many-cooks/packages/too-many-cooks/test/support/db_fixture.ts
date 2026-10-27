@@ -86,21 +86,62 @@ export type AgentDbHandle = {
   readonly agent: () => RegisteredAgent;
 };
 
+/** Access to per-test registered agents bound by `bindAgentsDb`. */
+export type AgentsDbHandle = {
+  readonly db: () => TooManyCooksDb;
+  readonly agents: () => readonly RegisteredAgent[];
+};
+
+/** Per-test db plus `agentLabels.length` registered agents, in order. */
+export const bindAgentsDb = (
+  dbPath: string,
+  agentLabels: readonly string[],
+): AgentsDbHandle => {
+  const testDb = bindTestDb(dbPath);
+  let current: readonly RegisteredAgent[] | undefined;
+  beforeEach(async () => {
+    current = await registerAgentList(testDb.db(), agentLabels);
+  });
+  return {
+    db: testDb.db,
+    agents: (): readonly RegisteredAgent[] => requireAgents(current, dbPath),
+  };
+};
+
+/** Asserts the agent list is bound and returns it. */
+const requireAgents = (
+  agents: readonly RegisteredAgent[] | undefined,
+  dbPath: string,
+): readonly RegisteredAgent[] => {
+  assert.ok(agents !== undefined, `no agents bound for ${dbPath}`);
+  return agents;
+};
+
+/** Registers every label in order; fails the test if any registration fails. */
+export const registerAgentList = async (
+  db: TooManyCooksDb,
+  agentLabels: readonly string[],
+): Promise<readonly RegisteredAgent[]> => {
+  const agents: RegisteredAgent[] = [];
+  for (const label of agentLabels) {
+    agents.push(await registerAgent(db, label));
+  }
+  return agents;
+};
+
 /** Per-test db plus one registered agent ([DEDUP-DESLOP]). */
 export const bindAgentDb = (
   dbPath: string,
   agentLabel: string,
 ): AgentDbHandle => {
-  const testDb = bindTestDb(dbPath);
-  let current: RegisteredAgent | undefined;
-  beforeEach(async () => {
-    current = await registerAgent(testDb.db(), agentLabel);
-  });
+  const agentsDb = bindAgentsDb(dbPath, [agentLabel]);
   return {
-    db: testDb.db,
+    db: agentsDb.db,
     agent: (): RegisteredAgent => {
-      if (current === undefined) { throw new Error(`no agent bound for ${dbPath}`); }
-      return current;
+      const agents = agentsDb.agents();
+      const only = agents[0];
+      assert.ok(only !== undefined, `no agent bound for ${dbPath}`);
+      return only;
     },
   };
 };

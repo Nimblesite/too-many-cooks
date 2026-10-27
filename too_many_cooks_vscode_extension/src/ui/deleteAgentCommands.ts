@@ -1,12 +1,13 @@
 // Delete agent commands — extracted from extension.ts to keep file under 300 LOC.
 
 import * as vscode from 'vscode';
+import { attemptOrReport, reportFailure } from './commandFailure';
 import type { DialogService } from '../services/dialogService';
+import type { FailureContext } from './commandFailure';
+import type { LogFn } from '../services/logging';
 import type { StoreManager } from '../services/storeManager';
 import { collectAgentNames } from './tree/treeItemUtils';
 import { getDialogService } from '../services/dialogService';
-
-type LogFn = (msg: string) => void;
 
 async function deleteAgents(
   storeManager: Readonly<StoreManager>,
@@ -14,15 +15,15 @@ async function deleteAgents(
   names: readonly string[],
 ): Promise<void> {
   const dialogs: DialogService = getDialogService();
+  const failure: FailureContext = { dialogs, logFn };
   for (const name of names) {
-    try {
-      await storeManager.deleteAgent(name);
-      logFn(`Removed agent: ${name}`);
-    } catch (err: unknown) {
-      logFn(`Failed to remove agent ${name}: ${String(err)}`);
-      await dialogs.showErrorMessage(`Failed to remove agent ${name}: ${String(err)}`);
-      return;
-    }
+    const removed: boolean = await attemptOrReport(
+      failure,
+      `Failed to remove agent ${name}`,
+      async (): Promise<void> => { await storeManager.deleteAgent(name); },
+    );
+    if (!removed) { return; }
+    logFn(`Removed agent: ${name}`);
   }
   await dialogs.showInformationMessage(`Removed ${String(names.length)} agent(s)`);
 }
@@ -79,8 +80,7 @@ export function registerDeleteAllAgentsCommand(
         logFn(`Removed all ${String(count)} agents`);
         await dialogs.showInformationMessage(`All ${String(count)} agents removed`);
       } catch (err: unknown) {
-        logFn(`Failed to remove all agents: ${String(err)}`);
-        await dialogs.showErrorMessage(`Failed to remove all agents: ${String(err)}`);
+        await reportFailure({ dialogs, logFn }, 'Failed to remove all agents', err);
       }
     },
   );

@@ -12,6 +12,7 @@ import type { ConnectionMode, ConnectionTarget } from './connectionTypes';
 import { LOCAL_BASE_URL_PREFIX, buildAuthHeaders, buildBaseUrl, ensureStatusOk, fetchWithAuth, postJsonWithAuth } from './storeManagerHelpers';
 import { checkServerAvailable, isRecord } from './httpClient';
 import { extractToolResultText, initMcpSession, mcpJsonRpcRequest } from './mcpProtocol';
+import type { LogFn } from './logging';
 import type { StatusData } from './statusParser';
 import { Store } from '../state/store';
 import { parseStatusResponse } from './statusParser';
@@ -30,7 +31,6 @@ const SERVER_NOT_RUNNING_MSG: string =
 const STALE_SESSION_ID: string = 'stale-session-00000000';
 const NOT_CONNECTED_JSON: string = '{"error":"Not connected"}';
 
-type LogFn = (msg: string) => void;
 
 export class StoreManager {
   private readonly store: Store;

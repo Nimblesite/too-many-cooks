@@ -2,6 +2,7 @@
 // Automatically reconnects when the SSE connection drops.
 
 import { DATA_PREFIX } from './httpClient';
+import type { LogFn } from './logging';
 import { initMcpSession } from './mcpProtocol';
 
 const ADMIN_EVENTS_PATH: string = '/admin/events';
@@ -12,7 +13,6 @@ const RECONNECT_MAX_DELAY_MS: number = 30000;
 const BACKOFF_MULTIPLIER: number = 2;
 const SSE_ACCEPT: string = 'application/json, text/event-stream';
 
-type LogFn = (msg: string) => void;
 
 export interface AdminEventStreamConfig {
   readonly baseUrl: string;

@@ -14,8 +14,10 @@ import {
   parseJsonRecord,
 } from "./support/json.js";
 import {
+  assertAllReportedTrue,
   bindIntegrationLifecycle,
   createIntegrationServer,
+  registerAgentPair,
   registerAgents,
 } from "./support/integration_server.js";
 
@@ -57,20 +59,12 @@ describe("Too Many Cooks MCP Server Integration", () => {
       }),
     );
     const lockResults = await Promise.all(lockPromises);
-
-    for (const r of lockResults) {
-      const json = parseJsonRecord(r);
-      assert.strictEqual(json.acquired, true);
-    }
+    assertAllReportedTrue(lockResults, "acquired");
   });
 
   it("lock race condition handled correctly", async () => {
     const client = suite.client();
-    const agents = await registerAgents(client, 2);
-    const first = agents[0];
-    const second = agents[1];
-    assertDefined(first, "first agent");
-    assertDefined(second, "second agent");
+    const [first, second] = await registerAgentPair(client, "first agent", "second agent");
 
     const contested = "/contested/file.dart";
     const raceResults = await Promise.all([
@@ -110,11 +104,7 @@ describe("Too Many Cooks MCP Server Integration", () => {
       }),
     );
     const results = await Promise.all(planPromises);
-
-    for (const r of results) {
-      const json = parseJsonRecord(r);
-      assert.strictEqual(json.updated, true);
-    }
+    assertAllReportedTrue(results, "updated");
   });
 
   it("5 agents send messages concurrently", async () => {
@@ -137,11 +127,7 @@ describe("Too Many Cooks MCP Server Integration", () => {
       );
     }
     const results = await Promise.all(msgPromises);
-
-    for (const r of results) {
-      const json = parseJsonRecord(r);
-      assert.strictEqual(json.sent, true);
-    }
+    assertAllReportedTrue(results, "sent");
   });
 
   it("broadcast message to all agents", async () => {
@@ -270,11 +256,7 @@ describe("Too Many Cooks MCP Server Integration", () => {
       }),
     );
     const results = await Promise.all(releasePromises);
-
-    for (const r of results) {
-      const json = parseJsonRecord(r);
-      assert.strictEqual(json.released, true);
-    }
+    assertAllReportedTrue(results, "released");
 
     // Verify no locks remain
     const status = parseJsonRecord(

@@ -3,7 +3,9 @@
 import { z } from "zod";
 
 import type { TooManyCooksDb } from "../db-interface.js";
+import type { Logger } from "../logger.js";
 import type { Result } from "../result.js";
+import { success } from "../result.js";
 import { type DbError, dbErrorToJson } from "../types.js";
 import {
   type CallToolResult,
@@ -79,6 +81,13 @@ export const jsonResult = (payload: Record<string, unknown>): CallToolResult => 
   isError: false,
 }};
 
+/** Map a db list result to JSON records, or pass the db error through. */
+export const mapListToJson = <T>(
+  result: Result<readonly T[], DbError>,
+  toJson: (item: T) => Record<string, unknown>
+): Result<Array<Record<string, unknown>>, DbError> =>
+  result.ok ? success(result.value.map(toJson)) : result;
+
 /** Build a successful JSON tool result from a db list result. */
 export const listJsonResult = <T>(
   result: Result<readonly T[], DbError>,
@@ -98,9 +107,46 @@ export const requireActionArg = (args: Record<string, unknown>): string | CallTo
   return typeof actionArg === "string" ? actionArg : errorContent(MISSING_ACTION_MESSAGE);
 };
 
+/** Read an optional string argument, or null when absent. */
+export const optionalString = (args: Record<string, unknown>, field: string): string | null => {
+  const value: unknown = args[field];
+  return typeof value === "string" ? value : null;
+};
+
 /** Build an error result for an unrecognized action. */
 export const unknownActionError = (action: string): CallToolResult =>
   errorContent(`Unknown action: ${action}`);
+
+/** Action argument plus a logger scoped to it. */
+type ActionOk = {
+  readonly isError: false;
+  readonly action: string;
+  readonly log: Logger;
+};
+
+/** Failure to extract the action argument. */
+type ActionErr = {
+  readonly isError: true;
+  readonly result: CallToolResult;
+};
+
+export type ActionContext = ActionErr | ActionOk;
+
+/** Extract the required `action` argument and a logger scoped to it. */
+export const actionContext = (
+  args: Record<string, unknown>,
+  logger: Logger,
+  tool: string,
+  logFields: Record<string, unknown>
+): ActionContext => {
+  const actionOrError: string | CallToolResult = requireActionArg(args);
+  if (typeof actionOrError !== "string") {return { isError: true, result: actionOrError };}
+  return { isError: false, action: actionOrError, log: logger.child({ tool, action: actionOrError, ...logFields }) };
+};
+
+/** Sentence stating that over-limit input is rejected outright, never truncated. */
+export const rejectedNeverTruncated = (subject: string): string =>
+  `Longer ${subject} are REJECTED, never truncated. `;
 
 /** Shared shape of every tool's registration config. */
 export type ToolConfig<Schema> = {

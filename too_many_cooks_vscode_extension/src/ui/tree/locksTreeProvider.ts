@@ -1,14 +1,34 @@
 // TreeDataProvider for file locks view.
 
 import * as vscode from 'vscode';
+import type { AppState, FileLock } from '../../state/types';
 import { selectActiveLocks, selectExpiredLocks } from '../../state/selectors';
-import type { FileLock } from '../../state/types';
+import type { LockTiming } from './lockTiming';
 import { LockTreeItem } from './lockTreeItem';
 import type { StoreManager } from '../../services/storeManager';
 import { StoreTreeProviderBase } from './storeTreeProviderBase';
+import { getLockTiming } from './lockTiming';
 
- 
-const MS_PER_SECOND: number = 1000;
+/** One top-level lock category: label, expanded state and its selector. */
+interface LockSection {
+  readonly collapsibleState: vscode.TreeItemCollapsibleState;
+  readonly label: string;
+  readonly select: (state: Readonly<AppState>) => readonly FileLock[];
+}
+
+const SECTION_ACTIVE: LockSection = {
+  collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+  label: 'Active',
+  select: selectActiveLocks,
+};
+
+const SECTION_EXPIRED: LockSection = {
+  collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+  label: 'Expired',
+  select: selectExpiredLocks,
+};
+
+const LOCK_SECTIONS: readonly LockSection[] = [SECTION_ACTIVE, SECTION_EXPIRED];
 
 export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
   public constructor(storeManager: Readonly<StoreManager>) {
@@ -30,22 +50,16 @@ export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
 
   private getRootItems(): LockTreeItem[] {
     const { state }: Readonly<StoreManager> = this.storeManager;
-    const active: readonly FileLock[] = selectActiveLocks(state);
-    const expired: readonly FileLock[] = selectExpiredLocks(state);
     const items: LockTreeItem[] = [];
 
-    if (active.length > 0) {
-      items.push(createCategoryItem(
-        `Active (${String(active.length)})`,
-        vscode.TreeItemCollapsibleState.Expanded,
-      ));
-    }
-
-    if (expired.length > 0) {
-      items.push(createCategoryItem(
-        `Expired (${String(expired.length)})`,
-        vscode.TreeItemCollapsibleState.Collapsed,
-      ));
+    for (const section of LOCK_SECTIONS) {
+      const locks: readonly FileLock[] = section.select(state);
+      if (locks.length > 0) {
+        items.push(createCategoryItem(
+          `${section.label} (${String(locks.length)})`,
+          section.collapsibleState,
+        ));
+      }
     }
 
     if (items.length === 0) {
@@ -62,23 +76,15 @@ export class LocksTreeProvider extends StoreTreeProviderBase<LockTreeItem> {
 
    
   private getCategoryChildren(element: LockTreeItem): LockTreeItem[] {
-     
     const rawLabel: vscode.TreeItemLabel | string | undefined = element.label;
-    let label: string = '';
-    if (typeof rawLabel === 'string') {
-      label = rawLabel;
-    }
-    const isActive: boolean = label.startsWith('Active');
+    const label: string = typeof rawLabel === 'string' ? rawLabel : '';
+    const section: LockSection = label.startsWith(SECTION_ACTIVE.label)
+      ? SECTION_ACTIVE
+      : SECTION_EXPIRED;
     const { state }: Readonly<StoreManager> = this.storeManager;
-    let lockList: readonly FileLock[];
-    if (isActive) {
-      lockList = selectActiveLocks(state);
-    } else {
-      lockList = selectExpiredLocks(state);
-    }
     const now: number = Date.now();
 
-    return lockList.map((lock: Readonly<FileLock>): LockTreeItem => {
+    return section.select(state).map((lock: Readonly<FileLock>): LockTreeItem => {
       return createLockItem(lock, now);
     });
   }
@@ -100,8 +106,7 @@ function createCategoryItem(
 }
 
 function createLockItem(lock: Readonly<FileLock>, now: number): LockTreeItem {
-  const expiresIn: number = Math.max(0, Math.round((lock.expiresAt - now) / MS_PER_SECOND));
-  const expired: boolean = lock.expiresAt <= now;
+  const { expired, expiresIn }: LockTiming = getLockTiming(lock, now);
   let desc: string;
   if (expired) {
     desc = `${lock.agentName} - EXPIRED`;
@@ -134,7 +139,7 @@ function createLockItem(lock: Readonly<FileLock>, now: number): LockTreeItem {
 }
 
 function createLockTooltip(lock: Readonly<FileLock>): vscode.MarkdownString {
-  const expired: boolean = lock.expiresAt <= Date.now();
+  const { expired, expiresIn }: LockTiming = getLockTiming(lock, Date.now());
   const md: vscode.MarkdownString = new vscode.MarkdownString();
   md.appendMarkdown(`**${lock.filePath}**\n\n`);
   md.appendMarkdown(`- **Agent:** ${lock.agentName}\n`);
@@ -142,7 +147,6 @@ function createLockTooltip(lock: Readonly<FileLock>): vscode.MarkdownString {
     md.appendMarkdown('- **Status:** **EXPIRED**\n');
   } else {
     md.appendMarkdown('- **Status:** Active\n');
-    const expiresIn: number = Math.round((lock.expiresAt - Date.now()) / MS_PER_SECOND);
     md.appendMarkdown(`- **Expires in:** ${String(expiresIn)}s\n`);
   }
   if (lock.reason !== null) {

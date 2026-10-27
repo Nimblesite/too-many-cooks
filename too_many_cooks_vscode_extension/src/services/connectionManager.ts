@@ -6,11 +6,9 @@
 
 import type { CloudTarget, ConnectionMode, ConnectionTarget, LocalTarget } from './connectionTypes';
 import type { ChildProcess } from 'node:child_process';
+import type { LogFn } from './logging';
 import { checkServerAvailable } from './httpClient';
 import { spawn } from 'node:child_process';
-
-/** Log function signature (same as StoreManager). */
-type LogFn = (msg: string) => void;
 
 /** Default local server port. */
 const DEFAULT_LOCAL_PORT: number = 4040;

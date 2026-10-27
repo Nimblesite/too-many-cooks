@@ -1,6 +1,7 @@
 // Relative-age formatting shared by tree items and tooltips.
 
-const MS_PER_SECOND: number = 1000;
+// Milliseconds in one second.
+export const MS_PER_SECOND: number = 1000;
 const SECONDS_PER_MINUTE: number = 60;
 const MINUTES_PER_HOUR: number = 60;
 const HOURS_PER_DAY: number = 24;

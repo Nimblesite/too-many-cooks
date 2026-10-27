@@ -2,8 +2,8 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+  type AgentEventHub,
   createNotificationEmitter,
   createAgentEventHub,
   sendNotification,
@@ -13,20 +13,23 @@ import {
   EVENT_MESSAGE_SENT,
 } from "too-many-cooks-core";
 
-const createServer = () =>
-  new McpServer(
-    { name: "test", version: "1.0.0" },
-    { capabilities: { tools: { listChanged: false }, logging: {} } },
-  );
+import { createEventRecorder, createTestMcpServer } from "./support/handlers.js";
+
+/** Binds `sessionId` to a fresh test server and agent name on `hub`. */
+const bindHubSession = (
+  hub: AgentEventHub,
+  sessionId: string,
+  agentName: string,
+): void => {
+  hub.servers.set(sessionId, createTestMcpServer());
+  hub.sessionAgentNames.set(sessionId, agentName);
+};
 
 describe("NotificationEmitter with callbacks", () => {
   it("emit calls both adminPush and agentPush", () => {
-    const adminEvents: string[] = [];
-    const agentEvents: string[] = [];
-    const adminPush = (event: string): void => { adminEvents.push(event); };
-    const agentPush = (event: string): void => { agentEvents.push(event); };
+    const { adminEvents, agentEvents, adminPush, agentPush } = createEventRecorder();
 
-    const emitter = createNotificationEmitter(createServer(), adminPush, agentPush);
+    const emitter = createNotificationEmitter(createTestMcpServer(), adminPush, agentPush);
     emitter.emit(EVENT_AGENT_REGISTERED, { agent_name: "test" });
 
     assert.strictEqual(adminEvents.length, 1);
@@ -36,12 +39,9 @@ describe("NotificationEmitter with callbacks", () => {
   });
 
   it("emitAdmin calls only adminPush", () => {
-    const adminEvents: string[] = [];
-    const agentEvents: string[] = [];
-    const adminPush = (event: string): void => { adminEvents.push(event); };
-    const agentPush = (event: string): void => { agentEvents.push(event); };
+    const { adminEvents, agentEvents, adminPush, agentPush } = createEventRecorder();
 
-    const emitter = createNotificationEmitter(createServer(), adminPush, agentPush);
+    const emitter = createNotificationEmitter(createTestMcpServer(), adminPush, agentPush);
     emitter.emitAdmin(EVENT_LOCK_ACQUIRED, { file: "/test.ts" });
 
     assert.strictEqual(adminEvents.length, 1);
@@ -56,7 +56,7 @@ describe("NotificationEmitter with callbacks", () => {
       targetedEvents.push({ event, toAgent });
     };
 
-    const emitter = createNotificationEmitter(createServer(), adminPush, undefined, agentPushToAgent);
+    const emitter = createNotificationEmitter(createTestMcpServer(), adminPush, undefined, agentPushToAgent);
     emitter.emitToAgent(EVENT_MESSAGE_SENT, { content: "hello" }, "agent-2");
 
     assert.strictEqual(adminEvents.length, 1);
@@ -67,7 +67,7 @@ describe("NotificationEmitter with callbacks", () => {
   });
 
   it("works with no callbacks (all undefined)", () => {
-    const emitter = createNotificationEmitter(createServer());
+    const emitter = createNotificationEmitter(createTestMcpServer());
     // Should not throw
     emitter.emit(EVENT_AGENT_REGISTERED, {});
     emitter.emitAdmin(EVENT_LOCK_ACQUIRED, {});
@@ -103,13 +103,11 @@ describe("AgentEventHub", () => {
 
   it("pushToAgent to agent WITHOUT active stream does not throw", () => {
     const hub = createAgentEventHub();
-    const server = createServer();
     const sessionId = "session-no-stream";
     const agentName = "offline-agent";
 
     // Register the agent's server and name mapping, but do NOT add to activeStreamSessions
-    hub.servers.set(sessionId, server);
-    hub.sessionAgentNames.set(sessionId, agentName);
+    bindHubSession(hub, sessionId, agentName);
 
     assert.strictEqual(hub.servers.size, 1);
     assert.strictEqual(hub.sessionAgentNames.size, 1);
@@ -127,11 +125,9 @@ describe("AgentEventHub", () => {
 
   it("pushEvent broadcast to agents WITHOUT active stream does not throw", () => {
     const hub = createAgentEventHub();
-    const server = createServer();
     const sessionId = "session-broadcast-no-stream";
 
-    hub.servers.set(sessionId, server);
-    hub.sessionAgentNames.set(sessionId, "broadcast-target");
+    bindHubSession(hub, sessionId, "broadcast-target");
 
     assert.strictEqual(hub.activeStreamSessions.size, 0);
 
@@ -147,16 +143,9 @@ describe("AgentEventHub", () => {
 
   it("pushToAgent broadcast to multiple agents WITHOUT active stream does not throw", () => {
     const hub = createAgentEventHub();
-    const server1 = createServer();
-    const server2 = createServer();
-    const server3 = createServer();
-
-    hub.servers.set("sess-1", server1);
-    hub.servers.set("sess-2", server2);
-    hub.servers.set("sess-3", server3);
-    hub.sessionAgentNames.set("sess-1", "agent-a");
-    hub.sessionAgentNames.set("sess-2", "agent-b");
-    hub.sessionAgentNames.set("sess-3", "agent-c");
+    bindHubSession(hub, "sess-1", "agent-a");
+    bindHubSession(hub, "sess-2", "agent-b");
+    bindHubSession(hub, "sess-3", "agent-c");
 
     assert.strictEqual(hub.servers.size, 3);
     assert.strictEqual(hub.sessionAgentNames.size, 3);
@@ -178,13 +167,8 @@ describe("AgentEventHub", () => {
 
   it("pushToAgent targeted to specific agent preserves other sessions", () => {
     const hub = createAgentEventHub();
-    const server1 = createServer();
-    const server2 = createServer();
-
-    hub.servers.set("sess-target", server1);
-    hub.servers.set("sess-other", server2);
-    hub.sessionAgentNames.set("sess-target", "target-agent");
-    hub.sessionAgentNames.set("sess-other", "other-agent");
+    bindHubSession(hub, "sess-target", "target-agent");
+    bindHubSession(hub, "sess-other", "other-agent");
 
     assert.strictEqual(hub.servers.size, 2);
     assert.strictEqual(hub.sessionAgentNames.size, 2);
@@ -203,10 +187,7 @@ describe("AgentEventHub", () => {
 
   it("pushToAgent to nonexistent agent does not throw or corrupt state", () => {
     const hub = createAgentEventHub();
-    const server = createServer();
-
-    hub.servers.set("sess-existing", server);
-    hub.sessionAgentNames.set("sess-existing", "existing-agent");
+    bindHubSession(hub, "sess-existing", "existing-agent");
 
     assert.strictEqual(hub.servers.size, 1);
     assert.strictEqual(hub.sessionAgentNames.size, 1);
@@ -224,7 +205,7 @@ describe("AgentEventHub", () => {
 
 describe("sendNotification", () => {
   it("returns error when server has no transport", async () => {
-    const server = createServer();
+    const server = createTestMcpServer();
     const result = await sendNotification(server, { test: "data" });
     // Should return error since server has no connected transport
     assert.strictEqual(result.ok, false);

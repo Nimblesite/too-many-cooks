@@ -16,7 +16,7 @@ import {
   logLevelName,
   logTransport,
 } from "./logger.js";
-import type { EventPushFn, EventPushToAgentFn } from "./notifications.js";
+import type { EventPushFn, EventPushToAgentFn, NotificationEmitter } from "./notifications.js";
 import { createNotificationEmitter } from "./notifications.js";
 import type { Result } from "./result.js";
 import { success } from "./result.js";
@@ -26,7 +26,7 @@ import { createMessageHandler, messageInputShape, messageToolDescription } from 
 import { createPlanHandler, planInputShape, planToolDescription } from "./tools/plan_tool.js";
 import { createRegisterHandler, REGISTER_INPUT_SHAPE, REGISTER_TOOL_CONFIG as registerToolConfig } from "./tools/register_tool.js";
 import { createStatusHandler, STATUS_INPUT_SHAPE, STATUS_TOOL_CONFIG as statusToolConfig } from "./tools/status_tool.js";
-import type { CallToolResult, SessionIdentity, ToolCallback } from "./mcp-types.js";
+import type { CallToolResult, SessionGetter, SessionIdentity, SessionSetter, ToolCallback } from "./mcp-types.js";
 
 /** Log prefix for console output. */
 const LOG_PREFIX: string = "[TMC]";
@@ -37,31 +37,22 @@ export type ServerBundle = {
   readonly db: TooManyCooksDb;
 };
 
+/** Options for wiring an MCP server onto a shared DB. */
+type McpServerOptions = {
+  readonly adminPush?: EventPushFn;
+  readonly agentPush?: EventPushFn;
+  readonly agentPushToAgent?: EventPushToAgentFn;
+  readonly onSessionSet?: (agentName: string, agentKey: string) => void;
+  /** Defaults to this package's own (release-stamped) package.json. */
+  readonly serverInfo?: ServerInfo;
+};
+
 /** Create an MCP server instance wired to a shared DB (any backend). */
-export const createMcpServerForDb: (
+export const createMcpServerForDb = (
   db: TooManyCooksDb,
   config: TooManyCooksDataConfig,
   log: Logger,
-  options?: {
-    adminPush?: EventPushFn;
-    agentPush?: EventPushFn;
-    agentPushToAgent?: EventPushToAgentFn;
-    onSessionSet?: (agentName: string, agentKey: string) => void;
-    /** Defaults to this package's own (release-stamped) package.json. */
-    serverInfo?: ServerInfo;
-  },
-) => Result<McpServer, string> = (
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  log: Logger,
-  options?: {
-    adminPush?: EventPushFn;
-    agentPush?: EventPushFn;
-    agentPushToAgent?: EventPushToAgentFn;
-    onSessionSet?: (agentName: string, agentKey: string) => void;
-    /** Defaults to this package's own (release-stamped) package.json. */
-    serverInfo?: ServerInfo;
-  },
+  options?: McpServerOptions,
 ): Result<McpServer, string> => {
   const adminPush: EventPushFn | undefined = options?.adminPush;
   const agentPush: EventPushFn | undefined = options?.agentPush;
@@ -92,7 +83,7 @@ export const createMcpServerForDb: (
     log.info(`Session established for agent: ${name}`);
   };
 
-  registerTools(server, db, config, emitter, log, getSession, setSession);
+  registerTools({ server, db, config, emitter, log, getSession, setSession });
   log.info("Server initialized with all tools registered");
 
   return success(server);
@@ -126,24 +117,20 @@ const registerOne: (
   server.registerTool(name, { description, inputSchema }, wrapHandler(handler));
 };
 
+/** Everything needed to register the MCP tools. */
+type RegisterToolsParams = {
+  readonly server: McpServer;
+  readonly db: TooManyCooksDb;
+  readonly config: TooManyCooksDataConfig;
+  readonly emitter: NotificationEmitter;
+  readonly log: Logger;
+  readonly getSession: SessionGetter;
+  readonly setSession: SessionSetter;
+};
+
 /** Register all tools on the MCP server. */
-const registerTools: (
-  server: McpServer,
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  emitter: ReturnType<typeof createNotificationEmitter>,
-  log: Logger,
-  getSession: () => SessionIdentity | null,
-  setSession: (name: string, key: string) => void,
-) => void = (
-  server: McpServer,
-  db: TooManyCooksDb,
-  config: TooManyCooksDataConfig,
-  emitter: ReturnType<typeof createNotificationEmitter>,
-  log: Logger,
-  getSession: () => SessionIdentity | null,
-  setSession: (name: string, key: string) => void,
-): void => {
+const registerTools = (params: RegisterToolsParams): void => {
+  const { server, db, config, emitter, log, getSession, setSession }: RegisterToolsParams = params;
   // [MCP-TOOL-LIMITS] message/plan schemas and descriptions carry the CONFIGURED limits.
   registerOne(server, "register", registerToolConfig.description, REGISTER_INPUT_SHAPE, createRegisterHandler(db, emitter, log, setSession));
   registerOne(server, "lock", lockToolConfig.description, LOCK_INPUT_SHAPE, createLockHandler(db, config, emitter, log, getSession));

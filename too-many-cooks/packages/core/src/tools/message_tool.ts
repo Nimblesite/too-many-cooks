@@ -11,7 +11,22 @@ import type { DbError, Message } from "../types.js";
 import { messageToJson } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
 import { DEFAULT_MAX_MESSAGE_LENGTH } from "../config.js";
-import { agentKeyField, errorContent, jsonResult, limitedText, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import { 
+  actionContext,
+  agentKeyField,
+  errorContent,
+  jsonResult,
+  limitedText,
+  listJsonResult,
+  makeErrorResult,
+  optionalString,
+  rejectedNeverTruncated,
+  toJsonSchema,
+  toolConfig,
+  unknownActionError,
+  withResolvedAgent,
+} from "./tool_utils.js";
+import type { ActionContext } from "./tool_utils.js";
 
 /** Message tool input — the ONE source of the wire schema. [MCP-TOOL-LIMITS] */
 export const messageInputShape = (maxContentLength: number): z.ZodRawShape => ({
@@ -25,8 +40,8 @@ export const messageInputShape = (maxContentLength: number): z.ZodRawShape => ({
 
 /** Message tool description — leads with the hard limit agents keep missing. */
 export const messageToolDescription = (maxContentLength: number): string =>
-  `HARD LIMIT: content must be ${String(maxContentLength)} characters or fewer. ` +
-  "Longer messages are REJECTED, never truncated. Keep it short; put detail in a file and send its path. " +
+  `HARD LIMIT: content must be ${String(maxContentLength)} characters or fewer. ${rejectedNeverTruncated("messages")}` +
+  "Keep it short; put detail in a file and send its path. " +
   "Send/receive messages. You must register first. " +
   "REQUIRED: action (send|get|mark_read). " +
   "For send: to_agent, content. For mark_read: message_id. " +
@@ -63,8 +78,8 @@ const dispatchAction = async (
         log,
         agentName,
         agentKey,
-        typeof args.to_agent === "string" ? args.to_agent : null,
-        typeof args.content === "string" ? args.content : null
+        optionalString(args, "to_agent"),
+        optionalString(args, "content")
       );
     case "get":
       return await handleGet(
@@ -80,7 +95,7 @@ const dispatchAction = async (
         db,
         agentName,
         agentKey,
-        typeof args.message_id === "string" ? args.message_id : null
+        optionalString(args, "message_id")
       );
     default:
       return unknownActionError(action);
@@ -95,13 +110,11 @@ export const createMessageHandler = (
   getSession: SessionGetter
 ): ToolCallback => {
   return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionOrError: string | CallToolResult = requireActionArg(args);
-    if (typeof actionOrError !== "string") {return actionOrError;}
-    const action: string = actionOrError;
-    const log: Logger = logger.child({ tool: "message", action });
+    const ctx: ActionContext = actionContext(args, logger, "message", {});
+    if (ctx.isError) {return ctx.result;}
 
     return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> =>
-      await dispatchAction(action, db, emitter, log, agentName, agentKey, args));
+      await dispatchAction(ctx.action, db, emitter, ctx.log, agentName, agentKey, args));
   };
 };
 

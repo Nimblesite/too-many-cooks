@@ -146,25 +146,37 @@ const createEncryptedDb = (): { readonly storageDb: TooManyCooksDb; readonly db:
   return { storageDb, db };
 };
 
+/** Message count a round-trip test expects in bob's inbox. */
+const SINGLE_MESSAGE = 1;
+
+/** Messages bob's inbox holds when read through `db`, asserting the count. */
+const bobInboxThrough = async (
+  db: TooManyCooksDb,
+  expectedCount: number,
+): Promise<readonly Message[]> => {
+  const messages = expectOk(
+    await db.getMessages(AGENT_BOB, BOB_KEY),
+    "get must be ok",
+  );
+  assert.equal(messages.length, expectedCount);
+  return messages;
+};
+
+/** The single message bob's inbox holds when read through `db`. */
+const soleBobMessage = async (
+  db: TooManyCooksDb,
+  label: string,
+): Promise<Message> => assertNonNullish((await bobInboxThrough(db, SINGLE_MESSAGE))[0], label);
+
 test("message round-trip: send encrypted, retrieve decrypted", async () => {
   const { storageDb, db } = createEncryptedDb();
 
   await db.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
-  const rawMessages = expectOk(
-    await storageDb.getMessages(AGENT_BOB, BOB_KEY),
-    "raw get must be ok",
-  );
-  assert.equal(rawMessages.length, 1);
-  const rawMsg = assertNonNullish(rawMessages[0], "raw message");
+  const rawMsg = await soleBobMessage(storageDb, "raw message");
   assert.notEqual(rawMsg.content, MSG_CONTENT);
 
-  const decMessages = expectOk(
-    await db.getMessages(AGENT_BOB, BOB_KEY),
-    "dec get must be ok",
-  );
-  assert.equal(decMessages.length, 1);
-  const decMsg = assertNonNullish(decMessages[0], "decrypted message");
+  const decMsg = await soleBobMessage(db, "decrypted message");
   assert.equal(decMsg.content, MSG_CONTENT);
   assert.equal(decMsg.fromAgent, AGENT_ALICE);
   assert.equal(decMsg.toAgent, AGENT_BOB);
@@ -304,20 +316,10 @@ test("adminSendMessage round-trip: admin message encrypted, retrieved decrypted"
   const adminContent = "System maintenance at 3am UTC";
   await db.adminSendMessage(AGENT_ALICE, AGENT_BOB, adminContent);
 
-  const rawMessages = expectOk(
-    await storageDb.getMessages(AGENT_BOB, BOB_KEY),
-    "raw get must be ok",
-  );
-  assert.equal(rawMessages.length, 1);
-  const rawMsg = assertNonNullish(rawMessages[0], "raw message");
+  const rawMsg = await soleBobMessage(storageDb, "raw message");
   assert.notEqual(rawMsg.content, adminContent);
 
-  const decMessages = expectOk(
-    await db.getMessages(AGENT_BOB, BOB_KEY),
-    "dec get must be ok",
-  );
-  assert.equal(decMessages.length, 1);
-  const decMsg = assertNonNullish(decMessages[0], "decrypted message");
+  const decMsg = await soleBobMessage(db, "decrypted message");
   assert.equal(decMsg.content, adminContent);
 });
 
@@ -336,12 +338,7 @@ test("key rotation: old ciphertext decryptable with keychain", async () => {
   await oldDb.sendMessage(AGENT_ALICE, ALICE_KEY, AGENT_BOB, MSG_CONTENT);
 
   const newDb = withEncryption(storageDb, newWk, keychain);
-  const messages = expectOk(
-    await newDb.getMessages(AGENT_BOB, BOB_KEY),
-    "get must be ok",
-  );
-  assert.equal(messages.length, 1);
-  const msg = assertNonNullish(messages[0], "decrypted message");
+  const msg = await soleBobMessage(newDb, "decrypted message");
   assert.equal(msg.content, MSG_CONTENT);
 });
 
@@ -354,11 +351,7 @@ test("routing fields remain plaintext through encryption", async () => {
     LOCK_FILE, AGENT_ALICE, ALICE_KEY, LOCK_REASON, LOCK_TIMEOUT,
   );
 
-  const rawMessages = expectOk(
-    await storageDb.getMessages(AGENT_BOB, BOB_KEY),
-    "raw get must be ok",
-  );
-  const msg = assertNonNullish(rawMessages[0], "raw message");
+  const msg = await soleBobMessage(storageDb, "raw message");
   assert.equal(msg.fromAgent, AGENT_ALICE);
   assert.equal(msg.toAgent, AGENT_BOB);
 

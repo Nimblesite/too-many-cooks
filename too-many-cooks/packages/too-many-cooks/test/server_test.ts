@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import { createTooManyCooksServer } from "../src/server.js";
 import { createTestLogger } from "./support/handlers.js";
+import { nonEmptyLines } from "./support/text.js";
 
 describe("createTooManyCooksServer", () => {
   it("creates server with default config", () => {
@@ -46,10 +47,9 @@ describe("createTooManyCooksServer", () => {
       assert.strictEqual(result.ok, false);
 
       const captured: string = chunks.join("");
-      const leaked: readonly string[] = captured
-        .split("\n")
-        .map((s: string): string => s.trim())
-        .filter((s: string): boolean => /\[(?:ERROR|FATAL)\]/u.test(s));
+      const leaked: readonly string[] = nonEmptyLines(captured).filter(
+        (s: string): boolean => /\[(?:ERROR|FATAL)\]/u.test(s),
+      );
       assert.deepStrictEqual(
         leaked,
         [],

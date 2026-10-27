@@ -31,7 +31,12 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
-import { pragmaColumnNames, rowName } from "./support/sqlite_rows.js";
+import { nonEmptyLines } from "./support/text.js";
+import {
+  assertTablesPresent,
+  columnNamesOf,
+  dropColumn,
+} from "./support/sqlite_rows.js";
 
 // ============================================================================
 // Constants
@@ -83,15 +88,6 @@ const PORT: number = 4067;
 const POLL_INTERVAL_MS: number = 200;
 const MAX_POLL_ATTEMPTS: number = 150; // 30s total — npm install + native build is slow
 
-/** Tables that must exist after a successful schema push. */
-const REQUIRED_TABLES: readonly string[] = [
-  "identity",
-  "locks",
-  "messages",
-  "message_reads",
-  "plans",
-];
-
 /** Column we drop to prove DataProviderMigrate repairs drift. */
 const DRIFT_TABLE: string = "locks";
 const DRIFT_COLUMN: string = "reason";
@@ -128,7 +124,7 @@ const packTarball = (packageDir: string): string => {
   ).trim();
   // npm pack prints the filename relative to --pack-destination on the last
   // non-empty line. Resolve to an absolute path.
-  const file: string | undefined = out.split("\n").map((s: string): string => s.trim()).filter((s: string): boolean => s.length > 0).pop();
+  const file: string | undefined = nonEmptyLines(out).pop();
   if (file === undefined) {
     throw new Error("npm pack produced no output");
   }
@@ -212,39 +208,10 @@ const killAndWait = async (proc: ChildProcess): Promise<void> => {
   });
 };
 
-const tableNames = (dbPath: string): readonly string[] => {
-  const db: Database.Database = new Database(dbPath, { readonly: true });
-  try {
-    const rows: readonly unknown[] = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all();
-    return rows.map(rowName);
-  } finally {
-    db.close();
-  }
-};
-
-const columnNames = (dbPath: string, table: string): readonly string[] => {
-  const db: Database.Database = new Database(dbPath, { readonly: true });
-  try {
-    return pragmaColumnNames(db.pragma(`table_info(${table})`));
-  } finally {
-    db.close();
-  }
-};
-
-const dropColumn = (dbPath: string, table: string, column: string): void => {
-  const db: Database.Database = new Database(dbPath);
-  try {
-    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
-  } finally {
-    db.close();
-  }
-};
 
 const tarballEntries = (tarball: string): readonly string[] => {
   const out: string = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" });
-  return out.split("\n").map((s: string): string => s.trim()).filter((s: string): boolean => s.length > 0);
+  return nonEmptyLines(out);
 };
 
 const requireFixture = (): Fixture => {
@@ -347,13 +314,7 @@ describe("published package: tarball + install + boot", () => {
       const dbPath: string = join(workspace, DB_REL_PATH);
       assert.ok(existsSync(dbPath), `DB file must exist after boot: ${dbPath}`);
 
-      const present: readonly string[] = tableNames(dbPath);
-      for (const required of REQUIRED_TABLES) {
-        assert.ok(
-          present.includes(required),
-          `Table '${required}' must exist after migration. Got: ${present.join(", ")}`,
-        );
-      }
+      assertTablesPresent(dbPath, "After migration,");
 
       const status: Response = await fetch(`http://127.0.0.1:${String(PORT)}/admin/status`);
       assert.strictEqual(status.status, HTTP_OK, "/admin/status must return 200 after boot");
@@ -380,12 +341,12 @@ describe("published package: tarball + install + boot", () => {
     } finally {
       await killAndWait(first);
     }
-    const beforeDrift: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
+    const beforeDrift: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
     assert.ok(beforeDrift.includes(DRIFT_COLUMN), `precondition: ${DRIFT_TABLE}.${DRIFT_COLUMN} present after first boot. Got: ${beforeDrift.join(",")}`);
 
     // Corrupt the schema by dropping a column out-of-band.
     dropColumn(dbPath, DRIFT_TABLE, DRIFT_COLUMN);
-    const dropped: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
+    const dropped: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
     assert.ok(!dropped.includes(DRIFT_COLUMN), `setup: ${DRIFT_TABLE}.${DRIFT_COLUMN} gone after DROP COLUMN. Got: ${dropped.join(",")}`);
 
     // Second boot — DataProviderMigrate must repair the drift.
@@ -395,7 +356,7 @@ describe("published package: tarball + install + boot", () => {
     } finally {
       await killAndWait(second);
     }
-    const afterRepair: readonly string[] = columnNames(dbPath, DRIFT_TABLE);
+    const afterRepair: readonly string[] = columnNamesOf(dbPath, DRIFT_TABLE);
     assert.ok(
       afterRepair.includes(DRIFT_COLUMN),
       `${DRIFT_TABLE}.${DRIFT_COLUMN} must be restored by DataProviderMigrate on the published bin. Got: ${afterRepair.join(",")}`,
@@ -422,7 +383,7 @@ describe("published package: tarball + install + boot", () => {
     } finally {
       seed.close();
     }
-    assert.deepStrictEqual(columnNames(dbPath, "identity"), ["agent_name", "garbage"]);
+    assert.deepStrictEqual(columnNamesOf(dbPath, "identity"), ["agent_name", "garbage"]);
 
     const proc: ChildProcess = spawnInstalledBin(fx.installDir, workspace);
     try {
@@ -430,14 +391,8 @@ describe("published package: tarball + install + boot", () => {
     } finally {
       await killAndWait(proc);
     }
-    const tables: readonly string[] = tableNames(dbPath);
-    for (const required of REQUIRED_TABLES) {
-      assert.ok(
-        tables.includes(required),
-        `After stale-DB recovery, '${required}' must exist. Got: ${tables.join(", ")}`,
-      );
-    }
-    const identityCols: readonly string[] = columnNames(dbPath, "identity");
+    assertTablesPresent(dbPath, "After stale-DB recovery,");
+    const identityCols: readonly string[] = columnNamesOf(dbPath, "identity");
     assert.ok(
       identityCols.includes("agent_key"),
       `identity.agent_key must exist after rebuild. Got: ${identityCols.join(",")}`,

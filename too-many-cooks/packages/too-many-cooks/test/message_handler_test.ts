@@ -1,15 +1,14 @@
 /// Tests for message tool handler (direct import, not via spawned server).
 
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
-import type { SessionIdentity, TooManyCooksDb } from "too-many-cooks-core";
+import type { SessionGetter, TooManyCooksDb } from "too-many-cooks-core";
 import {
-  freshTestDb,
-  registerAgentPair,
-  requireDb,
-  teardownTestDb,
+  type RegisteredAgent,
+  bindAgentsDb,
 } from "./support/db_fixture.js";
 import {
+  agentSession,
   messageHandlerFor,
   parseToolJson,
   runToolErr,
@@ -19,53 +18,71 @@ import { assertDefined } from "./support/assertions.js";
 import { getRecordArrayField, getStringField } from "./support/json.js";
 
 const TEST_DB_PATH = ".test_message_handler.db";
+const AGENT_LABELS: readonly string[] = ["msg-agent-1", "msg-agent-2"];
+const SENDER = 0;
+const RECIPIENT = 1;
+
+/** One message-tool validation failure: the case name and its arguments. */
+type MessageErrorCase = {
+  readonly name: string;
+  readonly args: () => Record<string, unknown>;
+};
 
 describe("message handler", () => {
-  let db: TooManyCooksDb | undefined;
-  let agentName = "";
-  let agentKey = "";
-  let agent2Name = "";
-  let agent2Key = "";
+  const agentsDb = bindAgentsDb(TEST_DB_PATH, AGENT_LABELS);
 
-  beforeEach(async () => {
-    const fixture = freshTestDb(TEST_DB_PATH);
-    db = fixture.db;
+  const db = (): TooManyCooksDb => agentsDb.db();
 
-    const [agent1, agent2] = await registerAgentPair(db, "msg-agent-1", "msg-agent-2");
-    agentName = agent1.agentName;
-    agentKey = agent1.agentKey;
-    agent2Name = agent2.agentName;
-    agent2Key = agent2.agentKey;
-  });
+  const agentAt = (index: number): RegisteredAgent => {
+    const agent = agentsDb.agents()[index];
+    assertDefined(agent, `agent ${String(index)}`);
+    return agent;
+  };
 
-  afterEach(() => {
-    teardownTestDb(db, TEST_DB_PATH);
-  });
+  const sessionFor = (index: number): SessionGetter => agentSession(agentAt(index));
 
-  const makeSession = (): (() => SessionIdentity) =>
-    () => ({ agentName, agentKey });
+  const unauthenticated = (): SessionGetter => () => null;
 
-  const makeSession2 = (): (() => SessionIdentity) =>
-    () => ({ agentName: agent2Name, agentKey: agent2Key });
+  const errorCases: readonly MessageErrorCase[] = [
+    { name: "fails when action is missing", args: (): Record<string, unknown> => ({}) },
+    {
+      name: "fails with unknown action",
+      args: (): Record<string, unknown> => ({ action: "invalid" }),
+    },
+    {
+      name: "send fails without to_agent",
+      args: (): Record<string, unknown> => ({ action: "send", content: "hello" }),
+    },
+    {
+      name: "send fails without content",
+      args: (): Record<string, unknown> => ({
+        action: "send",
+        to_agent: agentAt(RECIPIENT).agentName,
+      }),
+    },
+    {
+      name: "mark_read fails without message_id",
+      args: (): Record<string, unknown> => ({ action: "mark_read" }),
+    },
+  ];
 
   it("send succeeds between agents", async () => {
-    const d = requireDb(db);
     const parsed = await runToolOk(
-      messageHandlerFor(d, makeSession()),
-      { action: "send", to_agent: agent2Name, content: "hello" },
+      messageHandlerFor(db(), sessionFor(SENDER)),
+      { action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "hello" },
     );
     assert.strictEqual(parsed.sent, true);
     assert.strictEqual(typeof parsed.message_id, "string");
   });
 
   it("get returns messages for agent", async () => {
-    const d = requireDb(db);
-    // Send a message from agent1 to agent2
-    const handler1 = messageHandlerFor(d, makeSession());
-    await handler1({ action: "send", to_agent: agent2Name, content: "test msg" }, {});
+    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
+    await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "test msg" }, {});
 
-    // Agent2 gets messages
-    const parsed = await runToolOk(messageHandlerFor(d, makeSession2()), { action: "get" });
+    const parsed = await runToolOk(
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
+      { action: "get" },
+    );
     assert.strictEqual(Array.isArray(parsed.messages), true);
     const messages = getRecordArrayField(parsed, "messages");
     assert.ok(messages.length > 0);
@@ -75,70 +92,47 @@ describe("message handler", () => {
   });
 
   it("get with unread_only false returns all", async () => {
-    const d = requireDb(db);
-    const handler1 = messageHandlerFor(d, makeSession());
-    await handler1({ action: "send", to_agent: agent2Name, content: "msg1" }, {});
+    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
+    await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "msg1" }, {});
 
     const parsed = await runToolOk(
-      messageHandlerFor(d, makeSession2()),
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
       { action: "get", unread_only: false },
     );
     assert.strictEqual(Array.isArray(parsed.messages), true);
   });
 
   it("mark_read succeeds for valid message", async () => {
-    const d = requireDb(db);
-    // Send message
-    const handler1 = messageHandlerFor(d, makeSession());
-    const sendResult = await handler1({ action: "send", to_agent: agent2Name, content: "to mark" }, {});
-    const sendParsed = parseToolJson(sendResult);
-    const messageId = getStringField(sendParsed, "message_id");
+    const handler1 = messageHandlerFor(db(), sessionFor(SENDER));
+    const sendResult = await handler1({ action: "send", to_agent: agentAt(RECIPIENT).agentName, content: "to mark" }, {});
+    const messageId = getStringField(parseToolJson(sendResult), "message_id");
 
-    // Mark read
     const parsed = await runToolOk(
-      messageHandlerFor(d, makeSession2()),
+      messageHandlerFor(db(), sessionFor(RECIPIENT)),
       { action: "mark_read", message_id: messageId },
     );
     assert.strictEqual(parsed.marked, true);
   });
 
-  it("fails when action is missing", async () => {
-    const d = requireDb(db);
-    await runToolErr(messageHandlerFor(d, makeSession()), {});
-  });
-
-  it("fails with unknown action", async () => {
-    const d = requireDb(db);
-    await runToolErr(messageHandlerFor(d, makeSession()), { action: "invalid" });
-  });
-
-  it("send fails without to_agent", async () => {
-    const d = requireDb(db);
-    await runToolErr(messageHandlerFor(d, makeSession()), { action: "send", content: "hello" });
-  });
-
-  it("send fails without content", async () => {
-    const d = requireDb(db);
-    await runToolErr(messageHandlerFor(d, makeSession()), { action: "send", to_agent: agent2Name });
-  });
-
-  it("mark_read fails without message_id", async () => {
-    const d = requireDb(db);
-    await runToolErr(messageHandlerFor(d, makeSession()), { action: "mark_read" });
-  });
+  for (const testCase of errorCases) {
+    it(testCase.name, async () => {
+      await runToolErr(messageHandlerFor(db(), sessionFor(SENDER)), testCase.args());
+    });
+  }
 
   it("fails when not registered and no session", async () => {
-    const d = requireDb(db);
-    const getSession = (): SessionIdentity | null => null;
-    await runToolErr(messageHandlerFor(d, getSession), { action: "get" });
+    await runToolErr(messageHandlerFor(db(), unauthenticated()), { action: "get" });
   });
 
   it("works with agent_key override", async () => {
-    const d = requireDb(db);
-    const getSession = (): SessionIdentity | null => null;
     const parsed = await runToolOk(
-      messageHandlerFor(d, getSession),
-      { action: "send", to_agent: agent2Name, content: "via key", agent_key: agentKey },
+      messageHandlerFor(db(), unauthenticated()),
+      {
+        action: "send",
+        to_agent: agentAt(RECIPIENT).agentName,
+        content: "via key",
+        agent_key: agentAt(SENDER).agentKey,
+      },
     );
     assert.strictEqual(parsed.sent, true);
   });

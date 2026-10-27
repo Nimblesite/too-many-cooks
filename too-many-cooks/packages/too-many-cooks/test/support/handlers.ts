@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import assert from "node:assert";
 import {
   type CallToolResult,
+  BROADCAST_RECIPIENT,
   type Logger,
   type NotificationEmitter,
   type SessionIdentity,
@@ -24,6 +25,7 @@ import {
   getNumberField,
   getRecordArrayField,
   getRecordField,
+  getStringField,
   parseJsonRecord,
 } from "./json.js";
 import type { RegisteredAgent } from "./db_fixture.js";
@@ -31,13 +33,35 @@ import type { RegisteredAgent } from "./db_fixture.js";
 const TEST_SERVER_NAME = "test";
 const TEST_SERVER_VERSION = "1.0.0";
 
-/** Notification emitter wired to a throwaway in-memory McpServer. */
-export const createTestEmitter = (): NotificationEmitter => {
-  const server = new McpServer(
+/** A throwaway McpServer with the tool/logging capabilities tests need. */
+export const createTestMcpServer = (): McpServer =>
+  new McpServer(
     { name: TEST_SERVER_NAME, version: TEST_SERVER_VERSION },
     { capabilities: { tools: { listChanged: false }, logging: {} } },
   );
-  return createNotificationEmitter(server);
+
+/** Notification emitter wired to a throwaway in-memory McpServer. */
+export const createTestEmitter = (): NotificationEmitter =>
+  createNotificationEmitter(createTestMcpServer());
+
+/** Records the events an emitter pushes on the admin and agent channels. */
+export type EventRecorder = {
+  readonly adminEvents: string[];
+  readonly agentEvents: string[];
+  readonly adminPush: (event: string) => void;
+  readonly agentPush: (event: string) => void;
+};
+
+/** Builds an admin/agent event recorder ([DEDUP-DESLOP]). */
+export const createEventRecorder = (): EventRecorder => {
+  const adminEvents: string[] = [];
+  const agentEvents: string[] = [];
+  return {
+    adminEvents,
+    agentEvents,
+    adminPush: (event: string): void => { adminEvents.push(event); },
+    agentPush: (event: string): void => { agentEvents.push(event); },
+  };
 };
 
 /** Logger with a fresh logging context (no workspace file output). */
@@ -112,6 +136,19 @@ export const runToolErr = async (
   const result = await callback(args, {});
   assert.strictEqual(result.isError, true);
   return result;
+};
+
+/** Sends a broadcast through `callback`; returns the created message ID. */
+export const sendBroadcast = async (
+  callback: ToolCallback,
+  content: string,
+): Promise<string> => {
+  const result = await callback(
+    { action: "send", to_agent: BROADCAST_RECIPIENT, content },
+    {},
+  );
+  assert.strictEqual(result.isError, false, "broadcast send must succeed");
+  return getStringField(parseToolJson(result), "message_id");
 };
 
 /** Narrows a status tool result to the caller's inbox overview. */

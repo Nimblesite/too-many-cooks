@@ -51,6 +51,17 @@ const maxLengthOf = (info: ToolInfo, field: string): unknown => {
   return prop.maxLength;
 };
 
+/** Asserts an over-long value was rejected naming both length and limit. */
+const assertRejectedWithLimit = (
+  res: { readonly isError: boolean; readonly text: string },
+  actual: number,
+  limit: number,
+): void => {
+  assert.strictEqual(res.isError, true);
+  assert.ok(res.text.includes(`${String(actual)} characters`), res.text);
+  assert.ok(res.text.includes(`limit is ${String(limit)}`), res.text);
+};
+
 /** Text of a tools/call result, whether the SDK reports it as a result or throws. */
 const callText = async (client: Client, name: string, args: Record<string, unknown>): Promise<{ isError: boolean; text: string }> => {
   try {
@@ -125,16 +136,12 @@ describe("tool length limits on the wire", () => {
   it("an over-long message is rejected with its length and the limit", async () => {
     if (client === undefined) { assert.fail("client not connected"); }
     const res = await callText(client, "message", { action: "send", to_agent: "*", content: FILL.repeat(OVER_MESSAGE) });
-    assert.strictEqual(res.isError, true);
-    assert.ok(res.text.includes(`${String(OVER_MESSAGE)} characters`), res.text);
-    assert.ok(res.text.includes(`limit is ${String(MAX_MESSAGE)}`), res.text);
+    assertRejectedWithLimit(res, OVER_MESSAGE, MAX_MESSAGE);
   });
 
   it("an over-long plan goal is rejected with its length and the limit", async () => {
     if (client === undefined) { assert.fail("client not connected"); }
     const res = await callText(client, "plan", { action: "update", goal: FILL.repeat(OVER_PLAN), current_task: FILL });
-    assert.strictEqual(res.isError, true);
-    assert.ok(res.text.includes(`${String(OVER_PLAN)} characters`), res.text);
-    assert.ok(res.text.includes(`limit is ${String(MAX_PLAN)}`), res.text);
+    assertRejectedWithLimit(res, OVER_PLAN, MAX_PLAN);
   });
 });

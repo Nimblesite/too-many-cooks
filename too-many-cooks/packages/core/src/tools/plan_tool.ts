@@ -11,7 +11,22 @@ import type { AgentPlan, DbError } from "../types.js";
 import { agentPlanToJson } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
 import { DEFAULT_MAX_PLAN_LENGTH } from "../config.js";
-import { agentKeyField, errorContent, jsonResult, limitedText, listJsonResult, makeErrorResult, requireActionArg, toJsonSchema, toolConfig, unknownActionError, withResolvedAgent } from "./tool_utils.js";
+import {
+  actionContext,
+  agentKeyField,
+  errorContent,
+  jsonResult,
+  limitedText,
+  listJsonResult,
+  makeErrorResult,
+  optionalString,
+  rejectedNeverTruncated,
+  toJsonSchema,
+  toolConfig,
+  unknownActionError,
+  withResolvedAgent,
+} from "./tool_utils.js";
+import type { ActionContext } from "./tool_utils.js";
 
 /** Plan tool input — the ONE source of the wire schema. [MCP-TOOL-LIMITS] */
 export const planInputShape = (maxFieldLength: number): z.ZodRawShape => ({
@@ -23,8 +38,7 @@ export const planInputShape = (maxFieldLength: number): z.ZodRawShape => ({
 
 /** Plan tool description — leads with the hard limit agents keep missing. */
 export const planToolDescription = (maxFieldLength: number): string =>
-  `HARD LIMIT: goal and current_task must each be ${String(maxFieldLength)} characters or fewer. ` +
-  "Longer values are REJECTED, never truncated. " +
+  `HARD LIMIT: goal and current_task must each be ${String(maxFieldLength)} characters or fewer. ${rejectedNeverTruncated("values")}` +
   "Manage your plan. You must register first (except list). " +
   "REQUIRED: action (update|get|list). " +
   "For update: goal, current_task. " +
@@ -49,29 +63,27 @@ export const createPlanHandler = (
   getSession: SessionGetter
 ): ToolCallback => {
   return async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const actionOrError: string | CallToolResult = requireActionArg(args);
-    if (typeof actionOrError !== "string") {return actionOrError;}
-    const action: string = actionOrError;
-    const log: Logger = logger.child({ tool: "plan", action });
+    const ctx: ActionContext = actionContext(args, logger, "plan", {});
+    if (ctx.isError) {return ctx.result;}
 
-    if (action === "list") {return await handleList(db);}
+    if (ctx.action === "list") {return await handleList(db);}
 
     return await withResolvedAgent(db, args, getSession, async (agentName: string, agentKey: string): Promise<CallToolResult> => {
-      switch (action) {
+      switch (ctx.action) {
         case "update":
           return await handleUpdate(
             db,
             emitter,
-            log,
+            ctx.log,
             agentName,
             agentKey,
-            typeof args.goal === "string" ? args.goal : null,
-            typeof args.current_task === "string" ? args.current_task : null
+            optionalString(args, "goal"),
+            optionalString(args, "current_task")
           );
         case "get":
           return await handleGet(db, agentName);
         default:
-          return unknownActionError(action);
+          return unknownActionError(ctx.action);
       }
     });
   };

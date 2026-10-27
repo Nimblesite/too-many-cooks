@@ -5,14 +5,14 @@ import type { z } from "zod";
 import type { Logger } from "../logger.js";
 import type { MessageHeader, MessageOverview, TooManyCooksDb } from "../db-interface.js";
 import type { Result } from "../result.js";
-import type { AgentIdentity, AgentPlan, DbError, FileLock } from "../types.js";
+import type { DbError } from "../types.js";
 import {
   agentIdentityToJson,
   agentPlanToJson,
   fileLockToJson,
 } from "../types.js";
 import type { CallToolResult, SessionGetter, ToolCallback } from "../mcp-types.js";
-import { agentKeyField, jsonResult, type IdentityResult, makeErrorResult, resolveIdentity, toJsonSchema, toolConfig } from "./tool_utils.js";
+import { agentKeyField, jsonResult, type IdentityResult, makeErrorResult, mapListToJson, resolveIdentity, toJsonSchema, toolConfig } from "./tool_utils.js";
 
 /// [STATUS-BOUNDED] Issues #41/#42: cap on the recent-header slice embedded in a
 /// status overview. The payload is bounded by this constant regardless of how
@@ -51,17 +51,14 @@ export const createStatusHandler = (
   return async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const log: Logger = logger.child({ tool: "status" });
 
-    const agentsResult: Result<readonly AgentIdentity[], DbError> = await db.listAgents();
-    if (!agentsResult.ok) {return makeErrorResult(agentsResult.error);}
-    const agents: Array<Record<string, unknown>> = agentsResult.value.map(agentIdentityToJson);
+    const agents: Result<Array<Record<string, unknown>>, DbError> = mapListToJson(await db.listAgents(), agentIdentityToJson);
+    if (!agents.ok) {return makeErrorResult(agents.error);}
 
-    const locksResult: Result<readonly FileLock[], DbError> = await db.listLocks();
-    if (!locksResult.ok) {return makeErrorResult(locksResult.error);}
-    const locks: Array<Record<string, unknown>> = locksResult.value.map(fileLockToJson);
+    const locks: Result<Array<Record<string, unknown>>, DbError> = mapListToJson(await db.listLocks(), fileLockToJson);
+    if (!locks.ok) {return makeErrorResult(locks.error);}
 
-    const plansResult: Result<readonly AgentPlan[], DbError> = await db.listPlans();
-    if (!plansResult.ok) {return makeErrorResult(plansResult.error);}
-    const plans: Array<Record<string, unknown>> = plansResult.value.map(agentPlanToJson);
+    const plans: Result<Array<Record<string, unknown>>, DbError> = mapListToJson(await db.listPlans(), agentPlanToJson);
+    if (!plans.ok) {return makeErrorResult(plans.error);}
 
     // [STATUS-BOUNDED] Issues #41/#42, [MSG-PRIVACY] Issue #11: bounded, SQL-filtered
     // overview. The caller sees only their own unread inbox + broadcasts, as headers
@@ -78,6 +75,6 @@ export const createStatusHandler = (
 
     log.debug("Status queried");
 
-    return jsonResult({ agents, locks, plans, messages });
+    return jsonResult({ agents: agents.value, locks: locks.value, plans: plans.value, messages });
   };
 };

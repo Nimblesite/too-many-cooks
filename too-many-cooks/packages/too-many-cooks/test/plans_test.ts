@@ -6,6 +6,7 @@ import {
   ERR_UNAUTHORIZED,
   ERR_VALIDATION,
 } from "too-many-cooks-core";
+import type { TooManyCooksDb } from "too-many-cooks-core";
 import { bindAgentDb } from "./support/db_fixture.js";
 import {
   assertFieldSetEquals,
@@ -19,9 +20,18 @@ const TEST_DB_PATH = ".test_plans.db";
 describe("plans", () => {
   const agentDb = bindAgentDb(TEST_DB_PATH, "plan-agent");
 
-  it("updatePlan creates new plan", async () => {
-    const db = agentDb.db();
+  /** Db plus the bound agent's credentials ([DEDUP-DESLOP]). */
+  const actor = (): {
+    readonly db: TooManyCooksDb;
+    readonly agentName: string;
+    readonly agentKey: string;
+  } => {
     const { agentName, agentKey } = agentDb.agent();
+    return { db: agentDb.db(), agentName, agentKey };
+  };
+
+  it("updatePlan creates new plan", async () => {
+    const { db, agentName, agentKey } = actor();
     const result = await db.updatePlan(
       agentName,
       agentKey,
@@ -32,8 +42,7 @@ describe("plans", () => {
   });
 
   it("updatePlan updates existing plan", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     await db.updatePlan(agentName, agentKey, "Goal 1", "Task 1");
 
     const result = await db.updatePlan(agentName, agentKey, "Goal 2", "Task 2");
@@ -48,8 +57,7 @@ describe("plans", () => {
   });
 
   it("updatePlan fails with invalid credentials", async () => {
-    const db = agentDb.db();
-    const { agentName } = agentDb.agent();
+    const { db, agentName } = actor();
     const error = expectErr(
       await db.updatePlan(agentName, "wrong-key", "Goal", "Task"),
       "update must fail",
@@ -58,8 +66,7 @@ describe("plans", () => {
   });
 
   it("updatePlan fails for goal exceeding max length", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     const longGoal = "x".repeat(101); // Default max is 100
     const error = expectErr(
       await db.updatePlan(agentName, agentKey, longGoal, "Task"),
@@ -70,8 +77,7 @@ describe("plans", () => {
   });
 
   it("updatePlan fails for task exceeding max length", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     const longTask = "x".repeat(101);
     const error = expectErr(
       await db.updatePlan(agentName, agentKey, "Goal", longTask),
@@ -81,8 +87,7 @@ describe("plans", () => {
   });
 
   it("getPlan returns plan for agent", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     await db.updatePlan(agentName, agentKey, "My Goal", "Current Task");
 
     const plan = assertNonNullish(
@@ -105,8 +110,7 @@ describe("plans", () => {
   });
 
   it("listPlans returns all plans", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     await db.updatePlan(agentName, agentKey, "Goal 1", "Task 1");
 
     // Register second agent with plan
@@ -118,8 +122,7 @@ describe("plans", () => {
   });
 
   it("plan updatedAt changes on update", async () => {
-    const db = agentDb.db();
-    const { agentName, agentKey } = agentDb.agent();
+    const { db, agentName, agentKey } = actor();
     await db.updatePlan(agentName, agentKey, "Goal", "Task 1");
     const plan1 = assertNonNullish(
       expectOk(await db.getPlan(agentName), "get before must be ok"),

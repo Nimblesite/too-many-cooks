@@ -5,11 +5,13 @@
 /// errors when the shape is wrong, so malformed payloads fail tests
 /// loudly instead of silently coercing.
 
+import { isRecord } from "../../src/json-guards.js";
+
 const SNIPPET_MAX_CHARS = 120;
 
-/** Type guard: value is a JSON object (record), not array/null/primitive. */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+// `isRecord` is defined once for src and tests ([DEDUP-DESLOP]); re-exported
+// here so tests keep one import path for JSON narrowing.
+export { isRecord };
 
 /** Short rendering of an unexpected value for error messages. */
 const snippet = (value: unknown): string =>

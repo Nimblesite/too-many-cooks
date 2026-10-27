@@ -29,6 +29,17 @@ const EXPECTED_KEY_LENGTH = 32;
 /** Byte-value modulus for arithmetic byte corruption (no bitwise ops). */
 const BYTE_MODULUS = 256;
 
+/** Encrypts `plaintext` then decrypts it with the same derived key. */
+const roundTrip = (plaintext: string): string => {
+  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
+  const result = decrypt(encrypt(plaintext, wk), [wk]);
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    throw new Error("expected decrypt to succeed");
+  }
+  return result.value;
+};
+
 test("deriveWorkspaceKey produces deterministic 256-bit key", () => {
   const wk1 = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
   const wk2 = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
@@ -51,13 +62,7 @@ test("different workspace ID produces different key", () => {
 });
 
 test("encrypt then decrypt round-trips correctly", () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const ciphertext = encrypt(SAMPLE_PLAINTEXT, wk);
-  const result = decrypt(ciphertext, [wk]);
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.value, SAMPLE_PLAINTEXT);
-  }
+  assert.equal(roundTrip(SAMPLE_PLAINTEXT), SAMPLE_PLAINTEXT);
 });
 
 test("encrypt produces base64 output", () => {
@@ -101,24 +106,12 @@ test("decrypt empty string returns error", () => {
 });
 
 test("encrypt and decrypt empty plaintext", () => {
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const ciphertext = encrypt(EMPTY_STRING, wk);
-  const result = decrypt(ciphertext, [wk]);
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.value, EMPTY_STRING);
-  }
+  assert.equal(roundTrip(EMPTY_STRING), EMPTY_STRING);
 });
 
 test("encrypt and decrypt unicode content", () => {
   const unicode = "Hello World! Encryption test.";
-  const wk = deriveWorkspaceKey(TEST_PASSPHRASE, TEST_WORKSPACE_ID);
-  const ciphertext = encrypt(unicode, wk);
-  const result = decrypt(ciphertext, [wk]);
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.value, unicode);
-  }
+  assert.equal(roundTrip(unicode), unicode);
 });
 
 test("keychain with multiple versions decrypts old ciphertext", () => {
