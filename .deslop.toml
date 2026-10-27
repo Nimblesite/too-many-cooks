@@ -1,0 +1,11 @@
+# Deslop configuration (https://deslop.live/docs/configuration/).
+#
+# *.gen.ts files are generated from typeDiagram models (scripts/generate-models.sh,
+# AGENTS.md [MODEL-TYPEDIAGRAM]) and must never be hand-edited, so duplication
+# among them cannot be fixed in place. report_hide keeps them in the analysis
+# and only hides a cluster whose members are ALL generated: hand-written code
+# that duplicates generated code is still reported.
+[defaults]
+report_hide = [
+  "**/*.gen.ts",
+]
