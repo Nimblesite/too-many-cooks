@@ -103,15 +103,15 @@ Already in place (verified):
 - npm Trusted Publishing works: `too-many-cooks@0.15.1` and
   `too-many-cooks-core@0.15.1` carry SLSA provenance attestations.
 
-Outstanding (needs an account owner):
-
-- **macOS notarization** ([SWR-SIGN-*]) — darwin binaries are ad-hoc signed
-  (`codesign --sign -`), which runs fine from a VSIX install but is not
-  notarized. Notarizing needs an Apple Developer ID certificate and an App Store
-  Connect API key as `release`-environment secrets.
-- **Windows** binaries are unsigned; Shipwright treats native Authenticode as an
-  open problem ([SWR-SIGN-WINDOWS]) — integrity comes from the cosign-signed
-  `SHA256SUMS` and build provenance.
+No standalone binaries ship. Every native binary (the server SEA,
+DataProviderMigrate, the better-sqlite3 addon) is distributed only inside the
+per-platform VSIX or the npm package, and the GitHub release carries only those
+VSIXs and npm tarballs. VS Code and npm extract the files themselves, without
+the macOS quarantine attribute or Windows Mark-of-the-Web, so Gatekeeper and
+SmartScreen never assess them. The darwin server binary carries the ad-hoc
+signature arm64 requires (`codesign --sign -`); integrity comes from the
+cosign-signed `SHA256SUMS`, build provenance and the SBOMs. Nothing is
+outstanding for release.
 
 ## Dry run before tagging
 
