@@ -1,33 +1,37 @@
 ---
 layout: layouts/blog.njk
 title: "Too Many Cooks 0.16: The Server Just Starts"
-description: "0.16 drops Prisma. A bundled, checksum-verified migrator creates the database: no npx, no network, no surprises."
+description: "Too Many Cooks stops AI agents clobbering each other's code. 0.16 makes it start first time on every machine, and puts the server inside the VS Code extension."
 date: 2026-10-27
 author: Christian Findlay
 category: releases
 tags: [release]
 ---
 
-Starting the server on a clean machine could fail before the database even existed. On Windows: `spawnSync npx ENOENT`. Inside an AI agent's session, Prisma refused to run at all.
+**Too Many Cooks** lets Claude Code, Codex, pi and any other MCP agent work on one codebase at the same time. Agents lock a file before they edit it, share their plans and message each other. Nobody overwrites anybody.
 
-0.16 fixes that for good.
+0.16 is about one thing: it starts. First time, on every machine.
 
-## No Prisma. No npx. No network.
+## What we fixed
 
-- The whole schema is one YAML file.
-- A bundled [DataProviderMigrate](https://dataprovider.tech/docs/migrations/) binary applies it: SHA256-verified, spawned by absolute path.
-- Ships for macOS (arm64, x64), Linux x64 and Windows x64.
-- A fresh database in milliseconds. Drift repaired in place. Your data untouched.
+- **First start on a clean machine.** The server could fail while it created its database. Now the database is ready in about a second, on macOS, Linux and Windows.
+- **Windows.** The extension launched the server through `npx`, which died with `spawn npx ENOENT`. It now runs its own bundled server instead.
+- **The Codex connect line.** Our docs showed a flag that never existed. Every agent now has one line that works.
+- **A deleted logs folder** no longer crashes the server.
 
-## Hardened
+## What's new
 
-- TypeScript 7 everywhere. oxlint replaces ESLint.
-- Coverage gates actually gate: CI fails below 90%.
-- VS Code E2E tests run in their own isolated VS Code, on their own port. Never your live server.
-- A deleted logs folder no longer crashes the server.
-- MCP SDK 1.32. `npm audit`: zero vulnerabilities.
+- **The server ships inside the VS Code extension.** One build per platform, no Node.js needed. Click **TMC: Disconnected**, pick **Start Local Server**, done.
+- **Versions always match.** The extension checks the server's version before it runs it.
+- **Configurable limits** for message and plan length.
 
-## One line per agent
+## Get it
+
+Agents only need the server. The extension is optional: it's your window into the kitchen.
+
+```bash
+npm install -g too-many-cooks && too-many-cooks
+```
 
 ```bash
 claude mcp add --transport http too-many-cooks http://localhost:4040/mcp
@@ -35,10 +39,4 @@ codex mcp add too-many-cooks --url http://localhost:4040/mcp
 pi mcp add too-many-cooks --url http://localhost:4040/mcp
 ```
 
-See all of it in the [60-second walkthrough](/).
-
-## Upgrade
-
-```bash
-npm update -g too-many-cooks
-```
+[Install the VS Code extension](https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks), or [watch the 76-second walkthrough](/).

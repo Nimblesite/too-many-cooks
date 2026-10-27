@@ -1,0 +1,11 @@
+{#- A post's header image: `cover` from its front matter, or the house placeholder (dot grid, hairline geometry, the logo). Needs `coverPost` set. -#}
+<div class="post-cover{% if not coverPost.data.cover %} post-cover-placeholder{% endif %}" aria-hidden="true">
+  {%- if coverPost.data.cover %}
+  <img src="{{ coverPost.data.cover }}" alt="" loading="lazy">
+  {%- else %}
+  <span class="post-cover-ring"></span>
+  <span class="post-cover-diamond"></span>
+  <img class="post-cover-logo" src="/assets/images/tmclogo.png" alt="" loading="lazy">
+  {%- endif %}
+  {%- if coverPost.data.category %}<span class="post-cover-label">// {{ coverPost.data.category }}</span>{% endif %}
+</div>

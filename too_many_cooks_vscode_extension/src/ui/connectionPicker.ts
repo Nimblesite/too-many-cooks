@@ -21,6 +21,9 @@ const DESC_CLOUD: string = 'Each agent spawns its own process with cloud env var
 const DESC_DISCONNECT: string = 'Stop server and remove agent MCP configs';
 const DESC_LOCAL: string = 'Spin up a local SQLite-backed server';
 
+/** Logged when the picker closes without a choice. */
+const PICK_CANCELLED: string = '(cancelled)';
+
 /** Quick Pick placeholder. */
 const PICKER_PLACEHOLDER: string = 'Choose connection mode...';
 
@@ -188,6 +191,7 @@ export async function showConnectionPicker(deps: ConnectionPickerDeps): Promise<
     [...items],
     { placeHolder: PICKER_PLACEHOLDER },
   ) ?? CLEARED;
+  deps.log(`[ConnectionPicker] Picked: ${picked === CLEARED ? PICK_CANCELLED : picked.label}`);
   if (picked === CLEARED) { return; }
 
   try {

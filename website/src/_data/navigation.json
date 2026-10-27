@@ -77,6 +77,10 @@
       "title": "Community",
       "items": [
         {
+          "text": "VS Code Marketplace",
+          "url": "https://marketplace.visualstudio.com/items?itemName=Nimblesite.too-many-cooks"
+        },
+        {
           "text": "GitHub",
           "url": "https://github.com/Nimblesite/too-many-cooks"
         },

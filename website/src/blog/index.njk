@@ -1,0 +1,32 @@
+---
+layout: layouts/base.njk
+title: Blog
+description: "Releases and notes from the Too Many Cooks team: what shipped, what broke, what we fixed."
+permalink: /blog/
+eleventyExcludeFromCollections: true
+---
+<section class="blog-index">
+  <div class="container">
+    <header class="blog-index-header reveal">
+      <p class="eyebrow">// blog</p>
+      <h1>Notes from the kitchen</h1>
+      <p class="blog-index-lede">What shipped, what broke, what we fixed.</p>
+    </header>
+
+    <div class="post-list post-grid">
+      {%- for post in collections.posts | reverse %}
+      <article class="post-card{% if loop.first %} post-card-featured{% endif %}" style="--i: {{ loop.index0 }}">
+        {%- set coverPost = post %}
+        {% include "partials/post-cover.njk" %}
+        <div class="post-card-body">
+          {%- if post.data.category %}<span class="chip">{{ post.data.category }}</span>{% endif %}
+          <h2 class="post-card-title"><a href="{{ post.url }}" class="post-title">{{ post.data.title }}</a></h2>
+          {%- if post.data.description %}<p class="post-card-excerpt">{{ post.data.description }}</p>{% endif %}
+          {%- set bylinePost = post %}
+          {% include "partials/post-byline.njk" %}
+        </div>
+      </article>
+      {%- endfor %}
+    </div>
+  </div>
+</section>

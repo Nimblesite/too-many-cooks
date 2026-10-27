@@ -1,6 +1,14 @@
 .dart_tool/**
 .vscode/**
 .vscode-test/**
+.v8-coverage/**
+coverage/**
+coverage-integration/**
+logs/**
+.too_many_cooks/**
+.deslop/**
+.oxlintrc.json
+tsconfig*.json
 test/**
 lib/**
 scripts/**

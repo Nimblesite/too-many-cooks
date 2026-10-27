@@ -106,6 +106,7 @@ async function main() {
         VERBOSE_LOGGING: 'true',
         TMC_TEST_LOG_FILE: LOG_FILE,
         ...(process.env.TMC_PORT ? { TMC_PORT: process.env.TMC_PORT } : {}),
+        ...(process.env.TMC_TEST_GREP ? { TMC_TEST_GREP: process.env.TMC_TEST_GREP } : {}),
         ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}),
       },
     });

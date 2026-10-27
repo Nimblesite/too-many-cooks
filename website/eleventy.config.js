@@ -67,7 +67,6 @@ export default function(eleventyConfig) {
     "sitemap.njk",
     "robots.txt.njk",
     "llms.txt.njk",
-    "blog/index.njk",
     "blog/tags.njk",
     "blog/tags-pages.njk",
     "blog/categories.njk",
