@@ -5,6 +5,7 @@
 // Plan: tmc-cloud/docs/vsix-connection-switcher-plan.md
 
 import type { CloudTarget, ConnectionMode, ConnectionTarget, LocalTarget } from './connectionTypes';
+import { describeOccupant, isPortFree } from './portOccupant';
 import type { ChildProcess } from 'node:child_process';
 import type { LogFn } from './logging';
 import { checkServerAvailable } from './httpClient';
@@ -57,6 +58,12 @@ const HTTP_POST: string = 'POST';
 
 /** Empty JSON body. */
 const EMPTY_JSON_BODY: string = '{}';
+
+/** Appended when the port's occupant answers /admin/status. */
+const TMC_OCCUPANT_NOTE: string = ' It answers as a Too Many Cooks server — stop it or pick another port (tooManyCooks.port).';
+
+/** Appended when the occupant is something else. */
+const OTHER_OCCUPANT_NOTE: string = ' Stop it or pick another port (tooManyCooks.port).';
 
 /** Default transport for local connections (typed via LocalTarget.transport). */
 const LOCAL_TRANSPORT: LocalTarget['transport'] = 'http-streamable';
@@ -139,6 +146,18 @@ async function pollUntilReady(baseUrl: string, log: LogFn, signal: AbortSignal):
   }
   if (signal.aborted) { return; }
   throw new Error(`Local server did not start within ${String(STARTUP_TIMEOUT_MS)}ms`);
+}
+
+/** [CONN-LOCAL-PORT-IN-USE] Reject, naming the occupant, when the port is
+ *  taken — otherwise the spawned server dies with EADDRINUSE while the
+ *  readiness poll latches onto (or times out against) whatever holds it. */
+async function assertPortFree(port: number, log: LogFn): Promise<void> {
+  if (await isPortFree(port)) { return; }
+  const occupant: string = await describeOccupant(port);
+  const isTmc: boolean = await checkServerAvailable(buildLocalBaseUrl(port));
+  const message: string = `Port ${String(port)} is already in use by ${occupant}.${isTmc ? TMC_OCCUPANT_NOTE : OTHER_OCCUPANT_NOTE}`;
+  log(`[ConnectionManager] ${message}`);
+  throw new Error(message);
 }
 
 /** Spawn the too-many-cooks server as a child process. */
@@ -237,6 +256,7 @@ export function createConnectionManager(
 
   async function startLocal(port: number = DEFAULT_LOCAL_PORT): Promise<void> {
     if (state.mode !== 'disconnected') { disconnect(); }
+    await assertPortFree(port, log);
     const { args, command }: LocalLaunchSpec = await resolveLaunch();
     const spec: LocalServerSpec = { args, command, port, workspaceFolder };
     const child: ChildProcess = spawnLocalServer(spec, log);
