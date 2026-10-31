@@ -40,6 +40,9 @@ updates:
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    # Let a release age a week before bumping to it (zizmor dependabot-cooldown).
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:
@@ -56,6 +59,9 @@ updates:
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    # Let a release age a week before bumping to it (zizmor dependabot-cooldown).
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:
