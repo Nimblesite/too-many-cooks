@@ -12,7 +12,7 @@ VERSION="${1:?usage: stamp-version.sh <version> [repo-root]}"
 ROOT="${2:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 stamp() {
-  (cd "$1" && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null)
+  (cd "$1" && npm version "$VERSION" --no-git-tag-version --allow-same-version --ignore-scripts >/dev/null)
 }
 
 stamp "$ROOT/too-many-cooks/packages/core"

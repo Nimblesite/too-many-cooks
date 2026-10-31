@@ -159,7 +159,7 @@ jobs:
               echo "${pkg}@${VERSION} already published; skipping"
               continue
             fi
-            npm publish "dist/${pkg}-${VERSION}.tgz" --tag "$NPM_TAG" --provenance --access public
+            npm publish "./dist/${pkg}-${VERSION}.tgz" --tag "$NPM_TAG" --provenance --access public
           done
 
       - name: Upload npm artifacts
