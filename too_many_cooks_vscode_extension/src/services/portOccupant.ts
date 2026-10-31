@@ -22,6 +22,7 @@ const LSOF_COMMAND: RegExp = /^c(?<command>.+)$/mu;
 const NETSTAT_LISTENING: string = 'LISTENING';
 const NETSTAT_LOCAL_COLUMN: number = 1;
 const NETSTAT_PID_COLUMN: number = 4;
+const ADDRESS_IN_USE: string = 'EADDRINUSE';
 
 /** A process holding a port. */
 interface Occupant {
@@ -29,11 +30,12 @@ interface Occupant {
   readonly pid: string;
 }
 
-/** True when nothing is listening on the port. */
+/** True unless something is listening on the port. Other bind errors (e.g.
+ * EACCES on a privileged port) are not occupancy; the spawn reports them. */
 export async function isPortFree(port: number): Promise<boolean> {
   const probe: Server = createServer();
   return await new Promise<boolean>((resolve: (free: boolean) => void): void => {
-    probe.once('error', (): void => { resolve(false); });
+    probe.once('error', (err: NodeJS.ErrnoException): void => { resolve(err.code !== ADDRESS_IN_USE); });
     probe.listen(port, (): void => { probe.close((): void => { resolve(true); }); });
   });
 }
