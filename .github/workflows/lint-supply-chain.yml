@@ -65,3 +65,6 @@ jobs:
           min-severity: ${{ inputs.min_severity }}
           # No GitHub advisory upload — keep this gate read-only and offline-safe.
           online-audits: false
+          # No SARIF upload: it needs security-events: write, which the release
+          # caller withholds, so the upload failed the gate on every tag.
+          advanced-security: false
